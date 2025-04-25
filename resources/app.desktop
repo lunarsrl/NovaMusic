@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Cosmic Music
+Comment=A music player written in the libcosmic toolkit
+Type=Application
+Icon=dev.riveroluna.cosmicmusic
+Exec=cosmic-music %F
+Terminal=false
+StartupNotify=true
+Categories=COSMIC
+Keywords=COSMIC
+MimeType=

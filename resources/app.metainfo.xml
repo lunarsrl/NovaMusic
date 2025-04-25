@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.riveroluna.cosmicmusic</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0-or-later</project_license>
+  <name>Cosmic Music</name>
+  <summary>A music player written in the libcosmic toolkit</summary>
+  <icon type="remote" width="64" height="64" scale="1">
+    https://github.com/SRiverol/CosmicMusic.git/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
+  </icon>
+  <url type="vcs-browser">https://github.com/SRiverol/CosmicMusic.git</url>
+  <launchable type="desktop-id">dev.riveroluna.cosmicmusic.desktop</launchable>
+  <provides>
+    <id>dev.riveroluna.cosmicmusic</id>
+    <binaries>
+      <binary>cosmic-music</binary>
+    </binaries>
+  </provides>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <categories>
+    <category>COSMIC</category>
+  </categories>
+  <keywords>
+    <keyword>COSMIC</keyword>
+  </keywords>
+  <content_rating type="oars-1.1" />
+</component>
+
