@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::fmt::Display;
+use std::fs;
+use ::log::info;
 use strum_macros::EnumString;
 use symphonia::core::meta::StandardTagKey;
+use crate::database::create_database;
 use crate::log::setup_logger;
 
 mod app;
@@ -16,6 +19,19 @@ fn main() -> cosmic::iced::Result {
     let logger = setup_logger();
     // Get the system's preferred languages.
     let requested_languages = i18n_embed::DesktopLanguageRequester::requested_languages();
+    
+    // Todo: On first run, prompt user to enter music directory path and initiate a scan before continuing.
+    // For now: if database doesn't exist, create it.
+    match fs::exists("cosmic_music.db") {
+        Ok(val) => {
+            println!("Database exists: {}", val);
+            if !val {
+                create_database();
+            }
+        }
+        Err(val) => {}
+    }
+    
 
     // Enable localizations to be applied.
     i18n::init(&requested_languages);

@@ -8,11 +8,14 @@ mod scan;
 mod settings;
 
 use crate::app::scan::{scan_directory, MediaFileTypes};
+use crate::app::Message::UpdateScanProgress;
 use crate::config::Config;
+use crate::database::{create_database, create_database_entry};
 use crate::{config, fl, StandardTagKeyExt};
 use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::iced::keyboard::key::Physical::Code;
 use cosmic::iced::{Alignment, Length, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
@@ -20,18 +23,17 @@ use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{cosmic_theme, theme};
 use futures_util::SinkExt;
 use log::info;
+use rodio::source::SeekError::SymphoniaDecoder;
+use rodio::{OutputStream, OutputStreamHandle};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use cosmic::iced::keyboard::key::Physical::Code;
-use rodio::{OutputStream, OutputStreamHandle};
-use rodio::source::SeekError::SymphoniaDecoder;
+use std::ptr::read;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
-use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Value};
+use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Tag, Value};
 use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
-use crate::app::Message::UpdateScanProgress;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -79,10 +81,6 @@ pub enum Message {
     // Audio Messages
     StartStream(PathBuf),
 }
-
-
-
-
 
 /// Create a COSMIC application from the app model
 impl cosmic::Application for AppModel {
@@ -159,7 +157,7 @@ impl cosmic::Application for AppModel {
             rescan_available: true,
             // Audio
             stream,
-            stream_handle
+            stream_handle,
         };
 
         // Create a startup command that sets the window title.
@@ -344,140 +342,67 @@ impl cosmic::Application for AppModel {
                 self.config.set_num_files_found(&self.config_handler, 0);
                 self.config.set_files_scanned(&self.config_handler, 0);
 
+                std::fs::remove_file("cosmic_music.db").unwrap();
+                create_database();
+
                 let path = self.config.scan_dir.clone().parse().unwrap();
-                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(0, | mut tx| async move {
-                    let files = scan_directory(path, &mut tx).await;
-                    let mut files_scanned = 0;
+                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                    0,
+                    |mut tx| async move {
+                        let files = scan_directory(path, &mut tx).await;
+                        let mut files_scanned = 0;
 
-                    for file in files {
-                        files_scanned += 1;
-                        match file {
-                            MediaFileTypes::FLAC(path) => {
-                                log::info!("File: {:?}", path);
-                                let file = fs::File::open(&path).unwrap();
+                        for file in files {
+                            files_scanned += 1;
+                            match file {
+                                MediaFileTypes::FLAC(path) => {
+                                    log::info!("File: {:?}", path);
+                                    let file = fs::File::open(&path).unwrap();
 
-                                let probe = get_probe();
-                                let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());
+                                    let probe = get_probe();
+                                    let mss = symphonia::core::io::MediaSourceStream::new(
+                                        Box::new(file),
+                                        Default::default(),
+                                    );
 
-                                let mut hint = Hint::new();
-                                hint.with_extension("flac");
+                                    let mut hint = Hint::new();
+                                    hint.with_extension("flac");
 
-                                let mut reader = match probe.format(&Default::default(), mss, &Default::default(), &Default::default()) {
-                                    Ok(read) => {read}
-                                    Err(err) => {
-                                        eprintln!("{}", err);
-                                        continue
-                                    }
-                                };
-
-
-
-                                if let Some(metadata_rev) = reader.format.metadata().current() {
-                                    log::info!("KEY | VALUE");
-                                    for tag in metadata_rev.tags().iter().filter(|val| val.is_known()) {
-                                        let key = match &tag.std_key {
-                                            None => {
-                                                continue
-                                            }
-                                            Some(val) => {
-                                                let val = StandardTagKeyExt(*val);
-                                                val.to_string()
-
-                                            }
-                                        };
-
-                                        match &tag.value {
-                                            Value::Binary(_) => {}
-                                            Value::Flag => {
-
-                                            }
-                                            Value::Boolean(val) => {
-                                                log::info!("{} | {:?}", key, val);
-                                            }
-                                            Value::Float(val) => {
-
-                                                log::info!("{} | {:?}", key, val);
-                                            }
-                                            Value::SignedInt(val) => {
-
-                                                log::info!("{} | {:?}", key, val);
-                                            }
-                                            Value::String(val) => {
-
-                                                log::info!("{} | {:?}", key, val);
-                                            }
-                                            Value::UnsignedInt(val) => {
-
-                                                log::info!("{} | {:?}", key, val);
-                                            }
+                                    let mut reader = match probe.format(
+                                        &hint,
+                                        mss,
+                                        &Default::default(),
+                                        &Default::default(),
+                                    ) {
+                                        Ok(read) => read,
+                                        Err(err) => {
+                                            eprintln!("{}", err);
+                                            continue;
                                         }
-
                                     }
-                                } else {
-                                    log::info!("no metadata found")
+                                    .format;
+
+                                    if let Some(metadata_rev) = reader.metadata().current() {
+                                        let metadata_tags = metadata_rev.tags().into_iter().filter(|val| val.is_known()).map(|val| val.clone()).collect::<Vec<Tag>>();
+                                        
+                                        create_database_entry(metadata_tags, &path)
+                                    } else {
+                                        log::info!("no metadata found")
+                                    }
                                 }
-
-
-                                // let mdat_probe = reader.metadata().current().expect("no current metadata").clone();
-
-
-                                // for mdat in mdat_probe.tags() {
-                                //
-                                //     let key = match mdat.std_key {
-                                //         None => {
-                                //             continue;
-                                //         }
-                                //         Some(key) => {
-                                //             key
-                                //         }
-                                //     };
-                                //
-                                //
-                                //     let mdat_string_list: HashMap<String, String>;
-                                //     let mdat_binary_list: HashMap<String, Box<[u8]>>;
-                                //     let mdat_flag_list: Vec<HashMap<String, bool>>;
-                                //     let mdat_boolean_list: Vec<HashMap<String, bool>>;
-                                //     let mdat_int_list: Vec<HashMap<String, f32>>;
-                                //
-                                //     match mdat.value.clone() {
-                                //         Value::Binary(val) => {
-                                //
-                                //         }
-                                //         Value::Boolean(val) => {
-                                //
-                                //         }
-                                //         Value::Flag => {
-                                //
-                                //         }
-                                //         Value::Float(val) => {
-                                //
-                                //         }
-                                //         Value::SignedInt(val) => {
-                                //
-                                //         }
-                                //         Value::String(val) => {
-                                //
-                                //         }
-                                //         Value::UnsignedInt(val) => {
-                                //
-                                //         }
-                                //     };
-                                //
-                                //
-                                // }
-
+                                MediaFileTypes::MP4(path) => {}
+                                MediaFileTypes::MP3(path) => {}
                             }
-                            MediaFileTypes::MP4(path) => {}
-                            MediaFileTypes::MP3(path) => {}
                         }
-                    }
 
-
-                    tx.send(Message::UpdateScanProgress(files_scanned)).await.expect("TODO: panic message");
-                }))
-                    // Must wrap our app type in `cosmic::Action`.
-                    .map(cosmic::Action::App);
-            },
+                        tx.send(Message::UpdateScanProgress(files_scanned))
+                            .await
+                            .expect("TODO: panic message");
+                    },
+                ))
+                // Must wrap our app type in `cosmic::Action`.
+                .map(cosmic::Action::App);
+            }
             Message::UpdateScanProgress(num) => {
                 self.config.set_files_scanned(&self.config_handler, num);
                 if self.config.files_scanned == self.config.num_files_found {
@@ -486,13 +411,16 @@ impl cosmic::Application for AppModel {
             }
 
             Message::UpdateScanDirSize(num) => {
-                self.config.set_num_files_found(&self.config_handler, num).expect("Config Save Failed");
+                self.config
+                    .set_num_files_found(&self.config_handler, num)
+                    .expect("Config Save Failed");
             }
 
             Message::StartStream(filepath) => {
                 let file = std::fs::File::open(&filepath).unwrap();
-                self.stream_handle.play_once(file).expect("TODO: panic message");
-
+                self.stream_handle
+                    .play_once(file)
+                    .expect("TODO: panic message");
             }
         }
         Task::none()
@@ -580,7 +508,6 @@ pub enum Action {
     Settings,
     UpdateScanProgress(u32),
     UpdateScanDirSize(u32),
-
 }
 
 impl menu::action::MenuAction for Action {
@@ -592,8 +519,6 @@ impl menu::action::MenuAction for Action {
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
             Action::UpdateScanProgress(num) => Message::UpdateScanProgress(*num),
             Action::UpdateScanDirSize(num) => Message::UpdateScanDirSize(*num),
-
         }
     }
 }
-
