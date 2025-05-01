@@ -1,9 +1,12 @@
+use rusqlite::OptionalExtension;
+use std::any::Any;
 use std::path::PathBuf;
+use futures_util::future::err;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 
 struct Artist {
     id: u64,
-    name: String,
+    name: Option<String>,
 }
 
 struct Album {
@@ -18,7 +21,7 @@ struct Track {
     id: u64,
     artist_id: Option<u64>,
     name: Option<String>,
-    path: PathBuf
+    path: PathBuf,
 }
 
 struct AlbumTracks {
@@ -43,19 +46,40 @@ struct PlaylistTracks {
 pub fn create_database() {
     let conn = rusqlite::Connection::open("cosmic_music.db").unwrap();
 
-    conn.execute("
+    conn.execute_batch(
+        "
+        DROP TABLE IF EXISTS temp_album;
+        DROP TABLE IF EXISTS album;
+        DROP TABLE IF EXISTS album_tracks;
+        DROP TABLE IF EXISTS artists;
+        DROP TABLE IF EXISTS playlists;
+        DROP TABLE IF EXISTS track;
+    ",
+    )
+    .unwrap();
+
+    conn.execute(
+        "
     CREATE TABLE artists (
         id INTEGER PRIMARY KEY,
-        name TEXT
-    )", []).unwrap();
+        name TEXT UNIQUE
+    )",
+        [],
+    )
+    .unwrap();
 
-    conn.execute("
+    conn.execute(
+        "
     CREATE TABLE playlists (
         id INTEGER PRIMARY KEY,
         name TEXT
-    )", []).unwrap();
+    )",
+        [],
+    )
+    .unwrap();
 
-    conn.execute("
+    conn.execute(
+        "
     CREATE TABLE album_tracks (
         id INTEGER PRIMARY KEY,
         album_id INTEGER,
@@ -64,27 +88,37 @@ pub fn create_database() {
         disc_number INTEGER,
         FOREIGN KEY(album_id) REFERENCES albums(id),
         FOREIGN KEY(track_id) REFERENCES tracks(id)
-    )", []).unwrap();
+    )",
+        [],
+    )
+    .unwrap();
 
-    conn.execute("
+    conn.execute(
+        "
     CREATE TABLE track (
         id INTEGER PRIMARY KEY,
         name TEXT,
         path TEXT,
         artist_id INTEGER,
         FOREIGN KEY(artist_id) REFERENCES artist(id)
-    )", []).unwrap();
+    )",
+        [],
+    )
+    .unwrap();
 
-    conn.execute("
+    conn.execute(
+        "
         CREATE TABLE album (
             id INTEGER PRIMARY KEY,
-            name TEXT,
+            name TEXT UNIQUE,
             artist_id INTEGER,
             disc_number INTEGER,
             track_number INTEGER,
             FOREIGN KEY(artist_id) REFERENCES artist(id)
-        )"
-    , []).unwrap();
+        )",
+        [],
+    )
+    .unwrap();
 }
 pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     let conn = rusqlite::Connection::open("cosmic_music.db").unwrap();
@@ -101,7 +135,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
         name: "".to_string(),
         artist_id: 0,
         num_of_discs: 0,
-        num_of_tracks: 0
+        num_of_tracks: 0,
     };
 
     let mut album_tracks = AlbumTracks {
@@ -111,37 +145,60 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
         disc_number: 0,
         track_number: 0,
     };
+    
+    let mut artist = Artist {
+        id: 0,
+        name: None,
+    };
 
     for tag in metadata_tags {
         if let Some(key) = tag.std_key {
             match key {
                 StandardTagKey::AcoustidFingerprint => {}
                 StandardTagKey::AcoustidId => {}
-                StandardTagKey::Album => {
+                StandardTagKey::Album => match tag.value {
+                    Value::String(name) => {
+                        album.name = name;
+                    }
+                    _ => {
+                        log::error!("Album name is not a string");
+                    }
+                },
+                StandardTagKey::AlbumArtist => {
                     match tag.value {
                         Value::String(name) => {
-                            album.name = name;
+                            match conn.execute(
+                                "INSERT INTO artists (name) VALUES (?)",
+                                [&name],
+                            ) {
+                                Ok(_) => {
+                                    log::info!("Added artist {} to artists", name);
+                                    album.artist_id = conn.last_insert_rowid() as u64;
+                                }
+                                Err(_) => {
+                                    log::error!("Artist: {} already created", name);
+                                    album.artist_id = conn.query_row(
+                                        "SELECT id FROM artists WHERE name = ?",
+                                        &[&name],
+                                        |row| {
+                                            row.get::<usize, u32>(0)
+                                        },
+                                    ).unwrap() as u64;
+                                }
+                            }
                         }
-                        _ => {
-                            log::error!("Album name is not a string");
-                        }
+                        _ => {}
                     }
-                }
-                StandardTagKey::AlbumArtist => {
-
-
                 }
                 StandardTagKey::Arranger => {}
-                StandardTagKey::Artist => {
-                    match tag.value {
-                        Value::String(name) => {
-                            track.name = Some(name);
-                        }
-                        _ => {
-                            log::error!("Artist name is not a string");
-                        }
+                StandardTagKey::Artist => match tag.value {
+                    Value::String(name) => {
+                       artist.name = Some(name); 
                     }
-                }
+                    _ => {
+                        log::error!("Artist name is not a string");
+                    }
+                },
                 StandardTagKey::Bpm => {}
                 StandardTagKey::Comment => {}
                 StandardTagKey::Compilation => {}
@@ -151,27 +208,21 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                 StandardTagKey::Copyright => {}
                 StandardTagKey::Date => {}
                 StandardTagKey::Description => {}
-                StandardTagKey::DiscNumber => {
-                    match tag.value {
-                        Value::UnsignedInt(val) => {
-                            album_tracks.disc_number = val;
-                        }
-                        _ => {
-                            log::error!("Disc number is not a number");
-                        }
+                StandardTagKey::DiscNumber => match tag.value {
+                    Value::String(val) => {
+                        album_tracks.disc_number = val.parse::<u64>().unwrap();
                     }
-                }
+                    _ => {
+                        log::error!("Disc number is not a number");
+                    }
+                },
                 StandardTagKey::DiscSubtitle => {}
-                StandardTagKey::DiscTotal => {
-                    match tag.value {
-                        Value::UnsignedInt(val) => {
-                            album.num_of_discs = val
-                        }
-                        _ => {
-                            log::error!("Disc number is not a number");
-                        }
+                StandardTagKey::DiscTotal => match tag.value {
+                    Value::String(val) => album.num_of_discs = val.parse::<u64>().unwrap(),
+                    _ => {
+                        log::error!("Disc number is not a number");
                     }
-                }
+                },
                 StandardTagKey::EncodedBy => {}
                 StandardTagKey::Encoder => {}
                 StandardTagKey::EncoderSettings => {}
@@ -244,37 +295,29 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                 StandardTagKey::SortComposer => {}
                 StandardTagKey::SortTrackTitle => {}
                 StandardTagKey::TaggingDate => {}
-                StandardTagKey::TrackNumber => {
-                    match tag.value {
-                        Value::String(val) => {
-                            album_tracks.track_number = val.parse::<u64>().unwrap();
-                        }
-                        _ => {
-                            
-                        }
+                StandardTagKey::TrackNumber => match tag.value {
+                    Value::String(val) => {
+                        album_tracks.track_number = val.parse::<u64>().unwrap();
                     }
-                }
+                    _ => {}
+                },
                 StandardTagKey::TrackSubtitle => {}
-                StandardTagKey::TrackTitle => {
-                    match tag.value {
-                        Value::String(name) => {
-                            track.name = Some(name);
-                        }
-                        _ => {
-                            log::error!("Track name is not a string");
-                        }
+                StandardTagKey::TrackTitle => match tag.value {
+                    Value::String(name) => {
+                        track.name = Some(name);
                     }
-                }
-                StandardTagKey::TrackTotal => {
-                    match tag.value {
-                        Value::UnsignedInt(val) => {
-                            album.num_of_tracks = val;
-                        }
-                        _ => {
-                            log::error!("Track number is not a number");
-                        }
+                    _ => {
+                        log::error!("Track name is not a string");
                     }
-                }
+                },
+                StandardTagKey::TrackTotal => match tag.value {
+                    Value::String(val) => {
+                        album.num_of_tracks = val.parse::<u64>().unwrap();
+                    }
+                    _ => {
+                        log::error!("Track number is not a number");
+                    }
+                },
                 StandardTagKey::TvEpisode => {}
                 StandardTagKey::TvEpisodeTitle => {}
                 StandardTagKey::TvNetwork => {}
@@ -295,24 +338,78 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
             }
         }
     }
-    conn.execute(
-        "INSERT INTO track (name, path) VALUES (?, ?)",
-        ( &track.name, filepath.to_str().unwrap() ), ).unwrap();
 
+
+    match artist.name {
+        Some(name) => {
+            match conn.execute(
+                "INSERT INTO artists (name) VALUES (?)",
+                [&name],
+            ) {
+                Ok(_) => {
+                    log::info!("Added artist {} to artists", name);
+                    artist.id = conn.last_insert_rowid() as u64;
+                }
+                Err(_) => {
+                    log::error!("Artist: {} already created", name);
+                    artist.id = conn.query_row(
+                        "SELECT id FROM artists WHERE name = ?",
+                        &[&name],
+                        |row| {
+                            row.get::<usize, u32>(0)
+                        },
+                    ).unwrap() as u64;
+                }
+            }
+        }
+        None => {
+            log::error!("Artist name is None");
+        }
+    }
     
+    conn.execute(
+        "INSERT INTO track (name, path, artist_id) VALUES (?, ?, ?)",
+        (&track.name, filepath.to_str().unwrap(), artist.id),
+    )
+    .unwrap();
+
     track.id = conn.last_insert_rowid() as u64;
-    
+
     if album_tracks.track_number == 0 {
     } else {
-        log::info!("Adding track {} to album {}", album_tracks.track_number, album.name);
+        match conn.execute(
+            "INSERT INTO album (name, disc_number, track_number, artist_id) VALUES (?, ?, ?, ?)",
+            (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id),
+        ) {
+            Ok(_) => {
+                log::info!("Added album {} to temp_album", album.name);
+                album.id = conn.last_insert_rowid() as u32;
+            }
+            Err(_) => {
+                log::error!("Album: {} already created", album.name);
+
+                album.id = conn.query_row(
+                    "SELECT id FROM album WHERE name = ?",
+                    &[&album.name],
+                    |row| {
+                        row.get::<usize, u32>(0)
+                    },
+                ).unwrap();
+            }
+        }
+
+
+
+        log::info!(
+            "Adding track {} to album {}",
+            album_tracks.track_number,
+            album.name
+        );
         conn.execute(
-            "INSERT INTO album_tracks (track_number, disc_number, track_id) VALUES (?, ?, ?)",
-            (&album_tracks.track_number, &album_tracks.disc_number, &track.id),
+            "INSERT INTO album_tracks (track_number, disc_number, track_id, album_id) VALUES (?, ?, ?, ?)",
+            (&album_tracks.track_number, &album_tracks.disc_number, &track.id, &album.id),
         ).unwrap();
     }
-
-    conn.execute(
-        "INSERT INTO album (name, disc_number, track_number, artist_id, ) VALUES (?, ?, ?)",
-        (&album.name, &album.num_of_discs, &album.num_of_tracks)
-    ).unwrap();
 }
+
+

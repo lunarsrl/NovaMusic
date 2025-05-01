@@ -51,9 +51,9 @@ fn main() -> cosmic::iced::Result {
 struct StandardTagKeyExt(StandardTagKey);
 
 
-impl ToString for StandardTagKeyExt {
-    fn to_string(&self) -> String {
-        match self.0 {
+impl Display for StandardTagKeyExt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self.0 {
             StandardTagKey::AcoustidFingerprint => {
                 "AcoustID Fingerprint".to_string()
             }
@@ -387,7 +387,8 @@ impl ToString for StandardTagKeyExt {
             StandardTagKey::Writer => {
                 "Writer".to_string()
             }
-        }
+        };
+        write!(f, "{}", str)
     }
 }
 

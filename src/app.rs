@@ -34,6 +34,7 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Tag, Value};
 use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
+use crate::app::albums::top_album_page;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -218,11 +219,13 @@ impl cosmic::Application for AppModel {
             ))
             .into(),
             "Artists" => {
-                cosmic::widget::Container::new(cosmic::widget::text::title3("hello Artists!"))
-                    .into()
+
+
+                cosmic::widget::Container::new(cosmic::widget::text::title3("hello Albums!")).into()
+
             }
             "Albums" => {
-                cosmic::widget::Container::new(cosmic::widget::text::title3("hello Albums!")).into()
+                top_album_page()
             }
             "Playlists" => {
                 cosmic::widget::Container::new(cosmic::widget::text::title3("hello Home!")).into()
@@ -341,8 +344,7 @@ impl cosmic::Application for AppModel {
                 self.rescan_available = false;
                 self.config.set_num_files_found(&self.config_handler, 0);
                 self.config.set_files_scanned(&self.config_handler, 0);
-
-                std::fs::remove_file("cosmic_music.db").unwrap();
+                
                 create_database();
 
                 let path = self.config.scan_dir.clone().parse().unwrap();
