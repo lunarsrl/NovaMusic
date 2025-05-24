@@ -7,34 +7,41 @@ mod playlists;
 mod scan;
 mod settings;
 
+use tokio::task::spawn_blocking;
+
+use crate::app::albums::{get_top_album_info, Album};
 use crate::app::scan::{scan_directory, MediaFileTypes};
-use crate::app::Message::UpdateScanProgress;
+use crate::app::Message::{PageTaskDone, SubscriptionChannel, UpdateScanProgress};
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
-use crate::{config, fl, StandardTagKeyExt};
+use crate::{app, config, fl, StandardTagKeyExt};
 use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key::Physical::Code;
-use cosmic::iced::{Alignment, Length, Subscription};
+use cosmic::iced::wgpu::naga::FastHashMap;
+use cosmic::iced::{stream, Alignment, Length, Pixels, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
-use cosmic::widget::{self, icon, menu, nav_bar};
-use cosmic::{cosmic_theme, theme};
+use cosmic::widget::{self, icon, menu, nav_bar, progress_bar, toaster};
+use cosmic::{cosmic_theme, iced, iced_futures, theme};
 use futures_util::SinkExt;
 use log::info;
 use rodio::source::SeekError::SymphoniaDecoder;
 use rodio::{OutputStream, OutputStreamHandle};
+use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
 use std::fs;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::ptr::read;
+use std::thread::sleep;
+use std::time::Duration;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Tag, Value};
 use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
-use crate::app::albums::top_album_page;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -54,11 +61,17 @@ pub struct AppModel {
     config: Config,
     config_handler: cosmic_config::Config,
 
+    // Pages
+    pub ready_to_render: bool,
+
     //Settings Page
     pub change_dir_filed: String,
     pub rescan_available: bool,
     pub stream_handle: OutputStreamHandle,
     pub stream: OutputStream,
+    //Album Page
+    pub albums: Vec<Album>
+    //experimenting
 }
 
 /// Messages emitted by the application and its widgets.
@@ -79,8 +92,16 @@ pub enum Message {
     UpdateScanProgress(u32),
     UpdateScanDirSize(u32),
 
+    // Page Rendering
+    PageSpecificTask,
+    PageTaskDone(Vec<Album>),
+
     // Audio Messages
     StartStream(PathBuf),
+
+    //experimenting
+    ToastDone,
+    OnNavEnter,
 }
 
 /// Create a COSMIC application from the app model
@@ -116,23 +137,23 @@ impl cosmic::Application for AppModel {
 
         nav.insert()
             .text(fl!("home"))
-            .data::<Page>(Page::Page1)
+            .data::<Page>(Page::NowPlaying)
             .icon(icon::from_name("applications-audio-symbolic"))
             .activate();
 
         nav.insert()
             .text(fl!("artists"))
-            .data::<Page>(Page::Page2)
+            .data::<Page>(Page::Artists)
             .icon(icon::from_name("avatar-default-symbolic"));
 
         nav.insert()
             .text(fl!("albums"))
-            .data::<Page>(Page::Page3)
+            .data::<Page>(Page::Albums)
             .icon(icon::from_name("media-optical-symbolic"));
 
         nav.insert()
             .text(fl!("playlists"))
-            .data::<Page>(Page::Page3)
+            .data::<Page>(Page::Playlists)
             .icon(icon::from_name("playlist-symbolic"));
 
         // INIT CONFIG
@@ -159,6 +180,10 @@ impl cosmic::Application for AppModel {
             // Audio
             stream,
             stream_handle,
+            // Page Data
+            ready_to_render: false,
+            //experimenting
+            albums: vec![]
         };
 
         // Create a startup command that sets the window title.
@@ -219,13 +244,40 @@ impl cosmic::Application for AppModel {
             ))
             .into(),
             "Artists" => {
-
-
                 cosmic::widget::Container::new(cosmic::widget::text::title3("hello Albums!")).into()
-
             }
             "Albums" => {
-                top_album_page()
+                match self.ready_to_render {
+                    true => {
+                        let mut albums = vec![];
+                        
+                        for each in self.albums.iter() {
+                            albums.push(cosmic::widget::text(each.name.clone()).into());
+                        }
+                        cosmic::widget::container::Container::new(
+                            cosmic::widget::flex_row(albums)
+                        ).into()
+                    },
+                    false => {
+                        // wait until info from databses retrieved, should be very quick.
+                        //todo: change progress bar to spinny thing if they come out
+                        let content: Vec<Element<Message>> = vec![
+                            cosmic::widget::text::heading("Loading Albums...").into(),
+                            cosmic::widget::progress_bar(0.0..=1.0, 0.5).into(),
+                            cosmic::widget::button::text("click me")
+                                .on_press(Message::ToastDone)
+                                .into(),
+                        ];
+
+                        cosmic::widget::Container::new(
+                            cosmic::widget::column::with_children(content).max_width(Pixels(300.0)),
+                        )
+                        .center_x(Length::Fill)
+                        .center_y(Length::Fill)
+                        .max_height(Pixels(300.0))
+                        .into()
+                    }
+                }
             }
             "Playlists" => {
                 cosmic::widget::Container::new(cosmic::widget::text::title3("hello Home!")).into()
@@ -242,8 +294,6 @@ impl cosmic::Application for AppModel {
     /// emit messages to the application through a channel. They are started at the
     /// beginning of the application, and persist through its lifetime.
     fn subscription(&self) -> Subscription<Self::Message> {
-        struct MySubscription;
-
         Subscription::batch(vec![
             // Watch for application configuration changes.
             self.core()
@@ -255,6 +305,7 @@ impl cosmic::Application for AppModel {
 
                     Message::UpdateConfig(update.config)
                 }),
+            // Page event loop maybe, hopefully it wont come to that but it probably will
         ])
     }
 
@@ -263,39 +314,13 @@ impl cosmic::Application for AppModel {
     /// Tasks may be returned for asynchronous execution of code in the background
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
-        // Set config macro from Cosmic-Files
-        macro_rules! config_set {
-            ($name: ident, $value: expr) => {
-                match &self.config_handler {
-                    Some(config_handler) => {
-                        match paste::paste! { self.config.[<set_ $name>](config_handler, $value) } {
-                            Ok(_) => {}
-                            Err(err) => {
-                                log::warn!(
-                                    "failed to save config {:?}: {}",
-                                    stringify!($name),
-                                    err
-                                );
-                            }
-                        }
-                    }
-                    None => {
-                        self.config.$name = $value;
-                        log::warn!(
-                            "failed to save config {:?}: no config handler",
-                            stringify!($name)
-                        );
-                    }
-                }
-            };
-        }
         match message {
             Message::OpenRepositoryUrl => {
                 _ = open::that_detached(REPOSITORY);
             }
 
             Message::SubscriptionChannel => {
-                // For example purposes only.
+                log::info!("subscription channel");
             }
 
             Message::ToggleContextPage(context_page) => {
@@ -344,7 +369,7 @@ impl cosmic::Application for AppModel {
                 self.rescan_available = false;
                 self.config.set_num_files_found(&self.config_handler, 0);
                 self.config.set_files_scanned(&self.config_handler, 0);
-                
+
                 create_database();
 
                 let path = self.config.scan_dir.clone().parse().unwrap();
@@ -385,8 +410,13 @@ impl cosmic::Application for AppModel {
                                     .format;
 
                                     if let Some(metadata_rev) = reader.metadata().current() {
-                                        let metadata_tags = metadata_rev.tags().into_iter().filter(|val| val.is_known()).map(|val| val.clone()).collect::<Vec<Tag>>();
-                                        
+                                        let metadata_tags = metadata_rev
+                                            .tags()
+                                            .into_iter()
+                                            .filter(|val| val.is_known())
+                                            .map(|val| val.clone())
+                                            .collect::<Vec<Tag>>();
+
                                         create_database_entry(metadata_tags, &path)
                                     } else {
                                         log::info!("no metadata found")
@@ -424,6 +454,26 @@ impl cosmic::Application for AppModel {
                     .play_once(file)
                     .expect("TODO: panic message");
             }
+            Message::PageSpecificTask => {}
+            Message::PageTaskDone(val) => {
+                self.albums = val;
+                self.ready_to_render = true;
+            }
+            Message::ToastDone => {}
+            Message::OnNavEnter => match self.nav.active_data().unwrap() {
+                Page::NowPlaying => {}
+                Page::Artists => {}
+                Page::Albums => {
+                    return cosmic::task::future(
+                        async move {
+                            let albums = get_top_album_info().await;
+                            PageTaskDone(albums)
+                        }
+                    );
+
+                }
+                Page::Playlists => {}
+            },
         }
         Task::none()
     }
@@ -432,7 +482,6 @@ impl cosmic::Application for AppModel {
     fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<cosmic::Action<Self::Message>> {
         // Activate the page in the model.
         self.nav.activate(id);
-
         self.update_title()
     }
 }
@@ -481,8 +530,12 @@ impl AppModel {
             window_title.push_str(page);
         }
 
+        fn do_thing() -> Task<cosmic::Action<Message>> {
+            return cosmic::task::future(async move { Message::OnNavEnter });
+        };
+
         if let Some(id) = self.core.main_window_id() {
-            self.set_window_title(window_title, id)
+            return cosmic::Task::batch(vec![self.set_window_title(window_title, id), do_thing()]);
         } else {
             Task::none()
         }
@@ -490,10 +543,12 @@ impl AppModel {
 }
 
 /// The page to display in the application.
+#[derive(Clone, Debug)]
 pub enum Page {
-    Page1,
-    Page2,
-    Page3,
+    NowPlaying,
+    Artists,
+    Albums,
+    Playlists,
 }
 
 /// The context page to display in the context drawer.

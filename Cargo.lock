@@ -1091,7 +1091,9 @@ dependencies = [
 name = "cosmic-music"
 version = "0.1.0"
 dependencies = [
+ "event-listener-strategy",
  "fern",
+ "futures",
  "futures-util",
  "humantime",
  "i18n-embed",

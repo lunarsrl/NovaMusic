@@ -24,6 +24,8 @@ symphonia = {version = "0.5.4", features = ["all-codecs"]}
 strum = "0.27.1"
 strum_macros = "0.27.1"
 rusqlite = "0.35.0"
+event-listener-strategy = "0.5.4"
+futures = "0.3.31"
 
 [dependencies.i18n-embed]
 version = "0.15"
