@@ -9,9 +9,9 @@ mod settings;
 
 use tokio::task::spawn_blocking;
 
-use crate::app::albums::{get_top_album_info, Album};
+use crate::app::albums::{get_album_info, get_top_album_info, Album, AlbumPage, FullAlbum};
 use crate::app::scan::{scan_directory, MediaFileTypes};
-use crate::app::Message::{PageTaskDone, SubscriptionChannel, UpdateScanProgress};
+use crate::app::Message::{AlbumPageDone, SubscriptionChannel, UpdateScanProgress};
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
 use crate::{app, config, fl, StandardTagKeyExt};
@@ -20,10 +20,10 @@ use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key::Physical::Code;
 use cosmic::iced::wgpu::naga::FastHashMap;
-use cosmic::iced::{stream, Alignment, Length, Pixels, Subscription};
+use cosmic::iced::{alignment, stream, Alignment, ContentFit, Fill, Length, Pixels, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
-use cosmic::widget::{self, icon, menu, nav_bar, progress_bar, toaster};
+use cosmic::widget::{self, container, icon, menu, nav_bar, progress_bar, toaster, JustifyContent};
 use cosmic::{cosmic_theme, iced, iced_futures, theme};
 use futures_util::SinkExt;
 use log::info;
@@ -31,10 +31,13 @@ use rodio::source::SeekError::SymphoniaDecoder;
 use rodio::{OutputStream, OutputStreamHandle};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::ptr::read;
+
+use cosmic::cosmic_theme::palette::cast::IntoComponents;
+use cosmic::iced_core::text::Wrapping;
 use std::thread::sleep;
 use std::time::Duration;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
@@ -70,7 +73,7 @@ pub struct AppModel {
     pub stream_handle: OutputStreamHandle,
     pub stream: OutputStream,
     //Album Page
-    pub albums: Vec<Album>
+    pub albums: Vec<Album>,
     //experimenting
 }
 
@@ -94,7 +97,12 @@ pub enum Message {
 
     // Page Rendering
     PageSpecificTask,
-    PageTaskDone(Vec<Album>),
+    AlbumPageDone(AlbumPage),
+
+
+    // Album Page
+    AlbumRequested((String, String)),
+    AlbumInfoRetrieved(FullAlbum),
 
     // Audio Messages
     StartStream(PathBuf),
@@ -148,7 +156,7 @@ impl cosmic::Application for AppModel {
 
         nav.insert()
             .text(fl!("albums"))
-            .data::<Page>(Page::Albums)
+            .data::<Page>(Page::Albums(AlbumPage::new(None)))
             .icon(icon::from_name("media-optical-symbolic"));
 
         nav.insert()
@@ -183,7 +191,7 @@ impl cosmic::Application for AppModel {
             // Page Data
             ready_to_render: false,
             //experimenting
-            albums: vec![]
+            albums: vec![],
         };
 
         // Create a startup command that sets the window title.
@@ -238,75 +246,24 @@ impl cosmic::Application for AppModel {
     /// Application events will be processed through the view. Any messages emitted by
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
-        match self.nav.text(self.nav.active()).unwrap() {
-            "Home" => cosmic::widget::Container::new(cosmic::widget::text::title1(
-                "this is def the hardest part so dont do this first",
-            ))
-            .into(),
-            "Artists" => {
-                cosmic::widget::Container::new(cosmic::widget::text::title3("hello Albums!")).into()
+        match self.nav.active_data::<Page>().unwrap() {
+            Page::NowPlaying => {
+                cosmic::widget::container(cosmic::widget::text::title1("Now Playing")).into()
             }
-            "Albums" => {
-                match self.ready_to_render {
-                    true => {
-                        let mut albums = vec![];
-                        
-                        for each in self.albums.iter() {
-                            albums.push(cosmic::widget::text(each.name.clone()).into());
-                        }
-                        cosmic::widget::container::Container::new(
-                            cosmic::widget::flex_row(albums)
-                        ).into()
-                    },
-                    false => {
-                        // wait until info from databses retrieved, should be very quick.
-                        //todo: change progress bar to spinny thing if they come out
-                        let content: Vec<Element<Message>> = vec![
-                            cosmic::widget::text::heading("Loading Albums...").into(),
-                            cosmic::widget::progress_bar(0.0..=1.0, 0.5).into(),
-                            cosmic::widget::button::text("click me")
-                                .on_press(Message::ToastDone)
-                                .into(),
-                        ];
-
-                        cosmic::widget::Container::new(
-                            cosmic::widget::column::with_children(content).max_width(Pixels(300.0)),
-                        )
-                        .center_x(Length::Fill)
-                        .center_y(Length::Fill)
-                        .max_height(Pixels(300.0))
-                        .into()
-                    }
-                }
+            Page::Artists => {
+                cosmic::widget::container(cosmic::widget::text::title1(" Artists ")).into()
             }
-            "Playlists" => {
-                cosmic::widget::Container::new(cosmic::widget::text::title3("hello Home!")).into()
+            Page::Albums(albumspage) => {
+                albumspage.load_page()
             }
-            _ => {
-                panic!("Should never occur!")
+            Page::Playlists => {
+                cosmic::widget::container(cosmic::widget::text::title1("Playlists")).into()
             }
         }
-    }
 
-    /// Register subscriptions for this application.
-    ///
-    /// Subscriptions are long-running async tasks running in the background which
-    /// emit messages to the application through a channel. They are started at the
-    /// beginning of the application, and persist through its lifetime.
-    fn subscription(&self) -> Subscription<Self::Message> {
-        Subscription::batch(vec![
-            // Watch for application configuration changes.
-            self.core()
-                .watch_config::<Config>(Self::APP_ID)
-                .map(|update| {
-                    // for why in update.errors {
-                    //     tracing::error!(?why, "app config error");
-                    // }
 
-                    Message::UpdateConfig(update.config)
-                }),
-            // Page event loop maybe, hopefully it wont come to that but it probably will
-        ])
+
+
     }
 
     /// Handles messages emitted by the application and its widgets.
@@ -335,20 +292,15 @@ impl cosmic::Application for AppModel {
             }
 
             Message::EditInput(val) => {
-                info!("input: {:?}", val);
-
                 self.change_dir_filed = val.to_string();
             }
             Message::ChangeScanDir(val) => match fs::read_dir(&val) {
                 Ok(dir) => {
-                    info!("dir: {:?}", val);
-
                     match self.config.set_scan_dir(&self.config_handler, val) {
                         Ok(val) => {
-                            println!("dir: {:?}", val);
                         }
                         Err(err) => {
-                            println!("dir: {:?}", err);
+                           log::error!("dir: {:?}", err);
                         }
                     }
                 }
@@ -410,6 +362,9 @@ impl cosmic::Application for AppModel {
                                     .format;
 
                                     if let Some(metadata_rev) = reader.metadata().current() {
+                                        let metadata_visual = metadata_rev.visuals();
+
+
                                         let metadata_tags = metadata_rev
                                             .tags()
                                             .into_iter()
@@ -423,13 +378,53 @@ impl cosmic::Application for AppModel {
                                     }
                                 }
                                 MediaFileTypes::MP4(path) => {}
-                                MediaFileTypes::MP3(path) => {}
+                                MediaFileTypes::MP3(path) => {
+                                    log::info!("File: {:?}", path);
+                                    let file = fs::File::open(&path).unwrap();
+
+                                    let probe = get_probe();
+                                    let mss = symphonia::core::io::MediaSourceStream::new(
+                                        Box::new(file),
+                                        Default::default(),
+                                    );
+
+                                    let mut hint = Hint::new();
+                                    hint.with_extension("mp3");
+
+                                    let mut reader = match probe.format(
+                                        &Default::default(),
+                                        mss,
+                                        &Default::default(),
+                                        &Default::default(),
+                                    ) {
+                                        Ok(read) => read,
+                                        Err(err) => {
+                                            eprintln!("{}", err);
+                                            continue;
+                                        }
+                                    };
+
+                                    if let Some(mdat_revision) =
+                                        reader.metadata.get().unwrap().current()
+                                    {
+                                        let metadata_visual = mdat_revision.visuals();
+                                        let visual = &metadata_visual.get(0).unwrap().data;
+                                        let metadata_tags = mdat_revision
+                                            .tags()
+                                            .iter()
+                                            .filter(|a| a.is_known())
+                                            .map(|a| a.clone())
+                                            .collect::<Vec<Tag>>();
+                                        create_database_entry(metadata_tags, &path)
+                                    }
+                                }
                             }
                         }
 
                         tx.send(Message::UpdateScanProgress(files_scanned))
                             .await
                             .expect("TODO: panic message");
+                        tx.send(Message::OnNavEnter).await.expect("de")
                     },
                 ))
                 // Must wrap our app type in `cosmic::Action`.
@@ -455,25 +450,54 @@ impl cosmic::Application for AppModel {
                     .expect("TODO: panic message");
             }
             Message::PageSpecificTask => {}
-            Message::PageTaskDone(val) => {
-                self.albums = val;
-                self.ready_to_render = true;
+
+            // PAGE TASK RESPONSES
+            Message::AlbumPageDone(newPage) => {
+               match self.nav.active_data_mut::<Page>().unwrap() {
+                   Page::NowPlaying => {}
+                   Page::Artists => {}
+                   Page::Albums(oldPage) => {
+                       *oldPage = newPage
+                   }
+                   Page::Playlists => {}
+               }
             }
-            Message::ToastDone => {}
+
             Message::OnNavEnter => match self.nav.active_data().unwrap() {
                 Page::NowPlaying => {}
                 Page::Artists => {}
-                Page::Albums => {
-                    return cosmic::task::future(
-                        async move {
-                            let albums = get_top_album_info().await;
-                            PageTaskDone(albums)
-                        }
-                    );
-
+                Page::Albums(page) => {
+                    return cosmic::task::future(async move {
+                        let albums = get_top_album_info().await;
+                        AlbumPageDone(AlbumPage::new(Some(albums)))
+                    });
                 }
                 Page::Playlists => {}
             },
+            Message::AlbumInfoRetrieved(albuminfopage) => {
+                return cosmic::task::future(async move {
+                    
+                    AlbumPageDone(AlbumPage::new_album_page(albuminfopage))
+                });
+            },
+            Message::ToastDone => {}
+            Message::AlbumRequested(dat) => {
+                match self.nav.active_data_mut::<Page>().unwrap() {
+                    Page::Albums(page_dat) => {
+                        return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                            0,
+                            |mut tx| async move {
+                                let album = get_album_info(dat.0, dat.1).await;
+                                tx.send(Message::AlbumInfoRetrieved(album)).await.expect("send")
+                            }
+                        )).map(cosmic::Action::App)
+                    }
+                    _ => {
+                        // should never happen
+                        log::error!("Requested album info while outside albums page somehow")
+                    }
+                }
+            }
         }
         Task::none()
     }
@@ -547,7 +571,7 @@ impl AppModel {
 pub enum Page {
     NowPlaying,
     Artists,
-    Albums,
+    Albums(AlbumPage),
     Playlists,
 }
 

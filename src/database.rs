@@ -1,5 +1,6 @@
 use rusqlite::OptionalExtension;
 use std::any::Any;
+use std::fmt::format;
 use std::path::PathBuf;
 use futures_util::future::err;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
@@ -15,6 +16,7 @@ struct Album {
     artist_id: u64,
     num_of_discs: u64,
     num_of_tracks: u64,
+    album_cover: Option<Vec<u8>>,
 }
 
 struct Track {
@@ -22,6 +24,7 @@ struct Track {
     artist_id: Option<u64>,
     name: Option<String>,
     path: PathBuf,
+
 }
 
 struct AlbumTracks {
@@ -136,6 +139,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
         artist_id: 0,
         num_of_discs: 0,
         num_of_tracks: 0,
+        album_cover:  None,
     };
 
     let mut album_tracks = AlbumTracks {
@@ -176,7 +180,8 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                                     album.artist_id = conn.last_insert_rowid() as u64;
                                 }
                                 Err(_) => {
-                                    log::error!("Artist: {} already created", name);
+                                    log::warn!("Artist: {} already created", name);
+                                    
                                     album.artist_id = conn.query_row(
                                         "SELECT id FROM artists WHERE name = ?",
                                         &[&name],
@@ -184,6 +189,8 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                                             row.get::<usize, u32>(0)
                                         },
                                     ).unwrap() as u64;
+                                    
+                                    log::info!("ARTIST ID:  {}", album.artist_id);
                                 }
                             }
                         }
@@ -210,7 +217,13 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                 StandardTagKey::Description => {}
                 StandardTagKey::DiscNumber => match tag.value {
                     Value::String(val) => {
-                        album_tracks.disc_number = val.parse::<u64>().unwrap();
+                        let mut final_val = val;
+
+                        if final_val.contains("/") {
+                            final_val = final_val.split("/").next().expect("Number").parse().unwrap();
+                        }
+
+                        album_tracks.disc_number = final_val.parse::<u64>().expect(format!("Invalid track number: {}", final_val).as_str());
                     }
                     _ => {
                         log::error!("Disc number is not a number");
@@ -297,7 +310,16 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                 StandardTagKey::TaggingDate => {}
                 StandardTagKey::TrackNumber => match tag.value {
                     Value::String(val) => {
-                        album_tracks.track_number = val.parse::<u64>().unwrap();
+
+                        let mut final_val = val;
+                        
+                        if final_val.contains("/") {
+                            final_val = final_val.split("/").next().expect("Number").parse().unwrap();
+                        }
+
+                        album_tracks.track_number = final_val.parse::<u64>().expect(format!("Invalid track number: {}", final_val).as_str());
+
+
                     }
                     _ => {}
                 },
@@ -340,6 +362,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     }
 
 
+
     match artist.name {
         Some(name) => {
             match conn.execute(
@@ -351,7 +374,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                     artist.id = conn.last_insert_rowid() as u64;
                 }
                 Err(_) => {
-                    log::error!("Artist: {} already created", name);
+                    log::warn!("Artist: {} already created", name);
                     artist.id = conn.query_row(
                         "SELECT id FROM artists WHERE name = ?",
                         &[&name],
@@ -375,6 +398,8 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
 
     track.id = conn.last_insert_rowid() as u64;
 
+
+    log::info!("{}", album_tracks.track_number);
     if album_tracks.track_number == 0 {
     } else {
         match conn.execute(
@@ -386,7 +411,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                 album.id = conn.last_insert_rowid() as u32;
             }
             Err(_) => {
-                log::error!("Album: {} already created", album.name);
+                log::warn!("Album: {} already created", album.name);
 
                 album.id = conn.query_row(
                     "SELECT id FROM album WHERE name = ?",
