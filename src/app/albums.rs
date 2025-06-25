@@ -184,13 +184,15 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
 
     let mut track_vector = vec![];
 
+    // Select all tracks with a certain album ID and count them
     let num_tracks = conn.query_row(
         "SELECT COUNT(*) FROM album_tracks where album_id = ?",
         [row_num.0.as_ref().unwrap_or(&0)],
         |row| row.get::<usize, u32>(0),
     );
 
-    for each in 1..num_tracks.unwrap_or(0) {
+    // Use iteration of number of tracks to determine how many times to iterate through a table of album_tracks using their track_number data
+    for each in 1..=num_tracks.unwrap_or(0) {
         let tracks = conn
             .query_row(
                 "SELECT * FROM album_tracks WHERE album_id = ? AND track_number = ?",

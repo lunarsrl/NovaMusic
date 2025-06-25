@@ -1,9 +1,15 @@
-use rusqlite::OptionalExtension;
+use rusqlite::{Error, OptionalExtension};
 use std::any::Any;
-use std::fmt::format;
+use std::fmt::{format, Debug, Pointer};
+use std::fs;
+use std::panic::panic_any;
 use std::path::PathBuf;
+use colored::Colorize;
 use futures_util::future::err;
+use rusqlite::types::Type::Null;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
+use symphonia::core::probe::Hint;
+use symphonia::default::get_probe;
 
 struct Artist {
     id: u64,
@@ -117,6 +123,7 @@ pub fn create_database() {
             artist_id INTEGER,
             disc_number INTEGER,
             track_number INTEGER,
+            album_cover BLOB,
             FOREIGN KEY(artist_id) REFERENCES artist(id)
         )",
         [],
@@ -398,43 +405,102 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
 
     track.id = conn.last_insert_rowid() as u64;
 
-
-    log::info!("{}", album_tracks.track_number);
+    
     if album_tracks.track_number == 0 {
     } else {
-        match conn.execute(
-            "INSERT INTO album (name, disc_number, track_number, artist_id) VALUES (?, ?, ?, ?)",
-            (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id),
-        ) {
-            Ok(_) => {
-                log::info!("Added album {} to temp_album", album.name);
-                album.id = conn.last_insert_rowid() as u32;
+        // If album already exists, no need to add extra info
+        log::info!("Looking to insert {}", album.name);
+        match conn.query_row("select id from album where name = ?", &[&album.name], |row| {
+            row.get::<usize, String>(0)
+        }) {
+            Ok(val) => {
+                log::info!("Album with title, {}, found \n {}", album.name.white().on_blue().bold(), val);
+                // Album already exists
+                album.id = val.parse::<u32>().unwrap_or(0);
+                
             }
-            Err(_) => {
-                log::warn!("Album: {} already created", album.name);
+            Err(err) => {
+                
 
-                album.id = conn.query_row(
-                    "SELECT id FROM album WHERE name = ?",
-                    &[&album.name],
-                    |row| {
-                        row.get::<usize, u32>(0)
-                    },
-                ).unwrap();
+                log::info!("No album with title, {}, found; Creating a new one \n ------ \n {}", album.name.white().on_blue().bold(), err.to_string());
+                // Album does not exist yet
+                if let Some(visual) = find_visual(filepath) {
+                    //If visual data exists
+                    match conn.execute(
+                        "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
+                        (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, &visual),
+                    ) {
+                        Ok(_) => {
+                            log::info!("{}", "Added album with some visual!".green());
+                        }
+                        Err(_) => {
+                            log::error!("{}", "UNABLE TO INSERT ALBUM DATA W/ VISUAL".red());
+                        }
+                    }
+                } else {
+                    //If visual data does not exist
+                    match conn.execute(
+                        "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
+                        (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, None::<Box<[u8]>>),
+                    ) {
+                        Ok(_) => {
+                            log::info!("{}", "Added album without visual!".purple());
+                        }
+                        Err(err) => {
+                            log::error!("{} \n {}", "UNABLE TO INSERT ALBUM DATA W/O VISUAL".red(), err.to_string());
+                            
+                        }
+                    }
+                }
+
+                album.id = conn.last_insert_rowid() as u32
+
             }
         }
-
-
-
-        log::info!(
-            "Adding track {} to album {}",
-            album_tracks.track_number,
-            album.name
-        );
-        conn.execute(
-            "INSERT INTO album_tracks (track_number, disc_number, track_id, album_id) VALUES (?, ?, ?, ?)",
-            (&album_tracks.track_number, &album_tracks.disc_number, &track.id, &album.id),
-        ).unwrap();
     }
 }
 
 
+fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>>{
+    let file = fs::File::open(filepath).unwrap();
+
+    let probe = get_probe();
+    let mss = symphonia::core::io::MediaSourceStream::new(
+        Box::new(file),
+        Default::default(),
+    );
+    
+    
+
+    let mut reader = match probe.format(
+        &Default::default(),
+        mss,
+        &Default::default(),
+        &Default::default(),
+    ) {
+        Ok(read) => read,
+        Err(err) => {
+           panic!("{}", err.to_string());
+        }
+    };
+
+    if let Some(mdat_rev) = reader.metadata.get()?.current(){
+        match mdat_rev.visuals().get(0) {
+            Some(visual) => {
+                log::info!("This album contains visual data!");
+                Some(visual.data.clone())
+            }
+            None => {
+
+                log::info!("This album contains no visual data!");
+                None
+            }
+        }
+    } else {
+        log::info!("Some kind of reader error");
+        None
+    }
+
+
+
+}

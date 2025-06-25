@@ -362,9 +362,7 @@ impl cosmic::Application for AppModel {
                                     .format;
 
                                     if let Some(metadata_rev) = reader.metadata().current() {
-                                        let metadata_visual = metadata_rev.visuals();
-
-
+                                        
                                         let metadata_tags = metadata_rev
                                             .tags()
                                             .into_iter()
@@ -392,7 +390,7 @@ impl cosmic::Application for AppModel {
                                     hint.with_extension("mp3");
 
                                     let mut reader = match probe.format(
-                                        &Default::default(),
+                                        &hint,
                                         mss,
                                         &Default::default(),
                                         &Default::default(),
@@ -407,8 +405,8 @@ impl cosmic::Application for AppModel {
                                     if let Some(mdat_revision) =
                                         reader.metadata.get().unwrap().current()
                                     {
-                                        let metadata_visual = mdat_revision.visuals();
-                                        let visual = &metadata_visual.get(0).unwrap().data;
+                                        
+
                                         let metadata_tags = mdat_revision
                                             .tags()
                                             .iter()

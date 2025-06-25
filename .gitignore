@@ -14,3 +14,4 @@ debian/*
 !debian/source
 output.log
 cosmic_music.db
+elisaDatabase.db
