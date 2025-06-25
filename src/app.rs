@@ -362,7 +362,7 @@ impl cosmic::Application for AppModel {
                                     .format;
 
                                     if let Some(metadata_rev) = reader.metadata().current() {
-                                        
+
                                         let metadata_tags = metadata_rev
                                             .tags()
                                             .into_iter()
@@ -465,10 +465,17 @@ impl cosmic::Application for AppModel {
                 Page::NowPlaying => {}
                 Page::Artists => {}
                 Page::Albums(page) => {
-                    return cosmic::task::future(async move {
-                        let albums = get_top_album_info().await;
-                        AlbumPageDone(AlbumPage::new(Some(albums)))
-                    });
+                    return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                        0,
+                        |mut tx| async move {
+                            let albums = get_top_album_info().await;
+                            tx.send(AlbumPageDone(AlbumPage::new(Some(albums)))).await.unwrap();
+                        }
+                    )).map(cosmic::Action::App);
+
+                    // return cosmic::task::future(async move {
+                    // 
+                    // });
                 }
                 Page::Playlists => {}
             },

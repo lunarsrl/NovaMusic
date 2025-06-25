@@ -405,22 +405,21 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
 
     track.id = conn.last_insert_rowid() as u64;
 
-    
+
     if album_tracks.track_number == 0 {
     } else {
         // If album already exists, no need to add extra info
         log::info!("Looking to insert {}", album.name);
         match conn.query_row("select id from album where name = ?", &[&album.name], |row| {
-            row.get::<usize, String>(0)
+            row.get::<usize, u32>(0)
         }) {
             Ok(val) => {
                 log::info!("Album with title, {}, found \n {}", album.name.white().on_blue().bold(), val);
                 // Album already exists
-                album.id = val.parse::<u32>().unwrap_or(0);
-                
+                album.id = val
             }
             Err(err) => {
-                
+
 
                 log::info!("No album with title, {}, found; Creating a new one \n ------ \n {}", album.name.white().on_blue().bold(), err.to_string());
                 // Album does not exist yet
@@ -448,13 +447,23 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                         }
                         Err(err) => {
                             log::error!("{} \n {}", "UNABLE TO INSERT ALBUM DATA W/O VISUAL".red(), err.to_string());
-                            
+
                         }
                     }
                 }
-
                 album.id = conn.last_insert_rowid() as u32
+            }
+        }
 
+        match conn.execute(
+            "INSERT INTO album_tracks (album_id, track_id, track_number, disc_number) VALUES (?, ?, ?, ?)",
+            (&album.id, &track.id, &album_tracks.track_number, &album_tracks.disc_number),
+        ) {
+            Ok(_) => {
+
+            }
+            Err(err) => {
+                log::error!("album_track insertion went wrong \n ------ \n  {}", err.to_string());
             }
         }
     }
@@ -469,8 +478,8 @@ fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>>{
         Box::new(file),
         Default::default(),
     );
-    
-    
+
+
 
     let mut reader = match probe.format(
         &Default::default(),

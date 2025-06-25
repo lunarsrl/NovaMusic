@@ -1,11 +1,14 @@
 use crate::app::Message;
 use cosmic::cctk::wayland_client::backend::protocol::wl_message;
+use cosmic::cosmic_theme::palette::blend::Compose;
 use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
 use cosmic::widget::row;
-use cosmic::{Apply, Element};
+use cosmic::{iced_core, Apply, Element};
 use rusqlite::Row;
-use std::fmt::format;
+use std::fmt::{format};
 use std::time::{Duration, SystemTime};
+use cosmic::iced::{Alignment, Size};
+use cosmic::iced::wgpu::naga::MathFunction::Length;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -69,21 +72,25 @@ impl AlbumPage {
                 cosmic::widget::container(
                     // ALL
                     cosmic::widget::Column::with_children([
+                        cosmic::widget::button::icon(
+                            cosmic::widget::icon::from_name("format-text-bold-symbolic").handle()
+                        ).class(cosmic::widget::button::ButtonClass::Icon)
+                        .into(),
                         // HEADING
-                        cosmic::widget::Column::with_children([
-                            cosmic::widget::text::title3(albumpage.album.name.clone()).into(),
-                            cosmic::widget::text::title4(format!(
-                                "By {}",
-                                albumpage.album.artist.as_str()
-                            ))
+                        cosmic::widget::Row::with_children([
+                            cosmic::widget::Column::with_children([
+                                cosmic::widget::text::title3(albumpage.album.name.clone()).into(),
+                                cosmic::widget::text::title4(format!(
+                                    "By {}",
+                                    albumpage.album.artist.as_str()
+                                ))
+                                .into(),
+                            ])
                             .into(),
                         ])
                         .into(),
                         // BODY
-                        cosmic::widget::scrollable(
-                            tracks_listify(&albumpage.tracks)
-                        ).into()
-
+                        cosmic::widget::scrollable(tracks_listify(&albumpage.tracks)).into(),
                     ])
                     .spacing(page_margin),
                 )
@@ -119,7 +126,6 @@ struct Track {
 }
 
 fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
-
     let mut list_widget = Some(cosmic::widget::ListColumn::new());
 
     for track in tracks {
@@ -127,15 +133,12 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
             Some(prev_list) => {
                 list_widget = Some(
                     // ----CONTENT---- //
-                    prev_list.add(
-                         cosmic::widget::container::Container::new(
-                             cosmic::widget::row::with_children(
-                                 vec![
-                                     cosmic::widget::text::heading(format!("{}. {}", track.track_number, track.name)).into(),
-                                 ]
-                             )
-                         )
-                    )
+                    prev_list.add(cosmic::widget::container::Container::new(
+                        cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
+                            format!("{}. {}", track.track_number, track.name),
+                        )
+                        .into()]),
+                    )),
                 )
             }
             None => {
@@ -144,8 +147,7 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
         }
     }
 
-    list_widget.take().unwrap()
-        .into_element()
+    list_widget.take().unwrap().into_element()
 }
 
 impl Track {
@@ -227,10 +229,12 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
             track_number: tracks.1,
             disc_number: tracks.2,
         };
+        log::info!("{:?}", track);
 
         track_vector.push(track);
     }
 
+    log::info!("{:?}", track_vector);
     FullAlbum {
         album,
         tracks: track_vector,
