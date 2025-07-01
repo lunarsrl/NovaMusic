@@ -19,6 +19,7 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
                 message
             ))
         })
+        .level_for("wgpu_core::device::resource", log::LevelFilter::Error)
         .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
         .chain(fern::log_file("output.log")?)

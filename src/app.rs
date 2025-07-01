@@ -99,7 +99,6 @@ pub enum Message {
     PageSpecificTask,
     AlbumPageDone(AlbumPage),
 
-
     // Album Page
     AlbumRequested((String, String)),
     AlbumInfoRetrieved(FullAlbum),
@@ -253,17 +252,11 @@ impl cosmic::Application for AppModel {
             Page::Artists => {
                 cosmic::widget::container(cosmic::widget::text::title1(" Artists ")).into()
             }
-            Page::Albums(albumspage) => {
-                albumspage.load_page()
-            }
+            Page::Albums(albumspage) => albumspage.load_page(),
             Page::Playlists => {
                 cosmic::widget::container(cosmic::widget::text::title1("Playlists")).into()
             }
         }
-
-
-
-
     }
 
     /// Handles messages emitted by the application and its widgets.
@@ -295,15 +288,12 @@ impl cosmic::Application for AppModel {
                 self.change_dir_filed = val.to_string();
             }
             Message::ChangeScanDir(val) => match fs::read_dir(&val) {
-                Ok(dir) => {
-                    match self.config.set_scan_dir(&self.config_handler, val) {
-                        Ok(val) => {
-                        }
-                        Err(err) => {
-                           log::error!("dir: {:?}", err);
-                        }
+                Ok(dir) => match self.config.set_scan_dir(&self.config_handler, val) {
+                    Ok(val) => {}
+                    Err(err) => {
+                        log::error!("dir: {:?}", err);
                     }
-                }
+                },
                 Err(error) => {}
             },
 
@@ -362,7 +352,6 @@ impl cosmic::Application for AppModel {
                                     .format;
 
                                     if let Some(metadata_rev) = reader.metadata().current() {
-
                                         let metadata_tags = metadata_rev
                                             .tags()
                                             .into_iter()
@@ -402,18 +391,16 @@ impl cosmic::Application for AppModel {
                                         }
                                     };
 
-                                    if let Some(mdat_revision) =
-                                        reader.metadata.get().unwrap().current()
-                                    {
-                                        
-
-                                        let metadata_tags = mdat_revision
-                                            .tags()
-                                            .iter()
-                                            .filter(|a| a.is_known())
-                                            .map(|a| a.clone())
-                                            .collect::<Vec<Tag>>();
-                                        create_database_entry(metadata_tags, &path)
+                                    if let Some(mdat_revision) = reader.metadata.get() {
+                                        if let Some(mdat_revision) = mdat_revision.current() {
+                                            let metadata_tags = mdat_revision
+                                                .tags()
+                                                .iter()
+                                                .filter(|a| a.is_known())
+                                                .map(|a| a.clone())
+                                                .collect::<Vec<Tag>>();
+                                            create_database_entry(metadata_tags, &path)
+                                        }
                                     }
                                 }
                             }
@@ -450,16 +437,12 @@ impl cosmic::Application for AppModel {
             Message::PageSpecificTask => {}
 
             // PAGE TASK RESPONSES
-            Message::AlbumPageDone(newPage) => {
-               match self.nav.active_data_mut::<Page>().unwrap() {
-                   Page::NowPlaying => {}
-                   Page::Artists => {}
-                   Page::Albums(oldPage) => {
-                       *oldPage = newPage
-                   }
-                   Page::Playlists => {}
-               }
-            }
+            Message::AlbumPageDone(newPage) => match self.nav.active_data_mut::<Page>().unwrap() {
+                Page::NowPlaying => {}
+                Page::Artists => {}
+                Page::Albums(oldPage) => *oldPage = newPage,
+                Page::Playlists => {}
+            },
 
             Message::OnNavEnter => match self.nav.active_data().unwrap() {
                 Page::NowPlaying => {}
@@ -469,22 +452,24 @@ impl cosmic::Application for AppModel {
                         0,
                         |mut tx| async move {
                             let albums = get_top_album_info().await;
-                            tx.send(AlbumPageDone(AlbumPage::new(Some(albums)))).await.unwrap();
-                        }
-                    )).map(cosmic::Action::App);
+                            tx.send(AlbumPageDone(AlbumPage::new(Some(albums))))
+                                .await
+                                .unwrap();
+                        },
+                    ))
+                    .map(cosmic::Action::App);
 
                     // return cosmic::task::future(async move {
-                    // 
+                    //
                     // });
                 }
                 Page::Playlists => {}
             },
             Message::AlbumInfoRetrieved(albuminfopage) => {
                 return cosmic::task::future(async move {
-                    
                     AlbumPageDone(AlbumPage::new_album_page(albuminfopage))
                 });
-            },
+            }
             Message::ToastDone => {}
             Message::AlbumRequested(dat) => {
                 match self.nav.active_data_mut::<Page>().unwrap() {
@@ -493,9 +478,12 @@ impl cosmic::Application for AppModel {
                             0,
                             |mut tx| async move {
                                 let album = get_album_info(dat.0, dat.1).await;
-                                tx.send(Message::AlbumInfoRetrieved(album)).await.expect("send")
-                            }
-                        )).map(cosmic::Action::App)
+                                tx.send(Message::AlbumInfoRetrieved(album))
+                                    .await
+                                    .expect("send")
+                            },
+                        ))
+                        .map(cosmic::Action::App)
                     }
                     _ => {
                         // should never happen

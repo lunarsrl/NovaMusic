@@ -1,14 +1,16 @@
+use crate::app;
 use crate::app::Message;
 use cosmic::cctk::wayland_client::backend::protocol::wl_message;
 use cosmic::cosmic_theme::palette::blend::Compose;
 use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
-use cosmic::widget::row;
-use cosmic::{iced_core, Apply, Element};
-use rusqlite::Row;
-use std::fmt::{format};
-use std::time::{Duration, SystemTime};
-use cosmic::iced::{Alignment, Size};
 use cosmic::iced::wgpu::naga::MathFunction::Length;
+use cosmic::iced::{Alignment, Size};
+use cosmic::widget::image::Handle::Bytes;
+use cosmic::widget::row;
+use cosmic::{iced, iced_core, Apply, Element};
+use rusqlite::{params, Row};
+use std::fmt::format;
+use std::time::{Duration, SystemTime};
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -54,8 +56,18 @@ impl AlbumPage {
                 for album in self.clone().albums.unwrap() {
                     elements.push(
                         cosmic::widget::button::custom(cosmic::widget::column::with_children(
+                            // Need to turn this into an async task, just wanted to see what it would look like for now
                             vec![
-                                cosmic::widget::icon::from_name("media-optical-symbolic").into(),
+                                if let Some(cover_art) = &album.cover_art {
+                                    cosmic::widget::image(
+                                        cosmic::widget::image::Handle::from_bytes(
+                                            cover_art.clone(),
+                                        ),
+                                    )
+                                    .into()
+                                } else {
+                                    cosmic::widget::icon::from_name("music-note-beamed").into()
+                                },
                                 cosmic::widget::text::text(album.name.clone()).into(),
                                 cosmic::widget::text::text(album.artist.clone()).into(),
                             ],
@@ -66,19 +78,29 @@ impl AlbumPage {
                         .into(),
                     )
                 }
-                cosmic::widget::container(cosmic::widget::flex_row(elements)).into()
+                cosmic::widget::scrollable(cosmic::widget::container(cosmic::widget::flex_row(
+                    elements,
+                )))
+                .into()
             }
             PageState::Album(albumpage) => {
                 cosmic::widget::container(
                     // ALL
                     cosmic::widget::Column::with_children([
-                        cosmic::widget::button::icon(
-                            cosmic::widget::icon::from_name("format-text-bold-symbolic").handle()
-                        ).class(cosmic::widget::button::ButtonClass::Icon)
-                        .into(),
                         // HEADING
                         cosmic::widget::Row::with_children([
                             cosmic::widget::Column::with_children([
+                                cosmic::widget::button::custom(
+                                    cosmic::widget::row::with_children(vec![
+                                        cosmic::widget::icon::from_name("go-previous-symbolic")
+                                            .into(),
+                                        cosmic::widget::text::text("Albums").into(),
+                                    ])
+                                    .align_y(Alignment::Center),
+                                )
+                                .class(cosmic::widget::button::ButtonClass::Link)
+                                .on_press(app::Message::OnNavEnter)
+                                .into(),
                                 cosmic::widget::text::title3(albumpage.album.name.clone()).into(),
                                 cosmic::widget::text::title4(format!(
                                     "By {}",
@@ -90,7 +112,10 @@ impl AlbumPage {
                         ])
                         .into(),
                         // BODY
-                        cosmic::widget::scrollable(tracks_listify(&albumpage.tracks)).into(),
+                        cosmic::widget::scrollable(cosmic::widget::container::Container::new(
+                            tracks_listify(&albumpage.tracks),
+                        ))
+                        .into(),
                     ])
                     .spacing(page_margin),
                 )
@@ -107,6 +132,7 @@ impl AlbumPage {
 pub struct Album {
     pub name: String,
     pub artist: String,
+    pub cover_art: Option<Vec<u8>>,
     disc_number: u32,
     track_number: u32,
 }
@@ -182,6 +208,7 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
         artist,
         disc_number: row_num.1.unwrap_or(0),
         track_number: row_num.2.unwrap_or(0),
+        cover_art: None,
     };
 
     let mut track_vector = vec![];
@@ -194,47 +221,84 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
     );
 
     // Use iteration of number of tracks to determine how many times to iterate through a table of album_tracks using their track_number data
-    for each in 1..=num_tracks.unwrap_or(0) {
-        let tracks = conn
-            .query_row(
-                "SELECT * FROM album_tracks WHERE album_id = ? AND track_number = ?",
-                [row_num.0.as_ref().unwrap_or(&0), &each],
-                |row| {
-                    let track_num = row.get::<usize, u32>(3).unwrap();
-                    let disc_num = row.get::<usize, u32>(4).unwrap();
 
-                    let track_dat = match row.get::<usize, u32>(2) {
-                        Ok(val) => conn
-                            .query_row("SELECT name, path FROM track WHERE id = ?", [val], |row| {
-                                Ok((
-                                    row.get::<usize, String>(0)
-                                        .unwrap_or(String::from("NOT FOUND")),
-                                    row.get::<usize, String>(1)
-                                        .unwrap_or(String::from("NOT FOUND")),
-                                ))
-                            })
-                            .unwrap_or((String::from("ERROR"), String::from("ERROR"))),
-                        Err(_) => {
-                            panic!("NO ID")
-                        }
-                    };
-                    Ok((track_dat, track_num, disc_num))
-                },
-            )
-            .unwrap_or(((String::new(), String::new()), 0, 0));
+    let mut value = conn
+        .prepare("SELECT * FROM album_tracks where album_id = ?")
+        .expect("error preparing sql to fetch album tracks of a certain album id");
+    let mut rows = value
+        .query([row_num.0.expect("No row num, shouldve exited by now")])
+        .expect("error fetching album tracks of a certain album id");
+
+    while let Some(row) = rows.next().unwrap() {
+        let track_num = row.get::<usize, u32>(3).unwrap();
+        let disc_num = row.get::<usize, u32>(4).unwrap();
+
+        let track_dat = match row.get::<usize, u32>(2) {
+            Ok(val) => conn
+                .query_row("SELECT name, path FROM track WHERE id = ?", [val], |row| {
+                    Ok((
+                        row.get::<usize, String>(0)
+                            .unwrap_or(String::from("NOT FOUND")),
+                        row.get::<usize, String>(1)
+                            .unwrap_or(String::from("NOT FOUND")),
+                    ))
+                })
+                .unwrap_or((String::from("ERROR"), String::from("ERROR"))),
+            Err(_) => {
+                panic!("NO ID")
+            }
+        };
 
         let track = Track {
-            name: tracks.0 .0,
-            file_path: tracks.0 .1,
-            track_number: tracks.1,
-            disc_number: tracks.2,
+            name: track_dat.0,
+            file_path: track_dat.1,
+            track_number: track_num,
+            disc_number: disc_num,
         };
-        log::info!("{:?}", track);
-
         track_vector.push(track);
+        track_vector.sort_by(|a, b| a.track_number.cmp(&b.track_number))
     }
+    //
+    // for each in 1..=num_tracks.unwrap_or(0) {
+    //     let tracks = conn
+    //         .query_row(
+    //             "SELECT * FROM album_tracks WHERE album_id = ? AND track_number = ?",
+    //             [row_num.0.as_ref().unwrap_or(&0), &each],
+    //             |row| {
+    //                 let track_num = row.get::<usize, u32>(3).unwrap();
+    //                 let disc_num = row.get::<usize, u32>(4).unwrap();
+    //
+    //                 let track_dat = match row.get::<usize, u32>(2) {
+    //                     Ok(val) => conn
+    //                         .query_row("SELECT name, path FROM track WHERE id = ?", [val], |row| {
+    //                             Ok((
+    //                                 row.get::<usize, String>(0)
+    //                                     .unwrap_or(String::from("NOT FOUND")),
+    //                                 row.get::<usize, String>(1)
+    //                                     .unwrap_or(String::from("NOT FOUND")),
+    //                             ))
+    //                         })
+    //                         .unwrap_or((String::from("ERROR"), String::from("ERROR"))),
+    //                     Err(_) => {
+    //                         panic!("NO ID")
+    //                     }
+    //                 };
+    //                 Ok((track_dat, track_num, disc_num))
+    //             },
+    //         )
+    //         .unwrap_or(((String::new(), String::new()), 0, 0));
+    //
+    //     let track = Track {
+    //         name: tracks.0 .0,
+    //         file_path: tracks.0 .1,
+    //         track_number: tracks.1,
+    //         disc_number: tracks.2,
+    //     };
+    //     log::info!("{:?}", track);
+    //
+    //     track_vector.push(track);
+    // }
 
-    log::info!("{:?}", track_vector);
     FullAlbum {
         album,
         tracks: track_vector,
@@ -277,6 +341,7 @@ pub async fn get_top_album_info() -> Vec<Album> {
                     artist: artists_name,
                     disc_number: row.get::<usize, u32>(3).unwrap(),
                     track_number: row.get::<usize, u32>(4).unwrap(),
+                    cover_art: row.get(5).unwrap_or(None),
                 })
             }) {
                 Ok(val) => val,
