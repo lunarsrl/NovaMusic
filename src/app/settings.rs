@@ -27,7 +27,7 @@ impl AppModel {
         let contain = widget::Container::new(
             widget::column::Column::with_children([
                 current_settings
-                    .title("Current Config")
+                    .title("Current Scan Results")
                     .add(widget::Row::with_children([
                         text::heading("Music Directory:").into(),
                         widget::horizontal_space().into(),
@@ -61,7 +61,7 @@ impl AppModel {
                     ]))
                     .into(),
                 editable_settings
-                    .title("Edit Config")
+                    .title("Music Scanning")
                     .add(
                         widget::settings::item::builder("Music Directory:")
                             .description("Choose directory to scan for music.")
@@ -121,7 +121,7 @@ impl AppModel {
                     )
                     .into(),
                 grid_settings
-                    .title("Grid Size")
+                    .title("User Interface")
                     .add(
                         widget::settings::item::builder("Grid Item Size: ")
                             .control(cosmic::widget::slider(1..=6, self.config.grid_item_size, |a| Message::GridSliderChange(a))
