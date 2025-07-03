@@ -42,21 +42,20 @@ impl AlbumPage {
         }
     }
 
-    pub fn load_page(&self) -> Element<'static, Message> {
+    pub fn load_page(&self, grid_item_size: &u32, grid_item_spacing: &u32) -> Element<'static, Message> {
         let page_margin = cosmic::theme::spacing().space_m;
         match &self.page_state {
             PageState::Loading | PageState::Loaded => {
                 if self.albums.is_none() {
-                    if let PageState::Loading = self.page_state {
-
-                        return cosmic::widget::container(cosmic::widget::text::title3("Loading..."))
+                    return if let PageState::Loading = self.page_state {
+                        cosmic::widget::container(cosmic::widget::text::title3("Loading..."))
                             .align_x(Alignment::Center)
                             .align_y(Alignment::Center)
                             .width(Length::Fill)
                             .height(Length::Fill)
-                            .into();
+                            .into()
                     } else {
-                        return cosmic::widget::container(
+                        cosmic::widget::container(
                             cosmic::widget::column::with_children(
                                 vec![
                                     cosmic::widget::text::title3("No Albums Found In Database").into(),
@@ -69,10 +68,8 @@ impl AlbumPage {
                             .align_y(Alignment::Center)
                             .width(Length::Fill)
                             .height(Length::Fill)
-                            .into();
-                    }
-
-                    
+                            .into()
+                    } 
                 }
                 let mut elements = vec![];
                 for album in self.clone().albums.unwrap() {
@@ -86,8 +83,8 @@ impl AlbumPage {
                                     )
                                     .align_y(Alignment::Center)
                                     .align_x(Alignment::Center)
-                                    .height(192.0)
-                                    .width(192.0)
+                                    .height((grid_item_size * 32) as f32)
+                                    .width((grid_item_size * 32) as f32)
                                     .into()
                                 } else {
                                     cosmic::widget::container(
@@ -99,8 +96,8 @@ impl AlbumPage {
                                     .into()
                                 },
                                 cosmic::widget::column::with_children(vec![
-                                    cosmic::widget::text::text(album.name.clone()).into(),
-                                    cosmic::widget::text::text(album.artist.clone()).into(),
+                                    cosmic::widget::text::text(album.name.clone()).center().into(),
+                                    cosmic::widget::text::text(album.artist.clone()).center().into(),
                                 ])
                                 .align_x(Alignment::Center)
                                 .width(cosmic::iced::Length::Fill)
@@ -109,7 +106,7 @@ impl AlbumPage {
                         ))
                         .class(cosmic::widget::button::ButtonClass::Icon)
                         .on_press(Message::AlbumRequested((album.name, album.artist)))
-                        .width(192.0)
+                            .width((grid_item_size * 32) as f32)
                         .into(),
                     )
                 }

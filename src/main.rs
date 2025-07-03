@@ -22,7 +22,7 @@ fn main() -> cosmic::iced::Result {
     
     // Todo: On first run, prompt user to enter music directory path and initiate a scan before continuing.
     // For now: if database doesn't exist, create it.
-    match fs::exists("cosmic_music.db") {
+    match fs::exists("resources/cosmic_music.db") {
         Ok(val) => {
             println!("Database exists: {}", val);
             if !val {

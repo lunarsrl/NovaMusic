@@ -257,7 +257,7 @@ impl cosmic::Application for AppModel {
             Page::Artists => {
                 cosmic::widget::container(cosmic::widget::text::title1(" Artists ")).into()
             }
-            Page::Albums(albumspage) => albumspage.load_page(),
+            Page::Albums(albumspage) => albumspage.load_page(&self.config.grid_item_size, &self.config.grid_item_spacing),
             Page::Playlists => {
                 cosmic::widget::container(cosmic::widget::text::title1("Playlists")).into()
             }
