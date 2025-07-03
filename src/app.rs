@@ -9,9 +9,13 @@ mod settings;
 
 use tokio::task::spawn_blocking;
 
-use crate::app::albums::{get_album_info, get_top_album_info, Album, AlbumPage, FullAlbum};
+use crate::app::albums::{
+    get_album_info, get_top_album_info, Album, AlbumPage, FullAlbum, PageState,
+};
 use crate::app::scan::{scan_directory, MediaFileTypes};
-use crate::app::Message::{AlbumPageDone, SubscriptionChannel, UpdateScanProgress};
+use crate::app::Message::{
+    AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, SubscriptionChannel, UpdateScanProgress,
+};
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
 use crate::{app, config, fl, StandardTagKeyExt};
@@ -36,10 +40,14 @@ use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
+use colored::Colorize;
 use cosmic::cosmic_theme::palette::cast::IntoComponents;
 use cosmic::iced_core::text::Wrapping;
+use futures::channel::mpsc::Sender;
 use std::thread::sleep;
 use std::time::Duration;
+use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
+use cosmic::iced_wgpu::window::compositor::new;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Tag, Value};
@@ -64,17 +72,12 @@ pub struct AppModel {
     config: Config,
     config_handler: cosmic_config::Config,
 
-    // Pages
-    pub ready_to_render: bool,
-
     //Settings Page
     pub change_dir_filed: String,
     pub rescan_available: bool,
     pub stream_handle: OutputStreamHandle,
     pub stream: OutputStream,
-    //Album Page
-    pub albums: Vec<Album>,
-    //experimenting
+
 }
 
 /// Messages emitted by the application and its widgets.
@@ -96,19 +99,22 @@ pub enum Message {
     UpdateScanDirSize(u32),
 
     // Page Rendering
+    OnNavEnter,
     PageSpecificTask,
-    AlbumPageDone(AlbumPage),
 
     // Album Page
-    AlbumRequested((String, String)),
-    AlbumInfoRetrieved(FullAlbum),
+    AlbumRequested((String, String)), // when an album icon is clicked [gets title & artist of album]
+    AlbumInfoRetrieved(FullAlbum), // when task assigned to retrieving requested albums info is completed [gets full track list of album]
+    AlbumProcessed(Album), // when an album retrieved from db's data is organized and ready [Supplies AlbumPage with the new Album]
+    AlbumsLoaded, // when albums table retrieved from db is exhausted after OnNavEnter in Album Page [Sets page state to loaded]
+    AlbumPageStateAlbum(AlbumPage), // when album info is retrieved [Replaces AlbumPage with AlbumPage with new info] todo: Might be able to use this weird implementation to cache one album visit
+    AlbumPageReturn,
 
     // Audio Messages
     StartStream(PathBuf),
 
     //experimenting
     ToastDone,
-    OnNavEnter,
 }
 
 /// Create a COSMIC application from the app model
@@ -187,10 +193,6 @@ impl cosmic::Application for AppModel {
             // Audio
             stream,
             stream_handle,
-            // Page Data
-            ready_to_render: false,
-            //experimenting
-            albums: vec![],
         };
 
         // Create a startup command that sets the window title.
@@ -308,9 +310,19 @@ impl cosmic::Application for AppModel {
                 }
             },
             Message::RescanDir => {
+                // Settings: No rescan until current rescan finishes
                 self.rescan_available = false;
                 self.config.set_num_files_found(&self.config_handler, 0);
                 self.config.set_files_scanned(&self.config_handler, 0);
+
+                // Albums: Full reset
+                let album_pos = self.nav.entity_at(2).unwrap();
+                let album_dat = self.nav.data_mut::<Page>(album_pos).unwrap();
+                if let Page::Albums(page) = album_dat {
+                    page.albums = None;
+                    page.page_state = PageState::Loading
+                }
+
 
                 create_database();
 
@@ -437,24 +449,64 @@ impl cosmic::Application for AppModel {
             Message::PageSpecificTask => {}
 
             // PAGE TASK RESPONSES
-            Message::AlbumPageDone(newPage) => match self.nav.active_data_mut::<Page>().unwrap() {
+            Message::AlbumProcessed(new_album) => {
+                let dat_pos = self.nav.entity_at(2).expect("REASON");
+                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
+                if let Page::Albums(dat) = data {
+                    match &mut dat.albums {
+                        None => {
+                            dat.albums = Some(vec![new_album]);
+                        }
+                        Some(ref mut val) => {
+                            val.push(new_album);
+                        }
+                    }
+                }
+            }
+            Message::OnNavEnter => match self.nav.active_data_mut().unwrap() {
                 Page::NowPlaying => {}
                 Page::Artists => {}
-                Page::Albums(oldPage) => *oldPage = newPage,
-                Page::Playlists => {}
-            },
+                Page::Albums(val) => {
+                    match &mut val.page_state {
+                        PageState::Loading => {}
+                        PageState::Album(page) => return cosmic::Task::done(Message::AlbumPageReturn).map(cosmic::Action::from),
+                        PageState::Loaded => return Task::none(),
+                    }
 
-            Message::OnNavEnter => match self.nav.active_data().unwrap() {
-                Page::NowPlaying => {}
-                Page::Artists => {}
-                Page::Albums(page) => {
+                    let conn = rusqlite::Connection::open("cosmic_music.db").unwrap();
+
+                    let mut stmt = conn
+                        .prepare("SELECT a.id, a.name, a.disc_number, a.track_number, a.album_cover, art.name as artist_name
+                     FROM album a
+                     JOIN artists art ON a.artist_id = art.id")
+                        .expect("error preparing sql");
+
+                    let album_iter = stmt
+                        .query_map([], |row| {
+                            Ok((
+                                row.get::<_, String>("name").unwrap_or_default(),
+                                row.get::<_, String>("artist_name").unwrap_or_default(),
+                                row.get::<_, u32>("disc_number").unwrap_or(0),
+                                row.get::<_, u32>("track_number").unwrap_or(0),
+                                match row.get::<_, Vec<u8>>("album_cover") {
+                                    Ok(val) => Some(val),
+                                    Err(e) => {
+                                        log::info!("{}", e);
+                                        None
+                                    }
+                                },
+                            ))
+                        })
+                        .expect("error executing query");
+
+                    let albums: Vec<(String, String, u32, u32, Option<Vec<u8>>)> =
+                        album_iter.filter_map(|a| a.ok()).collect();
+
                     return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                         0,
                         |mut tx| async move {
-                            let albums = get_top_album_info().await;
-                            tx.send(AlbumPageDone(AlbumPage::new(Some(albums))))
-                                .await
-                                .unwrap();
+                            get_top_album_info(&mut tx, albums).await;
+                            tx.send(Message::AlbumsLoaded).await.expect("de")
                         },
                     ))
                     .map(cosmic::Action::App);
@@ -465,10 +517,46 @@ impl cosmic::Application for AppModel {
                 }
                 Page::Playlists => {}
             },
+            Message::AlbumsLoaded => {
+                let dat_pos = self.nav.entity_at(2).expect("REASON");
+                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
+
+                if let Page::Albums(dat) = data {
+                    dat.page_state = PageState::Loaded;
+                    dat.has_fully_loaded = true;
+                }
+            }
+            Message::AlbumPageReturn => {
+                let dat_pos = self.nav.entity_at(2).expect("REASON");
+                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
+
+                if let Page::Albums(dat) = data {
+                    match  dat.has_fully_loaded
+                    {
+                        true =>
+                            {dat.page_state = PageState::Loaded;}
+                        false => {dat.page_state = PageState::Loading;}
+                    }
+
+                }
+            },
+            Message::AlbumPageStateAlbum(new_page) => {
+                match self.nav.active_data_mut::<Page>().unwrap() {
+                    Page::NowPlaying => {}
+                    Page::Artists => {}
+                    Page::Albums(old_page) => {
+                        *old_page = new_page;
+                    }
+                    Page::Playlists => {}
+                }
+            }
             Message::AlbumInfoRetrieved(albuminfopage) => {
-                return cosmic::task::future(async move {
-                    AlbumPageDone(AlbumPage::new_album_page(albuminfopage))
-                });
+                    let pos =  self.nav.entity_at(2).expect("REASON");
+                   let album_page = self.nav.data_mut::<Page>(pos).unwrap();
+                    if let Page::Albums(page) = album_page {
+                        page.page_state = PageState::Album(albuminfopage);
+                    }
+
             }
             Message::ToastDone => {}
             Message::AlbumRequested(dat) => {
