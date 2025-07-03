@@ -20,7 +20,7 @@ use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
 use crate::{app, config, fl, StandardTagKeyExt};
 use cosmic::app::context_drawer;
-use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::cosmic_config::{self, ConfigSet, CosmicConfigEntry};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key::Physical::Code;
 use cosmic::iced::wgpu::naga::FastHashMap;
@@ -32,7 +32,7 @@ use cosmic::{cosmic_theme, iced, iced_futures, theme};
 use futures_util::SinkExt;
 use log::info;
 use rodio::source::SeekError::SymphoniaDecoder;
-use rodio::{OutputStream, OutputStreamHandle};
+use rodio::{OutputStream, OutputStreamHandle, PlayError, Sink};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -75,6 +75,8 @@ pub struct AppModel {
     //Settings Page
     pub change_dir_filed: String,
     pub rescan_available: bool,
+
+    //Audio
     pub stream_handle: OutputStreamHandle,
     pub stream: OutputStream,
 
@@ -115,6 +117,7 @@ pub enum Message {
 
     //experimenting
     ToastDone,
+    GridSliderChange(u32),
 }
 
 /// Create a COSMIC application from the app model
@@ -442,9 +445,15 @@ impl cosmic::Application for AppModel {
 
             Message::StartStream(filepath) => {
                 let file = std::fs::File::open(&filepath).unwrap();
-                self.stream_handle
-                    .play_once(file)
-                    .expect("TODO: panic message");
+                match self.stream_handle.play_once(file) {
+                    Ok(val) => {
+
+                    }
+                    Err(_) => {
+                        log::error!("Play Failed");
+                    }
+                }
+
             }
             Message::PageSpecificTask => {}
 
@@ -578,6 +587,9 @@ impl cosmic::Application for AppModel {
                         log::error!("Requested album info while outside albums page somehow")
                     }
                 }
+            },
+            app::Message::GridSliderChange(val) =>  {
+                self.config.set_grid_item_size(&self.config_handler, val).expect("Failed To Update Config");
             }
         }
         Task::none()

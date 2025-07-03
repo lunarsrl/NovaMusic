@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 #[version = 1]
 pub struct Config {
     pub scan_dir: String,
+    pub grid_item_size: u32,
+    pub grid_item_spacing: u32,
     pub num_files_found: u32,
     pub files_scanned: u32
 }

@@ -1,5 +1,5 @@
 use crate::app;
-use crate::app::AppModel;
+use crate::app::{AppModel, Message};
 use cosmic::widget::text::heading;
 use cosmic::widget::{container, icon, text, ProgressBar};
 use cosmic::{theme, widget, Element};
@@ -9,6 +9,7 @@ use std::fmt::format;
 use std::ops::RangeInclusive;
 use cosmic::iced::Alignment;
 use cosmic::iced::alignment::Horizontal;
+use cosmic::widget::settings::Section;
 
 impl AppModel {
     pub fn settings(&self) -> Element<app::Message> {
@@ -19,8 +20,9 @@ impl AppModel {
             ..
         } = theme::active().cosmic().spacing;
 
-        let editable_settings = cosmic::widget::settings::section();
-        let current_settings = cosmic::widget::settings::section();
+        let editable_settings: Section<Message> = cosmic::widget::settings::section();
+        let current_settings: Section<Message> = cosmic::widget::settings::section();
+        let grid_settings: Section<Message> = cosmic::widget::settings::section();
 
         let contain = widget::Container::new(
             widget::column::Column::with_children([
@@ -116,6 +118,15 @@ impl AppModel {
                                 .into(),
                         ])
                         .spacing(space_xxs),
+                    )
+                    .into(),
+                grid_settings
+                    .title("Grid Size")
+                    .add(
+                        widget::settings::item::builder("Grid Item Size: ")
+                            .control(cosmic::widget::slider(1..=6, self.config.grid_item_size, |a| Message::GridSliderChange(a))
+                                
+                            )
                     )
                     .into(),
             ])

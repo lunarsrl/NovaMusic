@@ -14,6 +14,7 @@ use rusqlite::{params, MappedRows, Row};
 use std::fmt::format;
 use std::time;
 use std::time::{Duration, SystemTime};
+use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -46,12 +47,32 @@ impl AlbumPage {
         match &self.page_state {
             PageState::Loading | PageState::Loaded => {
                 if self.albums.is_none() {
-                    return cosmic::widget::container(cosmic::widget::text::title3("Loading..."))
-                        .align_x(Alignment::Center)
-                        .align_y(Alignment::Center)
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .into();
+                    if let PageState::Loading = self.page_state {
+
+                        return cosmic::widget::container(cosmic::widget::text::title3("Loading..."))
+                            .align_x(Alignment::Center)
+                            .align_y(Alignment::Center)
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .into();
+                    } else {
+                        return cosmic::widget::container(
+                            cosmic::widget::column::with_children(
+                                vec![
+                                    cosmic::widget::text::title3("No Albums Found In Database").into(),
+                                    cosmic::widget::text::text("1. Go to View -> Settings \n 2. Choose the directory where your music is located \n 3. Click on the red \"Rescan\" button to create your music database.").into(),
+                                    cosmic::widget::text::caption_heading("If the issue persists, your files may lack the metadata to be identified as albums. A tool like MusicBrainz Picard can help you add and organize music metadata.").into(),
+                                ]
+                            ).spacing(cosmic::theme::spacing().space_s)
+                        )
+                            .align_x(Alignment::Center)
+                            .align_y(Alignment::Center)
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .into();
+                    }
+
+                    
                 }
                 let mut elements = vec![];
                 for album in self.clone().albums.unwrap() {
@@ -177,10 +198,26 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                 list_widget = Some(
                     // ----CONTENT---- //
                     prev_list.add(cosmic::widget::container::Container::new(
-                        cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
+                        cosmic::widget::row::with_children(vec![
+                            cosmic::widget::text::heading(
                             format!("{}. {}", track.track_number, track.name),
                         )
-                        .into()]),
+                        .into(),
+                            cosmic::widget::container(
+                            cosmic::widget::button::custom(
+                                cosmic::widget::row::with_children(vec![
+                                    cosmic::widget::icon::from_name("media-playback-start-symbolic")
+                                        .into(),
+                                    cosmic::widget::text::text("Play!").into(),
+                                ])
+                                    .align_y(Alignment::Center),
+                            )
+                                .on_press(Message::StartStream(track.file_path.parse().unwrap()))
+                                .class(cosmic::widget::button::ButtonClass::Link)
+                            )
+                                .align_x(Alignment::End)
+                                .into()
+                        ]),
                     )),
                 )
             }
