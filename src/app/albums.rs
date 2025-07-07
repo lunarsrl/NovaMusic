@@ -19,12 +19,12 @@ use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
     pub albums: Option<Vec<Album>>,
-    pub page_state: PageState,
+    pub page_state: AlbumPageState,
     pub has_fully_loaded: bool,
 }
 
 #[derive(Clone, Debug)]
-pub enum PageState {
+pub enum AlbumPageState {
     /// Top level state, view of albums that have been loaded thus far
     Loading,
     /// Top level state, view once all items have been loaded, todo: for cache purposes eventually probably
@@ -37,7 +37,7 @@ impl AlbumPage {
     pub(crate) fn new(album_list: Option<Vec<Album>>) -> AlbumPage {
         AlbumPage {
             albums: album_list,
-            page_state: PageState::Loading,
+            page_state: AlbumPageState::Loading,
             has_fully_loaded: false,
         }
     }
@@ -45,9 +45,9 @@ impl AlbumPage {
     pub fn load_page(&self, grid_item_size: &u32, grid_item_spacing: &u32) -> Element<'static, Message> {
         let page_margin = cosmic::theme::spacing().space_m;
         match &self.page_state {
-            PageState::Loading | PageState::Loaded => {
+            AlbumPageState::Loading | AlbumPageState::Loaded => {
                 if self.albums.is_none() {
-                    return if let PageState::Loading = self.page_state {
+                    return if let AlbumPageState::Loading = self.page_state {
                         cosmic::widget::container(cosmic::widget::text::title3("Loading..."))
                             .align_x(Alignment::Center)
                             .align_y(Alignment::Center)
@@ -118,7 +118,7 @@ impl AlbumPage {
                 .height(Length::Fill)
                 .into()
             }
-            PageState::Album(albumpage) => {
+            AlbumPageState::Album(albumpage) => {
                 cosmic::widget::container(
                     // ALL
                     cosmic::widget::Column::with_children([
@@ -142,6 +142,20 @@ impl AlbumPage {
                                     albumpage.album.artist.as_str()
                                 ))
                                 .into(),
+
+                                cosmic::widget::button::custom(
+                                    cosmic::widget::row::with_children(vec![
+                                        cosmic::widget::icon::from_name("media-playback-start-symbolic")
+                                            .into(),
+                                        cosmic::widget::text::text("Add Album To Queue").into(),
+                                    ])
+                                        .align_y(Alignment::Center),
+                                )
+                                    .on_press(
+                                        Message::AddAlbumToQueue,
+                                    )
+                                    .class(cosmic::widget::button::ButtonClass::Link)
+                                    .into()
                             ])
                             .into(),
                         ])
@@ -200,19 +214,20 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                             format!("{}. {}", track.track_number, track.name),
                         )
                         .into(),
-                            cosmic::widget::container(
+
+                            cosmic::widget::horizontal_space().into(),
+                            
                             cosmic::widget::button::custom(
                                 cosmic::widget::row::with_children(vec![
                                     cosmic::widget::icon::from_name("media-playback-start-symbolic")
                                         .into(),
-                                    cosmic::widget::text::text("Play!").into(),
                                 ])
                                     .align_y(Alignment::Center),
                             )
-                                .on_press(Message::StartStream(track.file_path.parse().unwrap()))
+                                .on_press(
+                                    Message::AddTrackToQueue(track.file_path.clone()),
+                                )
                                 .class(cosmic::widget::button::ButtonClass::Link)
-                            )
-                                .align_x(Alignment::End)
                                 .into()
                         ]),
                     )),
