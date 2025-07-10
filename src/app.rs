@@ -28,7 +28,9 @@ use cosmic::cosmic_config::{self, ConfigSet, CosmicConfigEntry};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key::Physical::Code;
 use cosmic::iced::wgpu::naga::FastHashMap;
-use cosmic::iced::{alignment, event, stream, Alignment, ContentFit, Fill, Length, Pixels, Subscription};
+use cosmic::iced::{
+    alignment, event, stream, Alignment, ContentFit, Fill, Length, Pixels, Subscription,
+};
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, container, icon, menu, nav_bar, progress_bar, toaster, JustifyContent};
@@ -49,12 +51,12 @@ use colored::Colorize;
 use cosmic::cosmic_theme::palette::cast::IntoComponents;
 use cosmic::iced::keyboard::key::Code::Home;
 use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
+use cosmic::iced::window::Id;
 use cosmic::iced_core::text::Wrapping;
 use cosmic::iced_wgpu::window::compositor::new;
 use futures::channel::mpsc::Sender;
 use std::thread::sleep;
 use std::time::Duration;
-use cosmic::iced::window::Id;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Tag, Value};
@@ -122,17 +124,23 @@ pub enum Message {
     AlbumPageReturn,
 
     // Home Page (Or Now Playing Page idk tbh)
+    //todo Change to pathbufs for safety?
     AddTrackToQueue(String),
+    //todo Make albums in queue fancier kinda like Elisa does it
+    AddAlbumToQueue(Vec<String>),
 
     // Audio Messages
     StartStream(PathBuf),
 
-    //experimenting
-    ToastDone,
+    // Media Controls
+    SkipTrack,
+
+    // Settings
     GridSliderChange(u32),
     VolumeSliderAdjusted(u32),
-    SkipTrack,
-    AddAlbumToQueue,
+
+    //experimenting
+    ToastDone,
 }
 
 /// Create a COSMIC application from the app model
@@ -160,7 +168,6 @@ impl cosmic::Application for AppModel {
     // fn on_close_requested(&self, id: Id) -> Option<Self::Message> {
     //
     // }
-
 
     /// Initializes the application with any given flags and startup commands.
     fn init(
@@ -227,15 +234,12 @@ impl cosmic::Application for AppModel {
     fn subscription(&self) -> Subscription<Self::Message> {
         struct PlayerSubscription;
 
-
         return Subscription::run_with_id(
             TypeId::of::<PlayerSubscription>(),
             stream::channel(100, |mut output| async move {
-                    output.send(Message::SubscriptionChannel).await.expect("Ew");
-            })
+                output.send(Message::SubscriptionChannel).await.expect("Ew");
+            }),
         );
-
-
     }
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<Self::Message>> {
@@ -648,22 +652,21 @@ select track.name as title, art.name as artist, track.path, a.album_cover
                         )
                         .expect("error preparing sql");
 
-                    let track = stmt.query_row([filepath], |row| {
-                        Ok(HomeTrack {
-                            title: row.get("title").expect("REASON"),
-                            artist: row.get("artist").expect("REASON"),
-                            path_buf: PathBuf::from(row.get::<&str, String>("path").expect("REASON")),
-                            cover_art: match row.get::<&str, Vec<u8>>("album_cover") {
-                                Ok(val) => {
-                                    Some(cosmic::widget::image::Handle::from_bytes(val))
-                                }
-                                Err(_) => {
-                                    None
-                                }
-                            },
+                    let track = stmt
+                        .query_row([filepath], |row| {
+                            Ok(HomeTrack {
+                                title: row.get("title").expect("REASON"),
+                                artist: row.get("artist").expect("REASON"),
+                                path_buf: PathBuf::from(
+                                    row.get::<&str, String>("path").expect("REASON"),
+                                ),
+                                cover_art: match row.get::<&str, Vec<u8>>("album_cover") {
+                                    Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
+                                    Err(_) => None,
+                                },
+                            })
                         })
-                    }).expect("error executing query");
-
+                        .expect("error executing query");
 
                     match &mut page.state {
                         HomePageState::Empty => {
@@ -679,7 +682,6 @@ select track.name as title, art.name as artist, track.path, a.album_cover
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
                 if let Page::NowPlaying(page) = home_page {
-
                     match &mut page.state {
                         HomePageState::Empty => {
                             log::warn!("No Tracks")
@@ -687,14 +689,63 @@ select track.name as title, art.name as artist, track.path, a.album_cover
                         HomePageState::Queued(queue) => {
                             queue.remove(0);
                             match queue.is_empty() {
-                                true => {page.state = HomePageState::Empty;}
-                                false => {;}
+                                true => {
+                                    page.state = HomePageState::Empty;
+                                }
+                                false => {}
                             }
                         }
                     }
                 }
-            },
-            app::Message::AddAlbumToQueue => todo!()
+            }
+            app::Message::AddAlbumToQueue(paths) => {
+                let pos = self.nav.entity_at(0).expect("REASON");
+                let home_page = self.nav.data_mut::<Page>(pos).unwrap();
+                if let Page::NowPlaying(page) = home_page {
+                    let conn = rusqlite::Connection::open("cosmic_music.db").unwrap();
+                    let mut stmt = conn
+                        .prepare(
+                            "
+select track.name as title, art.name as artist, track.path, a.album_cover
+    from track
+    left join main.album_tracks at on track.id = at.track_id
+    left join main.artists art on track.artist_id = art.id
+    left join main.album a on at.album_id = a.id
+    where track.path=?;
+
+                            ",
+                        )
+                        .expect("error preparing sql");
+                    for filepath in paths {
+                        let track = stmt
+                            .query_row([filepath], |row| {
+                                Ok(HomeTrack {
+                                    title: row.get("title").expect("REASON"),
+                                    artist: row.get("artist").expect("REASON"),
+                                    path_buf: PathBuf::from(
+                                        row.get::<&str, String>("path").expect("REASON"),
+                                    ),
+                                    cover_art: match row.get::<&str, Vec<u8>>("album_cover") {
+                                        Ok(val) => {
+                                            Some(cosmic::widget::image::Handle::from_bytes(val))
+                                        }
+                                        Err(_) => None,
+                                    },
+                                })
+                            })
+                            .expect("error executing query");
+
+                        match &mut page.state {
+                            HomePageState::Empty => {
+                                page.state = Queued(vec![track]);
+                            }
+                            HomePageState::Queued(queue) => {
+                                queue.push(track);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Task::none()
@@ -801,4 +852,3 @@ impl menu::action::MenuAction for Action {
         }
     }
 }
-

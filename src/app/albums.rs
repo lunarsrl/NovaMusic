@@ -7,16 +7,17 @@ use cosmic::iced::application::Title;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
 use cosmic::iced::{Alignment, ContentFit, Length, Size};
+use cosmic::iced_core::image::Handle;
 use cosmic::widget::image::Handle::Bytes;
 use cosmic::widget::row;
 use cosmic::{iced, iced_core, Apply, Element};
-use futures_util::SinkExt;
+use futures_util::{SinkExt, StreamExt};
 use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::{params, MappedRows, Row};
 use std::fmt::format;
+use std::path::PathBuf;
 use std::time;
 use std::time::{Duration, SystemTime};
-use cosmic::iced_core::image::Handle;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -128,10 +129,17 @@ impl AlbumPage {
                     cosmic::widget::container(
                         cosmic::widget::column::with_children(vec![
                             cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::title2("Album Library").into(),
-                                cosmic::widget::search_input("Enter Album Name", "").into(),
+                                cosmic::widget::text::title2("Album Library")
+                                    .width(Length::FillPortion(2))
+                                    .into(),
+                                cosmic::widget::horizontal_space()
+                                    .width(Length::Shrink)
+                                    .into(),
+                                /* todo: Add album search
+                                 cosmic::widget::search_input("Enter Album Name", "").width(Length::FillPortion(1)).into(),
+                                */
                             ])
-                                .align_y(Alignment::Center)
+                            .align_y(Alignment::Center)
                             .spacing(cosmic::theme::spacing().space_s)
                             .into(),
                             cosmic::widget::container(
@@ -171,14 +179,12 @@ impl AlbumPage {
                             // Art Area?
                             match &albumpage.album.cover_art {
                                 None => {
-
                                     log::info!("No Cover Art");
                                     cosmic::widget::icon::from_name("applications-audio-symbolic")
                                         .size(128)
                                         .into()
                                 }
                                 Some(handle) => {
-
                                     log::info!("Yes Cover Art");
                                     cosmic::widget::image(handle)
                                         .content_fit(ContentFit::Contain)
@@ -187,7 +193,6 @@ impl AlbumPage {
                                         .into()
                                 }
                             },
-
                             cosmic::widget::Column::with_children([
                                 // Album Title and Author Column
                                 cosmic::widget::text::title2(albumpage.album.name.clone()).into(),
@@ -204,17 +209,21 @@ impl AlbumPage {
                                         .into(),
                                         cosmic::widget::text::text("Add Album To Queue").into(),
                                     ])
+                                    .spacing(cosmic::theme::spacing().space_xxs)
                                     .align_y(Alignment::Center),
                                 )
-                                    .padding(cosmic::theme::spacing().space_xxs)
-                                .on_press(Message::AddAlbumToQueue)
+                                .padding(cosmic::theme::spacing().space_xxs)
+                                .on_press(Message::AddAlbumToQueue(albumpage.tracks.iter().map(|a| {
+                                    a.file_path.clone()
+                                }).collect::<Vec<String>>()
+                                ))
                                 .class(cosmic::widget::button::ButtonClass::Suggested)
                                 .into(),
                             ])
-                                .spacing(cosmic::theme::spacing().space_xxxs)
+                            .spacing(cosmic::theme::spacing().space_xxxs)
                             .into(),
                         ])
-                            .spacing(cosmic::theme::spacing().space_s)
+                        .spacing(cosmic::theme::spacing().space_s)
                         .into(),
                         // BODY
                         cosmic::widget::scrollable(cosmic::widget::container::Container::new(
@@ -285,7 +294,7 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                                 .align_y(Alignment::Center),
                             )
                             .on_press(Message::AddTrackToQueue(track.file_path.clone()))
-                            .class(cosmic::widget::button::ButtonClass::Link)
+                            .class(cosmic::widget::button::ButtonClass::Standard)
                             .into(),
                         ]),
                     )),
@@ -334,12 +343,8 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
         disc_number: row_num.1.unwrap_or(0),
         track_number: row_num.2.unwrap_or(0),
         cover_art: match row_num.3 {
-            Ok(bytes) => {
-                Some(cosmic::widget::image::Handle::from_bytes(bytes))
-            }
-            Err(_) => {
-                None
-            }
+            Ok(bytes) => Some(cosmic::widget::image::Handle::from_bytes(bytes)),
+            Err(_) => None,
         },
     };
 
