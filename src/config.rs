@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::app;
+use crate::app::home::HomePageState;
 use cosmic::cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry};
 use cosmic::Application;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ pub struct Config {
     pub grid_item_size: u32,
     pub grid_item_spacing: u32,
     pub num_files_found: u32,
-    pub files_scanned: u32
+    pub files_scanned: u32,
 }
 
 impl Config {

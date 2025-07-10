@@ -2,11 +2,12 @@
 
 mod albums;
 mod artists;
-mod home;
+pub(crate) mod home;
 mod playlists;
 mod scan;
 mod settings;
 
+use std::any::TypeId;
 use tokio::task::spawn_blocking;
 
 use crate::app::albums::{
@@ -27,7 +28,7 @@ use cosmic::cosmic_config::{self, ConfigSet, CosmicConfigEntry};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key::Physical::Code;
 use cosmic::iced::wgpu::naga::FastHashMap;
-use cosmic::iced::{alignment, stream, Alignment, ContentFit, Fill, Length, Pixels, Subscription};
+use cosmic::iced::{alignment, event, stream, Alignment, ContentFit, Fill, Length, Pixels, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, container, icon, menu, nav_bar, progress_bar, toaster, JustifyContent};
@@ -53,10 +54,12 @@ use cosmic::iced_wgpu::window::compositor::new;
 use futures::channel::mpsc::Sender;
 use std::thread::sleep;
 use std::time::Duration;
+use cosmic::iced::window::Id;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Tag, Value};
 use symphonia::core::probe::Hint;
+use symphonia::core::units::Time;
 use symphonia::default::get_probe;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
@@ -85,6 +88,8 @@ pub struct AppModel {
     pub stream_handle: OutputStreamHandle,
     pub stream: OutputStream,
 }
+
+struct MySubscription;
 
 /// Messages emitted by the application and its widgets.
 #[derive(Debug, Clone)]
@@ -152,6 +157,11 @@ impl cosmic::Application for AppModel {
         &mut self.core
     }
 
+    // fn on_close_requested(&self, id: Id) -> Option<Self::Message> {
+    //
+    // }
+
+
     /// Initializes the application with any given flags and startup commands.
     fn init(
         core: cosmic::Core,
@@ -214,6 +224,19 @@ impl cosmic::Application for AppModel {
         (app, command)
     }
 
+    fn subscription(&self) -> Subscription<Self::Message> {
+        struct PlayerSubscription;
+
+
+        return Subscription::run_with_id(
+            TypeId::of::<PlayerSubscription>(),
+            stream::channel(100, |mut output| async move {
+                    output.send(Message::SubscriptionChannel).await.expect("Ew");
+            })
+        );
+
+
+    }
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         let menu_bar = menu::bar(vec![menu::Tree::with_children(
@@ -778,3 +801,4 @@ impl menu::action::MenuAction for Action {
         }
     }
 }
+

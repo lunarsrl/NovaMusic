@@ -72,7 +72,8 @@ impl AlbumPage {
                     } 
                 }
                 let mut elements = vec![];
-                for album in self.clone().albums.unwrap() {
+                // removing some clones here would probably be big
+                for album in self.albums.as_ref().unwrap() {
                     elements.push(
                         cosmic::widget::button::custom(cosmic::widget::column::with_children(
                             // Need to turn this into an async task, just wanted to see what it would look like for now
@@ -105,7 +106,7 @@ impl AlbumPage {
                             ],
                         ))
                         .class(cosmic::widget::button::ButtonClass::Icon)
-                        .on_press(Message::AlbumRequested((album.name, album.artist)))
+                        .on_press(Message::AlbumRequested((album.name.clone(), album.artist.clone())))
                             .width((grid_item_size * 32) as f32)
                         .into(),
                     )

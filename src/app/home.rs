@@ -16,11 +16,14 @@ pub(crate) struct HomePage {
     pub state: HomePageState,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum HomePageState {
+    #[default]
     Empty,
     Queued(Vec<HomeTrack>),
 }
+
+
 
 
 impl HomePage {
@@ -277,6 +280,8 @@ fn listify_queue(state: &HomePageState) -> Element<'static, Message> {
 
 #[derive(Clone)]
 #[derive(Debug)]
+#[derive(PartialEq)]
+#[derive(Eq)]
 pub struct HomeTrack {
     pub(crate) title: String,
     pub(crate) artist: String,
