@@ -232,7 +232,7 @@ impl HomePage {
                                                 cosmic::widget::icon::from_name(
                                                     "media-playback-start-symbolic",
                                                 ),
-                                            )
+                                            ).on_press(Message::PlayPause)
                                             .class(cosmic::widget::button::ButtonClass::Standard)
                                             .into(),
                                             cosmic::widget::button::icon(
