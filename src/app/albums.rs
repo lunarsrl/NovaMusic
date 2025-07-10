@@ -3,8 +3,10 @@ use crate::app::Message;
 use cosmic::cctk::wayland_client::backend::protocol::wl_message;
 use cosmic::cosmic_theme::palette::blend::Compose;
 use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
+use cosmic::iced::application::Title;
 use cosmic::iced::futures::channel::mpsc::Sender;
-use cosmic::iced::{Alignment, Length, Size};
+use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
+use cosmic::iced::{Alignment, ContentFit, Length, Size};
 use cosmic::widget::image::Handle::Bytes;
 use cosmic::widget::row;
 use cosmic::{iced, iced_core, Apply, Element};
@@ -14,7 +16,7 @@ use rusqlite::{params, MappedRows, Row};
 use std::fmt::format;
 use std::time;
 use std::time::{Duration, SystemTime};
-use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
+use cosmic::iced_core::image::Handle;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -42,7 +44,11 @@ impl AlbumPage {
         }
     }
 
-    pub fn load_page(&self, grid_item_size: &u32, grid_item_spacing: &u32) -> Element<'static, Message> {
+    pub fn load_page(
+        &self,
+        grid_item_size: &u32,
+        grid_item_spacing: &u32,
+    ) -> Element<'static, Message> {
         let page_margin = cosmic::theme::spacing().space_m;
         match &self.page_state {
             AlbumPageState::Loading | AlbumPageState::Loaded => {
@@ -69,14 +75,13 @@ impl AlbumPage {
                             .width(Length::Fill)
                             .height(Length::Fill)
                             .into()
-                    } 
+                    };
                 }
                 let mut elements = vec![];
                 // removing some clones here would probably be big
                 for album in self.albums.as_ref().unwrap() {
                     elements.push(
                         cosmic::widget::button::custom(cosmic::widget::column::with_children(
-                            // Need to turn this into an async task, just wanted to see what it would look like for now
                             vec![
                                 if let Some(cover_art) = &album.cover_art {
                                     cosmic::widget::container::Container::new(
@@ -97,8 +102,12 @@ impl AlbumPage {
                                     .into()
                                 },
                                 cosmic::widget::column::with_children(vec![
-                                    cosmic::widget::text::text(album.name.clone()).center().into(),
-                                    cosmic::widget::text::text(album.artist.clone()).center().into(),
+                                    cosmic::widget::text::text(album.name.clone())
+                                        .center()
+                                        .into(),
+                                    cosmic::widget::text::text(album.artist.clone())
+                                        .center()
+                                        .into(),
                                 ])
                                 .align_x(Alignment::Center)
                                 .width(cosmic::iced::Length::Fill)
@@ -106,15 +115,39 @@ impl AlbumPage {
                             ],
                         ))
                         .class(cosmic::widget::button::ButtonClass::Icon)
-                        .on_press(Message::AlbumRequested((album.name.clone(), album.artist.clone())))
-                            .width((grid_item_size * 32) as f32)
+                        .on_press(Message::AlbumRequested((
+                            album.name.clone(),
+                            album.artist.clone(),
+                        )))
+                        .width((grid_item_size * 32) as f32)
                         .into(),
                     )
                 }
 
-                cosmic::widget::scrollable(cosmic::widget::container(cosmic::widget::flex_row(
-                    elements,
-                )))
+                cosmic::widget::scrollable(
+                    cosmic::widget::container(
+                        cosmic::widget::column::with_children(vec![
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::text::title2("Album Library").into(),
+                                cosmic::widget::search_input("Enter Album Name", "").into(),
+                            ])
+                                .align_y(Alignment::Center)
+                            .spacing(cosmic::theme::spacing().space_s)
+                            .into(),
+                            cosmic::widget::container(
+                                // Body
+                                cosmic::widget::flex_row(elements),
+                            )
+                            .into(),
+                        ])
+                        .padding(iced::core::padding::Padding::from([
+                            0,
+                            cosmic::theme::spacing().space_m,
+                        ]))
+                        .spacing(cosmic::theme::spacing().space_s),
+                    )
+                    .align_x(Alignment::Center),
+                )
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .into()
@@ -124,42 +157,64 @@ impl AlbumPage {
                     // ALL
                     cosmic::widget::Column::with_children([
                         // HEADING
+                        cosmic::widget::button::custom(
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::icon::from_name("go-previous-symbolic").into(),
+                                cosmic::widget::text::text("Albums").into(),
+                            ])
+                            .align_y(Alignment::Center),
+                        )
+                        .class(cosmic::widget::button::ButtonClass::Link)
+                        .on_press(Message::AlbumPageReturn)
+                        .into(),
                         cosmic::widget::Row::with_children([
+                            // Art Area?
+                            match &albumpage.album.cover_art {
+                                None => {
+
+                                    log::info!("No Cover Art");
+                                    cosmic::widget::icon::from_name("applications-audio-symbolic")
+                                        .size(128)
+                                        .into()
+                                }
+                                Some(handle) => {
+
+                                    log::info!("Yes Cover Art");
+                                    cosmic::widget::image(handle)
+                                        .content_fit(ContentFit::Contain)
+                                        .height(128.0)
+                                        .width(128.0)
+                                        .into()
+                                }
+                            },
+
                             cosmic::widget::Column::with_children([
-                                cosmic::widget::button::custom(
-                                    cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::icon::from_name("go-previous-symbolic")
-                                            .into(),
-                                        cosmic::widget::text::text("Albums").into(),
-                                    ])
-                                    .align_y(Alignment::Center),
-                                )
-                                .class(cosmic::widget::button::ButtonClass::Link)
-                                .on_press(Message::AlbumPageReturn)
-                                .into(),
-                                cosmic::widget::text::title3(albumpage.album.name.clone()).into(),
+                                // Album Title and Author Column
+                                cosmic::widget::text::title2(albumpage.album.name.clone()).into(),
                                 cosmic::widget::text::title4(format!(
                                     "By {}",
                                     albumpage.album.artist.as_str()
                                 ))
                                 .into(),
-
                                 cosmic::widget::button::custom(
                                     cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::icon::from_name("media-playback-start-symbolic")
-                                            .into(),
+                                        cosmic::widget::icon::from_name(
+                                            "media-playback-start-symbolic",
+                                        )
+                                        .into(),
                                         cosmic::widget::text::text("Add Album To Queue").into(),
                                     ])
-                                        .align_y(Alignment::Center),
+                                    .align_y(Alignment::Center),
                                 )
-                                    .on_press(
-                                        Message::AddAlbumToQueue,
-                                    )
-                                    .class(cosmic::widget::button::ButtonClass::Link)
-                                    .into()
+                                    .padding(cosmic::theme::spacing().space_xxs)
+                                .on_press(Message::AddAlbumToQueue)
+                                .class(cosmic::widget::button::ButtonClass::Suggested)
+                                .into(),
                             ])
+                                .spacing(cosmic::theme::spacing().space_xxxs)
                             .into(),
                         ])
+                            .spacing(cosmic::theme::spacing().space_s)
                         .into(),
                         // BODY
                         cosmic::widget::scrollable(cosmic::widget::container::Container::new(
@@ -169,7 +224,10 @@ impl AlbumPage {
                     ])
                     .spacing(page_margin),
                 )
-                .padding(page_margin)
+                .padding(iced::core::padding::Padding::from([
+                    0,
+                    cosmic::theme::spacing().space_m,
+                ]))
                 .into()
             }
         }
@@ -211,25 +269,24 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                     // ----CONTENT---- //
                     prev_list.add(cosmic::widget::container::Container::new(
                         cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text::heading(
-                            format!("{}. {}", track.track_number, track.name),
-                        )
-                        .into(),
-
+                            cosmic::widget::text::heading(format!(
+                                "{}. {}",
+                                track.track_number, track.name
+                            ))
+                            .into(),
                             cosmic::widget::horizontal_space().into(),
-                            
                             cosmic::widget::button::custom(
                                 cosmic::widget::row::with_children(vec![
-                                    cosmic::widget::icon::from_name("media-playback-start-symbolic")
-                                        .into(),
+                                    cosmic::widget::icon::from_name(
+                                        "media-playback-start-symbolic",
+                                    )
+                                    .into(),
                                 ])
-                                    .align_y(Alignment::Center),
+                                .align_y(Alignment::Center),
                             )
-                                .on_press(
-                                    Message::AddTrackToQueue(track.file_path.clone()),
-                                )
-                                .class(cosmic::widget::button::ButtonClass::Link)
-                                .into()
+                            .on_press(Message::AddTrackToQueue(track.file_path.clone()))
+                            .class(cosmic::widget::button::ButtonClass::Link)
+                            .into(),
                         ]),
                     )),
                 )
@@ -265,6 +322,7 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
                     row.get::<usize, u32>(0),
                     row.get::<usize, u32>(3),
                     row.get::<usize, u32>(4),
+                    row.get::<&str, Vec<u8>>("album_cover"),
                 ))
             },
         )
@@ -275,7 +333,14 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
         artist,
         disc_number: row_num.1.unwrap_or(0),
         track_number: row_num.2.unwrap_or(0),
-        cover_art: None,
+        cover_art: match row_num.3 {
+            Ok(bytes) => {
+                Some(cosmic::widget::image::Handle::from_bytes(bytes))
+            }
+            Err(_) => {
+                None
+            }
+        },
     };
 
     let mut track_vector = vec![];
