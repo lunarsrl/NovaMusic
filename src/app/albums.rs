@@ -179,13 +179,12 @@ impl AlbumPage {
                             // Art Area?
                             match &albumpage.album.cover_art {
                                 None => {
-                                    log::info!("No Cover Art");
+                                    
                                     cosmic::widget::icon::from_name("applications-audio-symbolic")
                                         .size(128)
                                         .into()
                                 }
                                 Some(handle) => {
-                                    log::info!("Yes Cover Art");
                                     cosmic::widget::image(handle)
                                         .content_fit(ContentFit::Contain)
                                         .height(128.0)

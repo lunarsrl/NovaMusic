@@ -8,7 +8,7 @@ mod scan;
 mod settings;
 
 use std::any::TypeId;
-use tokio::task::spawn_blocking;
+use tokio::task::{spawn_blocking, JoinHandle};
 
 use crate::app::albums::{
     get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
@@ -16,29 +16,45 @@ use crate::app::albums::{
 
 use crate::app::home::{HomePage, HomePageState, HomeTrack};
 
+use crate::app::home::HomePageState::{Empty, Queued};
 use crate::app::scan::{scan_directory, MediaFileTypes};
+
 use crate::app::Message::{
-    AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, StreamPaused, UpdateScanProgress,
+    AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, PlayNextInQueue, SongFinished,
+    StreamPaused, UpdateScanProgress,
 };
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
 use crate::{app, config, fl, StandardTagKeyExt};
+use colored::Colorize;
 use cosmic::app::context_drawer;
 use cosmic::cosmic_config::{self, ConfigSet, CosmicConfigEntry};
+use cosmic::cosmic_theme::palette::cast::IntoComponents;
+use cosmic::cosmic_theme::palette::chromatic_adaptation::AdaptInto;
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::iced::event::Status;
+use cosmic::iced::keyboard::key::Code::Home;
 use cosmic::iced::keyboard::key::Physical::Code;
+use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
 use cosmic::iced::wgpu::naga::FastHashMap;
+use cosmic::iced::window::Id;
 use cosmic::iced::{
-    alignment, event, stream, Alignment, ContentFit, Fill, Length, Pixels, Subscription,
+    alignment, event, stream, Alignment, ContentFit, Event, Fill, Length, Pixels, Subscription,
 };
+use cosmic::iced_core::text::Wrapping;
+use cosmic::iced_core::widget::operation::map;
+use cosmic::iced_wgpu::window::compositor::new;
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, container, icon, menu, nav_bar, progress_bar, toaster, JustifyContent};
 use cosmic::{cosmic_theme, iced, iced_futures, theme};
-use futures_util::SinkExt;
+use futures::channel::mpsc;
+use futures::channel::mpsc::{Receiver, Sender};
+use futures_util::stream::{Next, SelectNextSome};
+use futures_util::{SinkExt, StreamExt};
 use log::info;
 use rodio::source::SeekError::SymphoniaDecoder;
-use rodio::{OutputStream, OutputStreamHandle, PlayError, Sink, Source};
+use rodio::{Decoder, OutputStream, OutputStreamHandle, PlayError, Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -47,19 +63,10 @@ use std::fs::File;
 use std::future::Future;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-
-use crate::app::home::HomePageState::{Empty, Queued};
-use crate::app::MediaState::{Paused, Playing};
-use colored::Colorize;
-use cosmic::cosmic_theme::palette::cast::IntoComponents;
-use cosmic::iced::keyboard::key::Code::Home;
-use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
-use cosmic::iced::window::Id;
-use cosmic::iced_core::text::Wrapping;
-use cosmic::iced_wgpu::window::compositor::new;
-use futures::channel::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
+use cosmic::iced::wgpu::Queue;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
@@ -93,15 +100,11 @@ pub struct AppModel {
     //Audio
     pub stream_handle: OutputStreamHandle,
     pub stream: OutputStream,
-    pub media_state: MediaState,
+    pub sink: Arc<Sink>,
 }
 
-#[derive(Debug)]
-pub enum MediaState {
-    Playing,
-    Paused(f32),
-}
 /// Messages emitted by the application and its widgets.
+
 #[derive(Debug, Clone)]
 pub enum Message {
     OpenRepositoryUrl,
@@ -138,7 +141,7 @@ pub enum Message {
     AddAlbumToQueue(Vec<String>),
 
     // Audio Messages
-    StreamPlaying(PathBuf),
+    PlayNextInQueue(String),
 
     // Media Controls
     SkipTrack,
@@ -148,8 +151,11 @@ pub enum Message {
     VolumeSliderAdjusted(u32),
 
     //experimenting
-    ToastDone,
+    PlayerMessages(Sender<Message>),
     PlayPause,
+    SongFinished(()),
+    SubQueueState((String, u32)),
+    NextSong(()),
 }
 
 /// Create a COSMIC application from the app model
@@ -186,7 +192,8 @@ impl cosmic::Application for AppModel {
         // Create a nav bar with three page items.
         let mut nav = nav_bar::Model::default();
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
-
+        let sink = Sink::try_new(&stream_handle).unwrap();
+        let sink = Arc::new(sink);
         nav.insert()
             .text(fl!("home"))
             .data::<Page>(Page::NowPlaying(HomePage::new()))
@@ -232,7 +239,7 @@ impl cosmic::Application for AppModel {
             // Audio
             stream,
             stream_handle,
-            media_state: MediaState::Paused(0.0),
+            sink,
         };
 
         // Create a startup command that sets the window title.
@@ -241,63 +248,39 @@ impl cosmic::Application for AppModel {
         (app, command)
     }
 
-    fn subscription(&self) -> Subscription<Self::Message> {
-        struct PlayerSubscription;
-        struct TotallyDifferent;
+    fn subscription<'a>(&self) -> Subscription<Self::Message> {
+        struct QueueWatcher;
 
-        log::info!("When Are You Running");
+        let sub_sink = self.sink.clone();
+        let jobs = 8;
+        let mut subscriptions = Vec::with_capacity(jobs);
 
-        match self.media_state {
-            MediaState::Playing => {
-                for each in self.nav.iter() {
-                    if let Page::NowPlaying(page) = self.nav.data(each).unwrap() {
-                        match &page.state {
-                            Empty => {
-                                log::info!("Massive fail");
-                                return Subscription::none();
-                            }
-                            Queued(songs) => match songs.get(0) {
-                                None => {}
-                                Some(songs) => {
-                                    let song = songs.path_buf.clone();
-                                    return Subscription::run_with_id(
-                                        TypeId::of::<PlayerSubscription>(),
-                                        stream::channel(1000, |mut output| async move {
-                                            let (_stream, stream_handle) =
-                                                OutputStream::try_default().unwrap();
-                                            let file = BufReader::new(File::open(&song).unwrap());
-                                            let source =
-                                                rodio::decoder::Decoder::new(file).unwrap();
+        if self.sink.empty() {
+            subscriptions.push(Subscription::run_with_id(
+                TypeId::of::<QueueWatcher>(),
+                stream::channel(100, |mut output| async move {
+                    tokio::task::spawn_blocking(move || {
+                        
+                    }).await.unwrap();
 
-                                            let sink = Sink::try_new(&stream_handle).unwrap();
-                                            
-                                            sink.append(source);
-                                            sink.sleep_until_end();
-
-                                        }),
-                                    );
-                                }
-                            },
+                    match output
+                        .send(Message::StreamPaused)
+                        .await
+                    {
+                        Ok(()) => {}
+                        Err(err) => {
+                            log::warn!("Failed to send thumbnail")
                         }
-                    } else {
-                        log::info!("Massive fail");
                     }
-                }
-            }
-            MediaState::Paused(val) => {
-                return Subscription::run_with_id(
-                    TypeId::of::<TotallyDifferent>(),
-                    stream::channel(1000, |mut output| async move {
-                        loop {
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                            output.send(Message::StreamPaused).await.expect("")
-                        }
-                    }),
-                );
-            }
+
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
+                }),
+            ))
         }
 
-        return Subscription::none();
+        Subscription::batch(subscriptions)
     }
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<Self::Message>> {
@@ -368,10 +351,7 @@ impl cosmic::Application for AppModel {
             Message::OpenRepositoryUrl => {
                 _ = open::that_detached(REPOSITORY);
             }
-
-            Message::StreamPlaying(filepath) => {
-                log::info!("Start stream: {}", filepath.to_string_lossy().green());
-            }
+            Message::NextSong(song) => {}
 
             Message::StreamPaused => {
                 log::info!("{}", "Stream Paused At".red());
@@ -658,7 +638,6 @@ impl cosmic::Application for AppModel {
                     page.page_state = AlbumPageState::Album(albuminfopage);
                 }
             }
-            Message::ToastDone => {}
             Message::AlbumRequested(dat) => {
                 match self.nav.active_data_mut::<Page>().unwrap() {
                     Page::Albums(page_dat) => {
@@ -693,19 +672,18 @@ impl cosmic::Application for AppModel {
                     let mut stmt = conn
                         .prepare(
                             "
-select track.name as title, art.name as artist, track.path, a.album_cover
-    from track
-    left join main.album_tracks at on track.id = at.track_id
-    left join main.artists art on track.artist_id = art.id
-    left join main.album a on at.album_id = a.id
-    where track.path=?;
-
+                                select track.name as title, art.name as artist, track.path, a.album_cover
+                                from track
+                                left join main.album_tracks at on track.id = at.track_id
+                                left join main.artists art on track.artist_id = art.id
+                                left join main.album a on at.album_id = a.id
+                                where track.path=?;
                             ",
                         )
                         .expect("error preparing sql");
 
                     let track = stmt
-                        .query_row([filepath], |row| {
+                        .query_row([&filepath], |row| {
                             Ok(HomeTrack {
                                 title: row.get("title").expect("REASON"),
                                 artist: row.get("artist").expect("REASON"),
@@ -728,8 +706,19 @@ select track.name as title, art.name as artist, track.path, a.album_cover
                             queue.push(track);
                         }
                     }
-                    self.media_state = Playing;
-                    log::info!("{:?}", self.media_state);
+                }
+
+                match self.sink.empty() {
+                    true => {
+                        self.sink.append(
+                            rodio::Decoder::new(
+                                std::fs::File::open(filepath).expect("cosmic_music.db"),
+                            )
+                            .expect("cosmic_music.db"),
+                        );
+                        self.sink.play();
+                    }
+                    false => {}
                 }
             }
             Message::SkipTrack => {
@@ -742,7 +731,9 @@ select track.name as title, art.name as artist, track.path, a.album_cover
                         }
                         HomePageState::Queued(queue) => {
                             queue.remove(0);
-                            match queue.is_empty() {
+
+                            let queue_empty = queue.is_empty();
+                            match queue_empty {
                                 true => {
                                     page.state = HomePageState::Empty;
                                 }
@@ -764,15 +755,19 @@ select track.name as title, art.name as artist, track.path, a.album_cover
                 .map(cosmic::Action::App)
             }
 
-            Message::PlayPause => match self.media_state {
-                Playing => {
-                    self.media_state = Paused(0.0);
+            Message::PlayPause => match self.sink.is_paused() {
+                true => {
+                    self.sink.play();
                 }
-                MediaState::Paused(_) => {
-                    self.media_state = Playing;
+                false => {
+                    self.sink.pause();
                 }
             },
-        }
+            Message::PlayerMessages(mut sender) => {
+                sender.try_send(Message::StreamPaused).expect("send");
+            }
+            _ => {}
+        };
 
         Task::none()
     }
@@ -842,7 +837,7 @@ impl AppModel {
 }
 
 /// The page to display in the application.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Page {
     NowPlaying(HomePage),
     Artists,

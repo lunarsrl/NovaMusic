@@ -9,15 +9,21 @@ use cosmic::iced::Alignment::Start;
 use cosmic::iced::{Center, ContentFit, Length, Pixels};
 use cosmic::widget::{container, list_column, JustifyContent, ListColumn};
 use cosmic::{iced, iced_core, Element};
+use rodio::queue::queue;
 use std::fmt::{format, Alignment};
+use std::ops::Deref;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use cosmic::cosmic_theme::palette::{Alpha, IntoColor, Srgba};
 
-#[derive(Clone, Debug)]
+use cosmic::iced_core::text::Wrapping;
+
+#[derive(Debug)]
 pub(crate) struct HomePage {
     pub state: HomePageState,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default)]
 pub enum HomePageState {
     #[default]
     Empty,
@@ -143,6 +149,7 @@ impl HomePage {
                 .into()
             }
             HomePageState::Queued(val) => {
+                log::info!("Before Lockes");
                 cosmic::widget::scrollable(
                     cosmic::widget::container(
                         cosmic::widget::column::with_children(vec![
@@ -161,7 +168,7 @@ impl HomePage {
                                                         val.title.as_str()
                                                     }
                                                 }
-                                            ))
+                                            )).wrapping(Wrapping::WordOrGlyph)
                                             .into(),
                                             cosmic::widget::text::title2(format!(
                                                 "By: {}",
@@ -175,34 +182,35 @@ impl HomePage {
                                                 }
                                             ))
                                             .into(),
-                                        ]).into(),
+                                        ])
+                                        .into(),
                                     ])
-                                        .spacing(cosmic::theme::spacing().space_s)
+                                    .spacing(cosmic::theme::spacing().space_s)
                                     .into(),
                                     cosmic::widget::container(
-                                        cosmic::widget::Column::with_children(vec![
-                                            match val.get(0) {
-                                                None => cosmic::widget::icon::from_name(
-                                                    "applications-audio-symbolic",
-                                                )
-                                                .size(192)
-                                                .into(),
-                                                Some(track) => cosmic::widget::image(
-                                                    track.clone().cover_art.unwrap(),
-                                                )
-                                                .height(192.0)
-                                                .width(192.0)
-                                                .content_fit(ContentFit::Contain)
-                                                .border_radius([3.0, 3.0, 3.0, 3.0])
-                                                .into(),
-                                            },
-                                        ]),
+                                        cosmic::widget::Column::with_children(vec![match val
+                                            .get(0)
+                                        {
+                                            None => cosmic::widget::icon::from_name(
+                                                "applications-audio-symbolic",
+                                            )
+                                            .size(192)
+                                            .into(),
+                                            Some(track) => cosmic::widget::image(
+                                                track.cover_art.clone().unwrap(),
+                                            )
+                                            .height(192.0)
+                                            .width(192.0)
+                                            .content_fit(ContentFit::Contain)
+                                            .border_radius([9.0, 9.0, 9.0, 9.0])
+                                            .into(),
+                                        }]),
                                     )
                                     .padding(cosmic::theme::spacing().space_m)
                                     .into(),
                                 ])
                                 .spacing(cosmic::theme::spacing().space_s)
-                                .justify_content(JustifyContent::SpaceAround)
+                                .justify_content(JustifyContent::SpaceBetween)
                                 .into(),
                                 cosmic::widget::container(
                                     cosmic::widget::flex_row(vec![
@@ -232,7 +240,8 @@ impl HomePage {
                                                 cosmic::widget::icon::from_name(
                                                     "media-playback-start-symbolic",
                                                 ),
-                                            ).on_press(Message::PlayPause)
+                                            )
+                                            .on_press(Message::PlayPause)
                                             .class(cosmic::widget::button::ButtonClass::Standard)
                                             .into(),
                                             cosmic::widget::button::icon(
@@ -295,8 +304,15 @@ fn listify_queue(state: &HomePageState) -> Element<'static, Message> {
     let mut list = Some(list_column());
 
     if let HomePageState::Queued(val) = state {
-        for (index, val) in val.iter().enumerate() {
-            let name = format!("{}. {}", index + 1, val.title);
+        let length = val.len();
+
+        let mut queue_num = 0;
+        for item in 1..length {
+            let name = format!(
+                "{}. {}",
+                queue_num + 1,
+                val.get(item).unwrap().title
+            );
 
             match list.take() {
                 None => {}
@@ -304,7 +320,20 @@ fn listify_queue(state: &HomePageState) -> Element<'static, Message> {
                     list = Some(old_list.add(cosmic::widget::text(name)));
                 }
             }
+
+            queue_num += 1;
         }
+        // for val in val.try_lock().unwrap().clone() {
+        //     queue_num+=1;
+        //     let name = format!("{}. {}", queue_num + 1, val.title);
+        //
+        //     match list.take() {
+        //         None => {}
+        //         Some(old_list) => {
+        //             list = Some(old_list.add(cosmic::widget::text(name)));
+        //         }
+        //     }
+        // }
     }
 
     list.unwrap().into_element()
