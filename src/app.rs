@@ -19,7 +19,10 @@ use crate::app::home::{HomePage, HomePageState, HomeTrack};
 use crate::app::home::HomePageState::{Empty, Queued};
 use crate::app::scan::{scan_directory, MediaFileTypes};
 
-use crate::app::Message::{AddTrackToSink, AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, PlayNextInQueue, SongFinished, StreamPaused, UpdateScanProgress};
+use crate::app::Message::{
+    AddTrackToSink, AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, PlayNextInQueue,
+    SongFinished, StreamPaused, UpdateScanProgress,
+};
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
 use crate::{app, config, fl, StandardTagKeyExt};
@@ -52,7 +55,8 @@ use futures_util::stream::{Next, SelectNextSome};
 use futures_util::{SinkExt, StreamExt};
 use log::info;
 use rodio::source::SeekError::SymphoniaDecoder;
-use rodio::{Decoder, OutputStream, OutputStreamHandle, PlayError, Sink, Source};
+
+use rodio::{OutputStream, Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -95,7 +99,6 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
-    pub stream_handle: OutputStreamHandle,
     pub stream: OutputStream,
     pub sink: Arc<Sink>,
 }
@@ -145,7 +148,7 @@ pub enum Message {
 
     // Settings
     GridSliderChange(u32),
-    VolumeSliderAdjusted(u32),
+    VolumeSliderAdjusted(f64),
 
     //experimenting
     PlayerMessages(Sender<Message>),
@@ -154,6 +157,7 @@ pub enum Message {
     SubQueueState((String, u32)),
     NextSong(()),
     AddTrackToSink(String),
+    SinkProgress(f64),
 }
 
 /// Create a COSMIC application from the app model
@@ -189,8 +193,10 @@ impl cosmic::Application for AppModel {
     ) -> (Self, Task<cosmic::Action<Self::Message>>) {
         // Create a nav bar with three page items.
         let mut nav = nav_bar::Model::default();
-        let (stream, stream_handle) = OutputStream::try_default().unwrap();
-        let sink = Sink::try_new(&stream_handle).unwrap();
+        let stream =
+            rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
+        let sink = rodio::Sink::connect_new(stream.mixer());
+
         let sink = Arc::new(sink);
         nav.insert()
             .text(fl!("home"))
@@ -236,7 +242,6 @@ impl cosmic::Application for AppModel {
             rescan_available: true,
             // Audio
             stream,
-            stream_handle,
             sink,
         };
 
@@ -636,7 +641,7 @@ impl cosmic::Application for AppModel {
                     let mut stmt = conn
                         .prepare(
                             "
-                                select track.name as title, art.name as artist, track.path, a.album_cover
+                                select track.name as title, art.name as artist, track.path, a.album_cover, a.name as album_title
                                 from track
                                 left join main.album_tracks at on track.id = at.track_id
                                 left join main.artists art on track.artist_id = art.id
@@ -651,6 +656,7 @@ impl cosmic::Application for AppModel {
                             Ok(HomeTrack {
                                 title: row.get("title").expect("REASON"),
                                 artist: row.get("artist").expect("REASON"),
+                                album_title: row.get("album_title").expect("REASON"),
                                 path_buf: PathBuf::from(
                                     row.get::<&str, String>("path").expect("REASON"),
                                 ),
@@ -671,34 +677,76 @@ impl cosmic::Application for AppModel {
                         }
                     }
                 }
-                
+
                 match self.sink.empty() {
                     true => {
-                        self.sink.append(
-                            rodio::Decoder::new(
-                                std::fs::File::open(filepath).expect("cosmic_music.db"),
-                            )
-                                .expect("cosmic_music.db"),
-                        );
-                        let task_sink = Arc::clone(&self.sink);
-                        return cosmic::task::future(async move {
+                        let file = std::fs::File::open(filepath).expect("Failed to open file");
+
+                        let decoder = rodio::Decoder::builder()
+                            .with_byte_len(file.metadata().unwrap().len())
+                            .with_data(file)
+                            .with_seekable(true)
+                            .build()
+                            .expect("Failed to build decoder");
+
+                        let pos = self.nav.entity_at(0).expect("REASON");
+                        let home_page = self.nav.data_mut::<Page>(pos).unwrap();
+                        if let Page::NowPlaying(page) = home_page {
+                            page.song_duration = match decoder.total_duration() {
+                                None => {
+                                    log::info!("Duration Not found");
+                                    None
+                                }
+                                Some(val) => {
+                                    log::info!("Duration FOund");
+                                    Some(val.as_secs_f64())
+                                }
+                            };
+                        }
+
+                        self.sink.append(decoder);
+
+                        let sleeping_task_sink = Arc::clone(&self.sink);
+                        let sleeping_thread: Task<Message> = cosmic::task::future(async move {
                             Message::SongFinished(
                                 tokio::task::spawn_blocking(move || {
-                                    task_sink.sleep_until_end();
+                                    sleeping_task_sink.sleep_until_end();
                                 })
-                                    .await
-                                    .expect("cosmic_music.db"),
+                                .await
+                                .expect("cosmic_music.db"),
                             )
                         });
 
+                        let reporting_task_sink = Arc::clone(&self.sink);
+                        log::info!("Between threads");
+                        let progress_thread: Task<Message> = cosmic::Task::stream(
+                            cosmic::iced_futures::stream::channel(10, |mut tx| async move {
+                                tokio::task::spawn_blocking(move || loop {
+                                    sleep(Duration::from_millis(100));
+                                    tx.try_send(Message::SinkProgress(
+                                        reporting_task_sink.get_pos().as_secs_f64(),
+                                    ))
+                                    .unwrap();
+                                });
+                            }),
+                        );
+                        return cosmic::task::batch(vec![progress_thread, sleeping_thread]);
                     }
                     false => {
                         log::info!("{}", "IN QUEUE".red());
                     }
                 }
             }
+            Message::SinkProgress(number) => {
+                log::info!("{} {}", "SINK REPORTING: ".red(), number);
+                match self.nav.active_data_mut::<Page>().unwrap() {
+                    Page::NowPlaying(state) => {
+                        state.song_progress = number;
+                    }
+                    _ => {}
+                }
+            }
             Message::SongFinished(()) => {
-                log::info!("SONG FINISHED TRIGGERED");
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
                 if let Page::NowPlaying(page) = home_page {
@@ -710,10 +758,9 @@ impl cosmic::Application for AppModel {
                             }
                             Some(val) => {
                                 let fp = val.path_buf.to_str().expect("path_buf").to_string();
-                                return cosmic::task::future(async move {AddTrackToSink(fp)})
+                                return cosmic::task::future(async move { AddTrackToSink(fp) });
                             }
                         }
-
                     }
                 }
             }
@@ -721,24 +768,34 @@ impl cosmic::Application for AppModel {
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
                 if let Page::NowPlaying(page) = home_page {
+                    log::info!("{}", page.song_duration.unwrap().to_string().purple());
                     if let HomePageState::Queued(queue) = &mut page.state {
 
-;                        self.sink.append(
-                            rodio::Decoder::new(
-                                std::fs::File::open(filepath).expect("cosmic_music.db"),
-                            )
-                                .expect("cosmic_music.db"),
+                        let file = std::fs::File::open(filepath).expect("Failed to open file");
+
+                        let decoder = rodio::Decoder::builder()
+                            .with_byte_len(file.metadata().unwrap().len())
+                            .with_data(file)
+                            .with_seekable(true)
+                            .build()
+                            .expect("Failed to build decoder");
+
+                        page.song_duration = Some(decoder.total_duration().unwrap().as_secs_f64());
+                        self.sink.append(
+                            decoder
                         );
+
+
                         let task_sink = Arc::clone(&self.sink);
                         return cosmic::task::future(async move {
                             Message::SongFinished(
                                 tokio::task::spawn_blocking(move || {
                                     task_sink.sleep_until_end();
                                 })
-                                    .await
-                                    .expect("cosmic_music.db"),
+                                .await
+                                .expect("cosmic_music.db"),
                             )
-                        })
+                        });
                     }
                 }
             }
@@ -758,9 +815,7 @@ impl cosmic::Application for AppModel {
                                 true => {
                                     page.state = HomePageState::Empty;
                                 }
-                                false => {
-
-                                }
+                                false => {}
                             }
                         }
                     }
