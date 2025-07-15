@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::app;
-use crate::app::home::HomePageState;
 use cosmic::cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry};
 use cosmic::Application;
 use std::path::{Path, PathBuf};

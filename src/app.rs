@@ -14,14 +14,12 @@ use crate::app::albums::{
     get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
 };
 
-use crate::app::home::{HomePage, HomePageState, HomeTrack};
-
-use crate::app::home::HomePageState::{Empty, Queued};
+use crate::app::home::HomePage;
 use crate::app::scan::{scan_directory, MediaFileTypes};
 
 use crate::app::Message::{
-    AddTrackToSink, AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, PlayNextInQueue,
-    SongFinished, StreamPaused, UpdateScanProgress,
+    AddTrackToSink, AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, SongFinished,
+    StreamPaused, UpdateScanProgress,
 };
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
@@ -101,10 +99,27 @@ pub struct AppModel {
     //Audio
     pub stream: OutputStream,
     pub sink: Arc<Sink>,
+    pub loop_state: LoopState,
+    pub song_progress: f64,
+    pub song_duration: Option<f64>,
+    pub queue: Vec<AppTrack>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppTrack {
+    pub title: String,
+    pub artist: String,
+    pub album_title: String,
+    pub path_buf: PathBuf,
+    pub cover_art: Option<cosmic::widget::image::Handle>,
+}
 /// Messages emitted by the application and its widgets.
 
+pub enum LoopState {
+    LoopingTrack,
+    LoopingQueue,
+    NotLooping,
+}
 #[derive(Debug, Clone)]
 pub enum Message {
     OpenRepositoryUrl,
@@ -141,7 +156,12 @@ pub enum Message {
     AddAlbumToQueue(Vec<String>),
 
     // Audio Messages
-    PlayNextInQueue(String),
+    PlayerMessages(Sender<Message>),
+    PlayPause,
+    SongFinished(()),
+    NextSong(()),
+    AddTrackToSink(String),
+    SinkProgress(f64),
 
     // Media Controls
     SkipTrack,
@@ -149,15 +169,7 @@ pub enum Message {
     // Settings
     GridSliderChange(u32),
     VolumeSliderAdjusted(f64),
-
     //experimenting
-    PlayerMessages(Sender<Message>),
-    PlayPause,
-    SongFinished(()),
-    SubQueueState((String, u32)),
-    NextSong(()),
-    AddTrackToSink(String),
-    SinkProgress(f64),
 }
 
 /// Create a COSMIC application from the app model
@@ -200,7 +212,7 @@ impl cosmic::Application for AppModel {
         let sink = Arc::new(sink);
         nav.insert()
             .text(fl!("home"))
-            .data::<Page>(Page::NowPlaying(HomePage::new()))
+            .data::<Page>(Page::NowPlaying(HomePage))
             .icon(icon::from_name("applications-audio-symbolic"))
             .activate();
 
@@ -243,6 +255,10 @@ impl cosmic::Application for AppModel {
             // Audio
             stream,
             sink,
+            loop_state: LoopState::NotLooping,
+            song_progress: 0.0,
+            song_duration: None,
+            queue: vec![],
         };
 
         // Create a startup command that sets the window title.
@@ -298,7 +314,7 @@ impl cosmic::Application for AppModel {
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
         match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(home_page) => home_page.load(),
+            Page::NowPlaying(home_page) => home_page.load(&self),
             Page::Artists => {
                 cosmic::widget::container(cosmic::widget::text::title1(" Artists ")).into()
             }
@@ -653,7 +669,7 @@ impl cosmic::Application for AppModel {
 
                     let track = stmt
                         .query_row([&filepath], |row| {
-                            Ok(HomeTrack {
+                            Ok(AppTrack {
                                 title: row.get("title").expect("REASON"),
                                 artist: row.get("artist").expect("REASON"),
                                 album_title: row.get("album_title").expect("REASON"),
@@ -668,14 +684,7 @@ impl cosmic::Application for AppModel {
                         })
                         .expect("error executing query");
 
-                    match &mut page.state {
-                        HomePageState::Empty => {
-                            page.state = Queued(vec![track]);
-                        }
-                        HomePageState::Queued(queue) => {
-                            queue.push(track);
-                        }
-                    }
+                    self.queue.push(track);
                 }
 
                 match self.sink.empty() {
@@ -689,20 +698,17 @@ impl cosmic::Application for AppModel {
                             .build()
                             .expect("Failed to build decoder");
 
-                        let pos = self.nav.entity_at(0).expect("REASON");
-                        let home_page = self.nav.data_mut::<Page>(pos).unwrap();
-                        if let Page::NowPlaying(page) = home_page {
-                            page.song_duration = match decoder.total_duration() {
-                                None => {
-                                    log::info!("Duration Not found");
-                                    None
-                                }
-                                Some(val) => {
-                                    log::info!("Duration FOund");
-                                    Some(val.as_secs_f64())
-                                }
-                            };
-                        }
+                        self.song_duration = match decoder.total_duration() {
+                            None => {
+                                log::error!("Failed to decode song duration");
+                                None
+                            }
+                            Some(val) => {
+                                log::info!("Decoded song duration: {}", val.as_secs_f64());
+                                Some(val.as_secs_f64())
+                            }
+                        };
+                        log::info!("{:?}", self.song_duration);
 
                         self.sink.append(decoder);
 
@@ -732,94 +738,63 @@ impl cosmic::Application for AppModel {
                         );
                         return cosmic::task::batch(vec![progress_thread, sleeping_thread]);
                     }
-                    false => {
-                        log::info!("{}", "IN QUEUE".red());
-                    }
+                    false => {}
                 }
             }
             Message::SinkProgress(number) => {
-                log::info!("{} {}", "SINK REPORTING: ".red(), number);
-                match self.nav.active_data_mut::<Page>().unwrap() {
-                    Page::NowPlaying(state) => {
-                        state.song_progress = number;
-                    }
-                    _ => {}
-                }
+                self.song_progress = number;
             }
-            Message::SongFinished(()) => {
-                let pos = self.nav.entity_at(0).expect("REASON");
-                let home_page = self.nav.data_mut::<Page>(pos).unwrap();
-                if let Page::NowPlaying(page) = home_page {
-                    if let HomePageState::Queued(queue) = &mut page.state {
-                        queue.remove(0);
-                        match queue.get(0) {
-                            None => {
-                                page.state = Empty;
-                            }
-                            Some(val) => {
-                                let fp = val.path_buf.to_str().expect("path_buf").to_string();
-                                return cosmic::task::future(async move { AddTrackToSink(fp) });
-                            }
+            Message::SongFinished(()) => match self.loop_state {
+                LoopState::LoopingTrack => {
+                    let fp = self
+                        .queue
+                        .get(0)
+                        .unwrap()
+                        .path_buf
+                        .to_str()
+                        .expect("path_buf")
+                        .to_string();
+                    return cosmic::task::future(async move { AddTrackToSink(fp) });
+                }
+                LoopState::LoopingQueue => {}
+                LoopState::NotLooping => {
+                    self.queue.remove(0);
+                    match self.queue.get(0) {
+                        None => {}
+                        Some(val) => {
+                            let fp = val.path_buf.to_str().expect("path_buf").to_string();
+                            return cosmic::task::future(async move { AddTrackToSink(fp) });
                         }
                     }
                 }
-            }
+            },
             Message::AddTrackToSink(filepath) => {
-                let pos = self.nav.entity_at(0).expect("REASON");
-                let home_page = self.nav.data_mut::<Page>(pos).unwrap();
-                if let Page::NowPlaying(page) = home_page {
-                    log::info!("{}", page.song_duration.unwrap().to_string().purple());
-                    if let HomePageState::Queued(queue) = &mut page.state {
+                let file = std::fs::File::open(filepath).expect("Failed to open file");
 
-                        let file = std::fs::File::open(filepath).expect("Failed to open file");
+                let decoder = rodio::Decoder::builder()
+                    .with_byte_len(file.metadata().unwrap().len())
+                    .with_data(file)
+                    .with_seekable(true)
+                    .build()
+                    .expect("Failed to build decoder");
 
-                        let decoder = rodio::Decoder::builder()
-                            .with_byte_len(file.metadata().unwrap().len())
-                            .with_data(file)
-                            .with_seekable(true)
-                            .build()
-                            .expect("Failed to build decoder");
+                self.song_duration = Some(decoder.total_duration().unwrap().as_secs_f64());
+                self.sink.append(decoder);
 
-                        page.song_duration = Some(decoder.total_duration().unwrap().as_secs_f64());
-                        self.sink.append(
-                            decoder
-                        );
-
-
-                        let task_sink = Arc::clone(&self.sink);
-                        return cosmic::task::future(async move {
-                            Message::SongFinished(
-                                tokio::task::spawn_blocking(move || {
-                                    task_sink.sleep_until_end();
-                                })
-                                .await
-                                .expect("cosmic_music.db"),
-                            )
-                        });
-                    }
-                }
+                let task_sink = Arc::clone(&self.sink);
+                return cosmic::task::future(async move {
+                    Message::SongFinished(
+                        tokio::task::spawn_blocking(move || {
+                            task_sink.sleep_until_end();
+                        })
+                        .await
+                        .expect("cosmic_music.db"),
+                    )
+                });
             }
             Message::SkipTrack => {
-                let pos = self.nav.entity_at(0).expect("REASON");
-                let home_page = self.nav.data_mut::<Page>(pos).unwrap();
-                if let Page::NowPlaying(page) = home_page {
-                    match &mut page.state {
-                        HomePageState::Empty => {
-                            log::warn!("No Tracks")
-                        }
-                        HomePageState::Queued(queue) => {
-                            self.sink.clear();
-                            self.sink.play();
-                            let queue_empty = queue.is_empty();
-                            match queue_empty {
-                                true => {
-                                    page.state = HomePageState::Empty;
-                                }
-                                false => {}
-                            }
-                        }
-                    }
-                }
+                self.sink.clear();
+                self.sink.play();
             }
             app::Message::AddAlbumToQueue(paths) => {
                 return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
@@ -844,7 +819,6 @@ impl cosmic::Application for AppModel {
             Message::PlayerMessages(mut sender) => {
                 sender.try_send(Message::StreamPaused).expect("send");
             }
-            _ => {}
         };
 
         Task::none()
