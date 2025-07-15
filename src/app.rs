@@ -103,6 +103,7 @@ pub struct AppModel {
     pub song_progress: f64,
     pub song_duration: Option<f64>,
     pub queue: Vec<AppTrack>,
+    pub queue_pos: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -170,6 +171,7 @@ pub enum Message {
     GridSliderChange(u32),
     VolumeSliderAdjusted(f64),
     //experimenting
+    ChangeLoopState,
 }
 
 /// Create a COSMIC application from the app model
@@ -259,6 +261,7 @@ impl cosmic::Application for AppModel {
             song_progress: 0.0,
             song_duration: None,
             queue: vec![],
+            queue_pos: 0,
         };
 
         // Create a startup command that sets the window title.
@@ -337,7 +340,19 @@ impl cosmic::Application for AppModel {
                 _ = open::that_detached(REPOSITORY);
             }
             Message::NextSong(song) => {}
-
+           Message::ChangeLoopState => {
+             match self.loop_state   {
+                 LoopState::LoopingTrack => {
+                     self.loop_state = LoopState::NotLooping;
+                 }
+                 LoopState::LoopingQueue => {
+                     self.loop_state = LoopState::LoopingTrack;
+                 }
+                 LoopState::NotLooping => {
+                     self.loop_state = LoopState::LoopingQueue;
+                 }
+             }
+           } 
             Message::StreamPaused => {
                 log::info!("{}", "Stream Paused At".red());
             }
@@ -744,11 +759,12 @@ impl cosmic::Application for AppModel {
             Message::SinkProgress(number) => {
                 self.song_progress = number;
             }
-            Message::SongFinished(()) => match self.loop_state {
+            Message::SongFinished(()) => {
+                match self.loop_state {
                 LoopState::LoopingTrack => {
                     let fp = self
                         .queue
-                        .get(0)
+                        .get(self.queue_pos)
                         .unwrap()
                         .path_buf
                         .to_str()
@@ -756,10 +772,31 @@ impl cosmic::Application for AppModel {
                         .to_string();
                     return cosmic::task::future(async move { AddTrackToSink(fp) });
                 }
-                LoopState::LoopingQueue => {}
+                LoopState::LoopingQueue => {
+
+                    if self.queue_pos + 1 >= self.queue.len() {
+                        self.queue_pos = 0;
+                    } else {
+                        self.queue_pos += 1;
+                    }
+
+                    match self.queue.get(self.queue_pos as usize) {
+                        None => {}
+                        Some(val) => {
+                            let fp = val.path_buf.to_str().expect("path_buf").to_string();
+                            return cosmic::task::future(async move { AddTrackToSink(fp) });
+                        }
+                    }
+                    
+                }
                 LoopState::NotLooping => {
-                    self.queue.remove(0);
-                    match self.queue.get(0) {
+                    if self.queue_pos + 1 >= self.queue.len() {
+                        self.queue_pos = 0;
+                        self.sink.clear();
+                    } else {
+                        self.queue_pos += 1;
+                    }
+                    match self.queue.get(self.queue_pos as usize) {
                         None => {}
                         Some(val) => {
                             let fp = val.path_buf.to_str().expect("path_buf").to_string();
@@ -767,6 +804,7 @@ impl cosmic::Application for AppModel {
                         }
                     }
                 }
+            }
             },
             Message::AddTrackToSink(filepath) => {
                 let file = std::fs::File::open(filepath).expect("Failed to open file");
@@ -793,6 +831,18 @@ impl cosmic::Application for AppModel {
                 });
             }
             Message::SkipTrack => {
+                match self.loop_state {
+                    LoopState::LoopingTrack => {
+                        if self.queue_pos + 1 >= self.queue.len() {
+                            self.queue_pos = 0;
+                            self.sink.clear();
+                        } else {
+                            self.queue_pos += 1;
+                        }
+                    }
+                    LoopState::LoopingQueue => {}
+                    LoopState::NotLooping => {}
+                }
                 self.sink.clear();
                 self.sink.play();
             }

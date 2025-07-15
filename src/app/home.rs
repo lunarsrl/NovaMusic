@@ -1,12 +1,12 @@
 use crate::app;
 use crate::app::albums::Album;
-use crate::app::{AppModel, AppTrack, Message};
+use crate::app::{AppModel, AppTrack, LoopState, Message};
 use colored::Colorize;
 use cosmic::cosmic_theme::palette::chromatic_adaptation::AdaptInto;
 use cosmic::cosmic_theme::palette::{Alpha, IntoColor, Srgba};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::Alignment::Start;
-use cosmic::iced::{Center, ContentFit, Length, Pixels};
+use cosmic::iced::{color, Center, ContentFit, Length, Pixels};
 use cosmic::widget::{container, image, list_column, JustifyContent, ListColumn};
 use cosmic::{iced, iced_core, Element};
 use rodio::queue::queue;
@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use cosmic::iced_core::text::Wrapping;
+use cosmic::style::Text::Color;
 use humantime::format_duration;
 
 #[derive(Debug)]
@@ -30,7 +31,7 @@ impl HomePage {
                 let mut total_duration = "**:**".to_string();
                 match model.song_duration {
                     None => {
-                        
+
                     }
                     Some(val) => {
                         total_duration = format_time(val);
@@ -43,11 +44,11 @@ impl HomePage {
                         cover = format_cover_page(&"None".to_string(), &"None".to_string(), None, &None);
                     }
                     false => {
-                        cover = format_cover_page(&model.queue.get(0).unwrap().title, &model.queue.get(0).unwrap().artist, Some(&model.queue.get(0).unwrap().album_title), &model.queue.get(0).unwrap().cover_art);
+                        cover = format_cover_page(&model.queue.get(model.queue_pos).unwrap().title, &model.queue.get(model.queue_pos).unwrap().artist, Some(&model.queue.get(model.queue_pos).unwrap().album_title), &model.queue.get(model.queue_pos).unwrap().cover_art);
                     }
                 }
                 
-                
+
                 // Actual contents
                 cosmic::widget::scrollable(
                     cosmic::widget::container(
@@ -91,16 +92,24 @@ impl HomePage {
                                                     cosmic::widget::button::ButtonClass::Standard,
                                                 )
                                                 .into(),
+                                                    // PLAY OR PAUSE
                                                 cosmic::widget::button::icon(
-                                                    cosmic::widget::icon::from_name(
-                                                        "media-playback-start-symbolic",
-                                                    ),
+                                                    match model.sink.is_paused() {
+                                                        true => {
+                                                            cosmic::widget::icon::from_name("media-playback-start-symbolic")
+                                                        }
+                                                        false => {
+                                                            cosmic::widget::icon::from_name("media-playback-pause-symbolic")
+                                                        }
+                                                    }
                                                 )
                                                 .on_press(Message::PlayPause)
                                                 .class(
                                                     cosmic::widget::button::ButtonClass::Standard,
                                                 )
                                                 .into(),
+
+                                                // PLAY OR PAUSE
                                                 cosmic::widget::button::icon(
                                                     cosmic::widget::icon::from_name(
                                                         "media-skip-forward-symbolic",
@@ -112,13 +121,28 @@ impl HomePage {
                                                 )
                                                 .into(),
                                                 cosmic::widget::button::icon(
-                                                    cosmic::widget::icon::from_name(
-                                                        "media-playlist-no-repeat-symbolic",
-                                                    ),
+                                                    match model.loop_state {
+                                                        LoopState::LoopingTrack => {
+                                                            cosmic::widget::icon::from_name(
+                                                                "media-playlist-repeat-song-symbolic",
+                                                            )
+                                                        }
+                                                        LoopState::LoopingQueue => {
+                                                            cosmic::widget::icon::from_name(
+                                                                "media-playlist-no-repeat-symbolic",
+                                                            )
+                                                        }
+                                                        LoopState::NotLooping => {
+                                                            cosmic::widget::icon::from_name(
+                                                                "media-playlist-consecutive-symbolic",
+                                                            )
+                                                        }
+                                                    }
                                                 )
                                                 .class(
                                                     cosmic::widget::button::ButtonClass::Standard,
                                                 )
+                                                    .on_press(Message::ChangeLoopState)
                                                 .into(),
                                             ])
 
@@ -142,7 +166,7 @@ impl HomePage {
                             cosmic::widget::container(
                                 cosmic::widget::column::with_children(vec![
                                     cosmic::widget::text::heading("Queue: ").into(),
-                                    listify_queue(&model.queue),
+                                    listify_queue(&model.queue, model.queue_pos),
                                 ])
                                 .spacing(cosmic::theme::spacing().space_xxs),
                             )
@@ -161,24 +185,35 @@ impl HomePage {
             }
         }
 
-fn listify_queue(queue: &Vec<AppTrack>) -> Element<'static, Message> {
+fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, Message> {
     let mut list = Some(list_column());
-
     
-        let length = queue.len();
+        for (index, item)in queue.iter().enumerate() {
 
-        let mut queue_num = 0;
-        for item in 1..length {
-            let name = format!("{}. {}", queue_num + 1, queue.get(item).unwrap().title);
+
+            let name = format!("{}. {}", index + 1, item.title);
 
             match list.take() {
                 None => {}
                 Some(old_list) => {
-                    list = Some(old_list.add(cosmic::widget::text(name)));
+
+                    if  index == active {
+                        list = Some(old_list.add(
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::text(name).into(),
+                                cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::text("Now Playing")
+                                    .class(cosmic::theme::Text::Accent)
+                                    .into(),
+                            ])
+
+                        ));
+                    } else {
+                        list = Some(old_list.add(cosmic::widget::text(name)));
+                    }
+
                 }
             }
-
-            queue_num += 1;
     }
 
     list.unwrap().into_element()
@@ -211,7 +246,7 @@ fn format_cover_page(title: &String, artist: &String, album: Option<&String>, ha
                 .align_x(Horizontal::Right)
                 .width(Length::FillPortion(2))
                 .into(),
-            
+
             cosmic::widget::Column::with_children(vec![
                 cosmic::widget::text::title3(format!(
                     "{}",
@@ -230,7 +265,7 @@ fn format_cover_page(title: &String, artist: &String, album: Option<&String>, ha
                     album.unwrap_or(&String::new())
                 )).into()
 
- 
+
             ])
             .spacing(cosmic::theme::spacing().space_s)
                 .width(Length::FillPortion(2))
