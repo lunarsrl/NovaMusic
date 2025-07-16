@@ -44,7 +44,7 @@ impl HomePage {
                         cover = format_cover_page(&"None".to_string(), &"None".to_string(), None, &None);
                     }
                     false => {
-                        cover = format_cover_page(&model.queue.get(model.queue_pos).unwrap().title, &model.queue.get(model.queue_pos).unwrap().artist, Some(&model.queue.get(model.queue_pos).unwrap().album_title), &model.queue.get(model.queue_pos).unwrap().cover_art);
+                        cover = format_cover_page(&model.queue.get(model.queue_pos as usize).unwrap().title, &model.queue.get(model.queue_pos as usize).unwrap().artist, Some(&model.queue.get(model.queue_pos as usize).unwrap().album_title), &model.queue.get(model.queue_pos as usize).unwrap().cover_art);
                     }
                 }
                 
@@ -66,8 +66,9 @@ impl HomePage {
                                                 cosmic::widget::slider(
                                                     0.0..=model.song_duration.unwrap_or(1.0),
                                                     model.song_progress,
-                                                    |a| Message::VolumeSliderAdjusted(a),
+                                                    |a| Message::SeekTrack(a),
                                                 )
+                                                    .on_release(Message::SeekFinished)
                                                 
                                                 .height(31.0)
                                                 .into(),
@@ -90,7 +91,7 @@ impl HomePage {
                                                 )
                                                 .class(
                                                     cosmic::widget::button::ButtonClass::Standard,
-                                                )
+                                                ).on_press(Message::PreviousTrack)
                                                 .into(),
                                                     // PLAY OR PAUSE
                                                 cosmic::widget::button::icon(
@@ -166,7 +167,7 @@ impl HomePage {
                             cosmic::widget::container(
                                 cosmic::widget::column::with_children(vec![
                                     cosmic::widget::text::heading("Queue: ").into(),
-                                    listify_queue(&model.queue, model.queue_pos),
+                                    listify_queue(&model.queue, model.queue_pos as usize),
                                 ])
                                 .spacing(cosmic::theme::spacing().space_xxs),
                             )

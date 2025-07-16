@@ -66,6 +66,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
+use rodio::source::SeekError;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
@@ -104,6 +105,7 @@ pub struct AppModel {
     pub song_duration: Option<f64>,
     pub queue: Vec<AppTrack>,
     pub queue_pos: usize,
+    pub clear: bool
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -159,7 +161,7 @@ pub enum Message {
     // Audio Messages
     PlayerMessages(Sender<Message>),
     PlayPause,
-    SongFinished(()),
+    SongFinished(QueueUpdateReason),
     NextSong(()),
     AddTrackToSink(String),
     SinkProgress(f64),
@@ -169,9 +171,18 @@ pub enum Message {
 
     // Settings
     GridSliderChange(u32),
-    VolumeSliderAdjusted(f64),
+    SeekTrack(f64),
     //experimenting
     ChangeLoopState,
+    PreviousTrack,
+    SeekFinished,
+}
+
+#[derive(Clone, Debug)]
+enum QueueUpdateReason {
+    Skipped,
+    Previous,
+    None,
 }
 
 /// Create a COSMIC application from the app model
@@ -262,6 +273,7 @@ impl cosmic::Application for AppModel {
             song_duration: None,
             queue: vec![],
             queue_pos: 0,
+            clear: false
         };
 
         // Create a startup command that sets the window title.
@@ -340,19 +352,17 @@ impl cosmic::Application for AppModel {
                 _ = open::that_detached(REPOSITORY);
             }
             Message::NextSong(song) => {}
-           Message::ChangeLoopState => {
-             match self.loop_state   {
-                 LoopState::LoopingTrack => {
-                     self.loop_state = LoopState::NotLooping;
-                 }
-                 LoopState::LoopingQueue => {
-                     self.loop_state = LoopState::LoopingTrack;
-                 }
-                 LoopState::NotLooping => {
-                     self.loop_state = LoopState::LoopingQueue;
-                 }
-             }
-           } 
+            Message::ChangeLoopState => match self.loop_state {
+                LoopState::LoopingTrack => {
+                    self.loop_state = LoopState::NotLooping;
+                }
+                LoopState::LoopingQueue => {
+                    self.loop_state = LoopState::LoopingTrack;
+                }
+                LoopState::NotLooping => {
+                    self.loop_state = LoopState::LoopingQueue;
+                }
+            },
             Message::StreamPaused => {
                 log::info!("{}", "Stream Paused At".red());
             }
@@ -663,7 +673,17 @@ impl cosmic::Application for AppModel {
                     .set_grid_item_size(&self.config_handler, val)
                     .expect("Failed To Update Config");
             }
-            app::Message::VolumeSliderAdjusted(_) => {}
+            app::Message::SeekTrack(val) => {
+                self.sink.set_volume(0.0);
+                log::info!("volume: {}", self.sink.volume());
+                match self.sink.try_seek(Duration::from_secs_f64(val)) {
+                    Ok(_) => {}
+                    Err(_) => {}
+                }
+            }
+            Message::SeekFinished => {
+                self.sink.set_volume(1.0)
+            }
             app::Message::AddTrackToQueue(filepath) => {
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
@@ -732,6 +752,7 @@ impl cosmic::Application for AppModel {
                             Message::SongFinished(
                                 tokio::task::spawn_blocking(move || {
                                     sleeping_task_sink.sleep_until_end();
+                                    QueueUpdateReason::None
                                 })
                                 .await
                                 .expect("cosmic_music.db"),
@@ -759,53 +780,80 @@ impl cosmic::Application for AppModel {
             Message::SinkProgress(number) => {
                 self.song_progress = number;
             }
-            Message::SongFinished(()) => {
-                match self.loop_state {
-                LoopState::LoopingTrack => {
-                    let fp = self
-                        .queue
-                        .get(self.queue_pos)
-                        .unwrap()
-                        .path_buf
-                        .to_str()
-                        .expect("path_buf")
-                        .to_string();
-                    return cosmic::task::future(async move { AddTrackToSink(fp) });
-                }
-                LoopState::LoopingQueue => {
+            Message::SongFinished(val) => {
+                let sink = self.sink.clone();
 
-                    if self.queue_pos + 1 >= self.queue.len() {
-                        self.queue_pos = 0;
-                    } else {
-                        self.queue_pos += 1;
-                    }
-
-                    match self.queue.get(self.queue_pos as usize) {
-                        None => {}
-                        Some(val) => {
-                            let fp = val.path_buf.to_str().expect("path_buf").to_string();
-                            return cosmic::task::future(async move { AddTrackToSink(fp) });
+                match val {
+                    QueueUpdateReason::Skipped => {
+                        if self.queue_pos + 1 > self.queue.len() - 1 {
+                            self.queue_pos = 0;
+                        } else {
+                            self.queue_pos += 1;
                         }
+
+                        self.clear = true;
+                        sink.clear();
                     }
-                    
-                }
-                LoopState::NotLooping => {
-                    if self.queue_pos + 1 >= self.queue.len() {
-                        self.queue_pos = 0;
-                        self.sink.clear();
-                    } else {
-                        self.queue_pos += 1;
+                    QueueUpdateReason::Previous => {
+                        if self.queue_pos as i32 - 1 < 0 {
+                            self.queue_pos = self.queue.len() - 1;
+                        } else {
+                            self.queue_pos -= 1;
+                        }
+                        self.clear = true;
+                        sink.clear()
                     }
-                    match self.queue.get(self.queue_pos as usize) {
-                        None => {}
-                        Some(val) => {
-                            let fp = val.path_buf.to_str().expect("path_buf").to_string();
-                            return cosmic::task::future(async move { AddTrackToSink(fp) });
+                    QueueUpdateReason::None => {
+                        match self.clear {
+                            true => {
+                                self.clear = false;
+                                let file = self.queue.get(self.queue_pos).unwrap().path_buf.clone().to_string_lossy().to_string();
+                                sink.play();
+                                return cosmic::task::future(async move {
+                                    Message::AddTrackToSink(file)
+                                });
+                            }
+                            false => {
+
+                                match self.loop_state {
+                                    LoopState::LoopingTrack => {
+                                        let file = self.queue.get(self.queue_pos).unwrap().path_buf.clone().to_string_lossy().to_string();
+                                        return cosmic::task::future(async move {
+                                            Message::AddTrackToSink(file)
+                                        });
+                                    }
+                                    LoopState::LoopingQueue => {
+                                        if self.queue_pos + 1 > self.queue.len() - 1 {
+                                            self.queue_pos = 0;
+                                        } else {
+                                            self.queue_pos += 1;
+                                        }
+                                        sink.play();
+                                        let file = self.queue.get(self.queue_pos).unwrap().path_buf.clone().to_string_lossy().to_string();
+                                        return cosmic::task::future(async move {
+                                            Message::AddTrackToSink(file)
+                                        });
+                                    }
+                                    LoopState::NotLooping => {
+                                        if self.queue_pos + 1 > self.queue.len() - 1 {
+                                            self.queue_pos = 0;
+                                            sink.pause()
+                                        } else {
+                                            self.queue_pos += 1;
+
+                                        }
+
+                                        let file = self.queue.get(self.queue_pos).unwrap().path_buf.clone().to_string_lossy().to_string();
+                                        return cosmic::task::future(async move {
+                                            Message::AddTrackToSink(file)
+                                        });
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-            },
             Message::AddTrackToSink(filepath) => {
                 let file = std::fs::File::open(filepath).expect("Failed to open file");
 
@@ -824,6 +872,7 @@ impl cosmic::Application for AppModel {
                     Message::SongFinished(
                         tokio::task::spawn_blocking(move || {
                             task_sink.sleep_until_end();
+                            QueueUpdateReason::None
                         })
                         .await
                         .expect("cosmic_music.db"),
@@ -831,20 +880,14 @@ impl cosmic::Application for AppModel {
                 });
             }
             Message::SkipTrack => {
-                match self.loop_state {
-                    LoopState::LoopingTrack => {
-                        if self.queue_pos + 1 >= self.queue.len() {
-                            self.queue_pos = 0;
-                            self.sink.clear();
-                        } else {
-                            self.queue_pos += 1;
-                        }
-                    }
-                    LoopState::LoopingQueue => {}
-                    LoopState::NotLooping => {}
-                }
-                self.sink.clear();
-                self.sink.play();
+                return cosmic::task::future(async move {
+                    Message::SongFinished(QueueUpdateReason::Skipped)
+                });
+            }
+            Message::PreviousTrack => {
+                return cosmic::task::future(async move {
+                    Message::SongFinished(QueueUpdateReason::Previous)
+                });
             }
             app::Message::AddAlbumToQueue(paths) => {
                 return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
