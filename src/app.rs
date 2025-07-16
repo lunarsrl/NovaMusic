@@ -179,6 +179,7 @@ pub enum Message {
 
     //experimenting
     CreatePlaylist,
+    ChangeActiveInQueue(usize)
 }
 
 #[derive(Clone, Debug)]
@@ -368,6 +369,11 @@ impl cosmic::Application for AppModel {
             match message {
                 Message::OpenRepositoryUrl => {
                     _ = open::that_detached(REPOSITORY);
+                }
+                Message::ChangeActiveInQueue(index) => {
+                    self.clear = true;
+                    self.sink.clear();
+                    self.queue_pos = index;
                 }
                 Message::NextSong(song) => {}
                 Message::ChangeLoopState => match self.loop_state {
@@ -760,10 +766,7 @@ impl cosmic::Application for AppModel {
                                     Some(val.as_secs_f64())
                                 }
                             };
-                            log::info!("{:?}", self.song_duration);
-
                             self.sink.append(decoder);
-
                             let sleeping_task_sink = Arc::clone(&self.sink);
                             let sleeping_thread = cosmic::task::future(async move {
                                 let kill = true;
@@ -791,16 +794,15 @@ impl cosmic::Application for AppModel {
                             }
 
                             let reporting_task_sink = Arc::clone(&self.sink);
-                            log::info!("Between threads");
                             let progress_thread = cosmic::Task::stream(
                                 cosmic::iced_futures::stream::channel(10, |mut tx| async move {
                                     tokio::task::spawn_blocking(move || loop {
-                                        sleep(Duration::from_millis(100));
+                                        sleep(Duration::from_millis(10));
                                         match tx.try_send(Message::SinkProgress(
                                             reporting_task_sink.get_pos().as_secs_f64(),
                                         )) {
                                             Ok(_) => {}
-                                            Err(_) => { break }
+                                            Err(_) => {break}
                                         }
                                     });
                                 }),
@@ -834,6 +836,13 @@ impl cosmic::Application for AppModel {
                 }
                 Message::SongFinished(val) => {
                     let sink = self.sink.clone();
+
+                    if self.queue.is_empty() {
+                        self.queue_pos = 0;
+                        self.song_progress = 0.0;
+                        self.song_duration = None;
+                        return cosmic::Task::none()
+                    }
 
                     match val {
                         QueueUpdateReason::Skipped => {
@@ -954,7 +963,19 @@ impl cosmic::Application for AppModel {
                 Message::ClearQueue => {
                     self.clear = true;
                     self.sink.stop();
+                    match &self.task_handle {
+                        None => {}
+                        Some(handles) => {
+                            for handle in handles {
+                                handle.abort()
+                            }
+                        }
+                    }
+
                     self.queue_pos = 0;
+                    self.song_progress = 0.0;
+                    self.song_duration = None;
+
                     self.queue.clear();
                 }
                 Message::PreviousTrack => {
@@ -967,6 +988,7 @@ impl cosmic::Application for AppModel {
                         0,
                         |mut tx| async move {
                             for file in paths {
+
                                 tx.send(Message::AddTrackToQueue(file)).await.expect("send")
                             }
                         },
