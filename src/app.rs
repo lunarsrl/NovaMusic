@@ -6,6 +6,7 @@ pub(crate) mod home;
 mod playlists;
 mod scan;
 mod settings;
+mod tracks;
 
 use std::any::TypeId;
 use tokio::task::{spawn_blocking, JoinHandle};
@@ -14,7 +15,9 @@ use crate::app::albums::{
     get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
 };
 
+
 use crate::app::home::HomePage;
+use crate::app::tracks::TrackPage;
 use crate::app::scan::{scan_directory, MediaFileTypes};
 
 use crate::app::Message::{
@@ -162,7 +165,6 @@ pub enum Message {
     // Audio Messages
     PlayPause,
     SongFinished(QueueUpdateReason),
-    NextSong(()),
     AddTrackToSink(String),
     ChangeLoopState,
     PreviousTrack,
@@ -179,15 +181,17 @@ pub enum Message {
 
     //experimenting
     CreatePlaylist,
-    ChangeActiveInQueue(usize)
+    ChangeActiveInQueue(usize),
+    RemoveSongInQueue(usize)
 }
 
 #[derive(Clone, Debug)]
 enum QueueUpdateReason {
     Skipped,
     Previous,
-    Clear,
+    Removed(usize),
     None,
+    ThreadKilled,
 }
 
 /// Create a COSMIC application from the app model
@@ -235,15 +239,23 @@ impl cosmic::Application for AppModel {
             .activate();
 
         nav.insert()
-            .text(fl!("artists"))
-            .data::<Page>(Page::Artists)
-            .icon(icon::from_name("avatar-default-symbolic"));
+            .text(fl!("tracks"))
+            .data::<Page>(Page::Tracks(TrackPage))
+            .icon(icon::from_name("media-tape-symbolic"));
 
         nav.insert()
             .text(fl!("albums"))
             .data::<Page>(Page::Albums(AlbumPage::new(None)))
             .icon(icon::from_name("media-optical-symbolic"));
 
+        nav.insert()
+            .text(fl!("artists"))
+            .data::<Page>(Page::Artists)
+            .icon(icon::from_name("avatar-default-symbolic"));
+
+
+
+        // todo Add playlist support
         nav.insert()
             .text(fl!("playlists"))
             .data::<Page>(Page::Playlists)
@@ -349,14 +361,27 @@ impl cosmic::Application for AppModel {
         fn view(&self) -> Element<Self::Message> {
             match self.nav.active_data::<Page>().unwrap() {
                 Page::NowPlaying(home_page) => home_page.load(&self),
+                Page::Tracks(track_page) => {
+                    track_page.load()
+                }
                 Page::Artists => {
-                    cosmic::widget::container(cosmic::widget::text::title1(" Artists ")).into()
+                    cosmic::widget::container::Container::new(
+                        cosmic::widget::text::title1(" Artists ")
+                    )
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .into()
                 }
                 Page::Albums(album_page) => {
                     album_page.load_page(&self.config.grid_item_size, &self.config.grid_item_spacing)
                 }
                 Page::Playlists => {
-                    cosmic::widget::container(cosmic::widget::text::title1("Playlists")).into()
+                    cosmic::widget::container::Container::new(
+                        cosmic::widget::text::title1(" Playlists ")
+                    )
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .into()
                 }
             }
         }
@@ -373,9 +398,14 @@ impl cosmic::Application for AppModel {
                 Message::ChangeActiveInQueue(index) => {
                     self.clear = true;
                     self.sink.clear();
+                    self.sink.play();
                     self.queue_pos = index;
                 }
-                Message::NextSong(song) => {}
+                Message::RemoveSongInQueue(index) => {
+                    return cosmic::task::future(async move {
+                        Message::SongFinished(QueueUpdateReason::Removed(index))
+                    });
+                }
                 Message::ChangeLoopState => match self.loop_state {
                     LoopState::LoopingTrack => {
                         self.loop_state = LoopState::NotLooping;
@@ -426,6 +456,24 @@ impl cosmic::Application for AppModel {
                     }
                 },
                 Message::RescanDir => {
+
+                    self.clear = true;
+                    self.sink.stop();
+                    match &self.task_handle {
+                        None => {}
+                        Some(handles) => {
+                            for handle in handles {
+                                handle.abort()
+                            }
+                        }
+                    }
+
+                    self.queue_pos = 0;
+                    self.song_progress = 0.0;
+                    self.song_duration = None;
+
+                    self.queue.clear();
+
                     // Settings: No rescan until current rescan finishes
                     self.rescan_available = false;
                     self.config.set_num_files_found(&self.config_handler, 0);
@@ -628,7 +676,8 @@ impl cosmic::Application for AppModel {
                         //
                         // });
                     }
-                    Page::Playlists => {}
+                    Page::Playlists => {},
+                    Page::Tracks(_) => {}
                 },
                 Message::AlbumsLoaded => {
                     let dat_pos = self.nav.entity_at(2).expect("REASON");
@@ -661,7 +710,8 @@ impl cosmic::Application for AppModel {
                         Page::Albums(old_page) => {
                             *old_page = new_page;
                         }
-                        Page::Playlists => {}
+                        Page::Playlists => {},
+                        Page::Tracks(page) => {},
                     }
                 }
                 Message::AlbumInfoRetrieved(albuminfopage) => {
@@ -776,7 +826,7 @@ impl cosmic::Application for AppModel {
                                             sleeping_task_sink.sleep_until_end();
                                             QueueUpdateReason::None
                                         } else {
-                                            QueueUpdateReason::Clear
+                                            QueueUpdateReason::ThreadKilled
                                         }
                                     })
                                         .await
@@ -854,6 +904,7 @@ impl cosmic::Application for AppModel {
 
                             self.clear = true;
                             sink.clear();
+                            sink.play()
                         }
                         QueueUpdateReason::Previous => {
                             if self.queue_pos as i32 - 1 < 0 {
@@ -862,7 +913,8 @@ impl cosmic::Application for AppModel {
                                 self.queue_pos -= 1;
                             }
                             self.clear = true;
-                            sink.clear()
+                            sink.clear();
+                            sink.play()
                         }
                         QueueUpdateReason::None => {
                             match self.clear {
@@ -872,7 +924,6 @@ impl cosmic::Application for AppModel {
                                         true => {}
                                         false => {
                                             let file = self.queue.get(self.queue_pos).unwrap().path_buf.clone().to_string_lossy().to_string();
-                                            sink.play();
                                             return cosmic::task::future(async move {
                                                 Message::AddTrackToSink(file)
                                             });
@@ -916,7 +967,38 @@ impl cosmic::Application for AppModel {
                                 }
                             }
                         }
-                        QueueUpdateReason::Clear => {}
+                        QueueUpdateReason::Removed(index) => {
+                            if self.queue_pos > index {
+                                self.queue_pos -= 1;
+
+                                self.clear = true;
+                                self.sink.clear();
+                                self.sink.play();
+                                return cosmic::Task::none();
+                            }
+
+                            if index as i32 == (self.queue.len() as i32 - 1) && self.queue_pos as i32 == (self.queue.len() as i32) - 1 {
+                                self.queue_pos = 0;
+                                self.queue.remove(index);
+
+
+                                self.clear = true;
+                                self.sink.clear();
+                                if let LoopState::LoopingQueue = self.loop_state {
+                                    self.sink.play();
+                                }
+                                return cosmic::Task::none();
+                            } else {
+                                self.queue.remove(index);
+                                self.clear = true;
+                                self.sink.clear();
+                                self.sink.play();
+                            }
+
+
+
+                        }
+                        QueueUpdateReason::ThreadKilled => {}
                     }
                 }
                 Message::AddTrackToSink(filepath) => {
@@ -1084,6 +1166,7 @@ impl cosmic::Application for AppModel {
         Artists,
         Albums(AlbumPage),
         Playlists,
+        Tracks(TrackPage),
     }
 
     /// The context page to display in the context drawer.

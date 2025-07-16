@@ -98,7 +98,6 @@ impl HomePage {
                                                 "media-skip-backward-symbolic",
                                             ),
                                         )
-                                        .class(cosmic::widget::button::ButtonClass::Standard)
                                         .on_press(Message::PreviousTrack)
                                         .into(),
                                         // PLAY OR PAUSE
@@ -113,7 +112,6 @@ impl HomePage {
                                             },
                                         )
                                         .on_press(Message::PlayPause)
-                                        .class(cosmic::widget::button::ButtonClass::Standard)
                                         .into(),
                                         // PLAY OR PAUSE
                                         cosmic::widget::button::icon(
@@ -122,7 +120,6 @@ impl HomePage {
                                             ),
                                         )
                                         .on_press(Message::SkipTrack)
-                                        .class(cosmic::widget::button::ButtonClass::Standard)
                                         .into(),
                                         cosmic::widget::button::icon(match model.loop_state {
                                             LoopState::LoopingTrack => {
@@ -141,7 +138,6 @@ impl HomePage {
                                                 )
                                             }
                                         })
-                                        .class(cosmic::widget::button::ButtonClass::Standard)
                                         .on_press(Message::ChangeLoopState)
                                         .into(),
                                     ])
@@ -171,10 +167,11 @@ impl HomePage {
                                     .class(cosmic::widget::button::ButtonClass::Destructive)
                                     .on_press(Message::ClearQueue)
                                     .into(),
-                                cosmic::widget::button::text("Create Playlist")
-                                    .class(cosmic::widget::button::ButtonClass::Standard)
-                                    .on_press(Message::CreatePlaylist)
-                                    .into(),
+                                // todo: create playlist from queue
+                                // cosmic::widget::button::text("Create Playlist")
+                                //     .class(cosmic::widget::button::ButtonClass::Standard)
+                                //     .on_press(Message::CreatePlaylist)
+                                //     .into(),
                             ])
                             .align_y(Vertical::Center)
                             .spacing(cosmic::theme::spacing().space_xxs),
@@ -209,26 +206,45 @@ fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, Messa
             None => {}
             Some(old_list) => {
                 if index == active {
-                    list = Some(old_list.add(cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text(name).into(),
-                            cosmic::widget::horizontal_space().into(),
-                            cosmic::widget::text("Now Playing")
-                                .class(cosmic::theme::Text::Accent)
-                                .into(),
-                        ])));
+                    list = Some(
+                        old_list.add(
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::text(name).into(),
+                                cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                    "window-close-symbolic",
+                                ))
+                                    .on_press(Message::RemoveSongInQueue(index))
+                                    .into(),
+                                cosmic::widget::text("Now Playing")
+                                    .class(cosmic::theme::Text::Accent)
+                                    .into(),
+                            ])
+                            .align_y(Vertical::Center)
+                            .spacing(cosmic::theme::spacing().space_xxxs),
+                        ),
+                    );
                 } else {
                     list = Some(
                         old_list.add(
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::text(name).into(),
                                 cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                    "window-close-symbolic",
+                                ))
+                                .on_press(Message::RemoveSongInQueue(index))
+                                .into(),
                                 cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                    cosmic::widget::icon::from_name("media-playback-start-symbolic")
-                                )).on_press(Message::ChangeActiveInQueue(index))
+                                    cosmic::widget::icon::from_name(
+                                        "media-playback-start-symbolic",
+                                    ),
+                                ))
+                                .on_press(Message::ChangeActiveInQueue(index))
                                 .into(),
                             ])
-                                .align_y(Vertical::Center)
-                                .spacing(cosmic::theme::spacing().space_m),
+                            .align_y(Vertical::Center)
+                            .spacing(cosmic::theme::spacing().space_xxxs),
                         ),
                     )
                 }
