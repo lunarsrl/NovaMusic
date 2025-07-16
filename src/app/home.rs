@@ -18,6 +18,7 @@ use std::time::Duration;
 
 use cosmic::iced_core::text::Wrapping;
 use cosmic::style::Text::Color;
+
 use humantime::format_duration;
 
 #[derive(Debug)]
@@ -161,15 +162,35 @@ impl HomePage {
                                 .spacing(cosmic::theme::spacing().space_xs),
                             )
                             .width(Length::Fill)
-                            .padding(cosmic::theme::spacing().space_xs)
+                            .padding(cosmic::theme::spacing().space_xxs)
                             .class(cosmic::theme::Container::Primary)
                             .into(),
                             cosmic::widget::container(
                                 cosmic::widget::column::with_children(vec![
-                                    cosmic::widget::text::heading("Queue: ").into(),
+                                    cosmic::widget::container(
+                                    cosmic::widget::row::with_children(vec![
+                                        cosmic::widget::text::heading("Queue: ")
+                                            .center()
+                                            .into(),
+                                        cosmic::widget::horizontal_space().into(),
+                                        cosmic::widget::button::text("Clear All")
+                                            .class(cosmic::widget::button::ButtonClass::Destructive)
+                                            .on_press(Message::ClearQueue)
+                                            .into(),
+                                        cosmic::widget::button::text("Create Playlist")
+                                            .class(cosmic::widget::button::ButtonClass::Standard)
+                                            .on_press(Message::CreatePlaylist)
+                                            .into(),
+                                    ])
+                                        .align_y(Vertical::Center)
+                                        .spacing(cosmic::theme::spacing().space_xxs)
+                                    )
+                                        .class(cosmic::theme::Container::Primary)
+                                        .padding(cosmic::theme::spacing().space_xxs)
+                                        .into()
+                                    ,
                                     listify_queue(&model.queue, model.queue_pos as usize),
                                 ])
-                                .spacing(cosmic::theme::spacing().space_xxs),
                             )
                             .into(),
                         ])
@@ -200,6 +221,7 @@ fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, Messa
 
                     if  index == active {
                         list = Some(old_list.add(
+                            
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::text(name).into(),
                                 cosmic::widget::horizontal_space().into(),
