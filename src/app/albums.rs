@@ -283,17 +283,13 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                             ))
                             .into(),
                             cosmic::widget::horizontal_space().into(),
-                            cosmic::widget::button::custom(
-                                cosmic::widget::row::with_children(vec![
+                            cosmic::widget::button::icon(
+                                
                                     cosmic::widget::icon::from_name(
                                         "media-playback-start-symbolic",
                                     )
-                                    .into(),
-                                ])
-                                .align_y(Alignment::Center),
                             )
                             .on_press(Message::AddTrackToQueue(track.file_path.clone()))
-                            .class(cosmic::widget::button::ButtonClass::Standard)
                             .into(),
                         ]),
                     )),

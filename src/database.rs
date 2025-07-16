@@ -50,7 +50,7 @@ struct PlaylistTracks {
     playlist_id: u64,
     track_id: u64,
 }
-
+// todo When I first made this I had never done sql before I swear. Make database safer and more efficient
 pub fn create_database() {
     let conn = rusqlite::Connection::open("cosmic_music.db").unwrap();
 

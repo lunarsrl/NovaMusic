@@ -1,5 +1,6 @@
 app-title = Cosmic Music
 
+# Pages
 view = View
 about = About
 settings = Settings
@@ -7,6 +8,7 @@ settings = Settings
 scandir = Scan Directory
 
 home = Home
+tracks = Tracks
 artists = Artists
 albums = Albums
 playlists = Playlists
