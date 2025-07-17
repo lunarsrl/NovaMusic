@@ -4,7 +4,7 @@
 
 ## Table Of Contents
 
-![](images/albuminfopage.png)
+![](images/player.png)
 ## Installation
 
 A [justfile](./justfile) is included by default for the [casey/just][just] command runner.
