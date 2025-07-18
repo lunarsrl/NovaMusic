@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 mod albums;
 mod artists;
 pub(crate) mod home;
@@ -72,6 +73,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use rayon::iter::{IntoParallelIterator, ParallelBridge};
+use rayon::slice::ParallelSliceMut;
+use regex::Match;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, Track};
 use symphonia::core::io::MediaSourceStream;
@@ -117,6 +120,7 @@ pub struct AppModel {
     pub search_field: String,
 }
 
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppTrack {
     pub title: String,
@@ -125,6 +129,14 @@ pub struct AppTrack {
     pub path_buf: PathBuf,
     pub cover_art: Option<cosmic::widget::image::Handle>,
 }
+
+
+
+pub struct SearchResult {
+    track: AppTrack,
+    weight: u32
+}
+
 /// Messages emitted by the application and its widgets.
 
 #[derive(Debug)]
@@ -190,7 +202,7 @@ pub enum Message {
     RemoveSongInQueue(usize),
     TracksLoaded,
     UpdateSearch(String),
-    SearchResults,
+    SearchResults(Vec<AppTrack>),
     TrackLoaded(Vec<AppTrack>),
 }
 
@@ -467,13 +479,76 @@ impl cosmic::Application for AppModel {
                         }
                     };
 
+                    let track: Arc<Vec<AppTrack>> = Arc::clone(&page.tracks);
+                    let results: Vec<SearchResult>;
+
                     return cosmic::iced_runtime::Task::perform(
-                        async move {
+                        async  move {
                             let action = tokio::task::spawn_blocking(move || {
-                                return action::app(Message::SearchResults);
-                            })
-                                .await
-                                .unwrap_or(return cosmic::action::Action::None);
+                                let binding = track.clone();
+                                let mut results = binding.par_iter().map(|track| {
+                                        let result = match regex.find(&track.title)     {
+                                            None => {
+                                                match regex.find(&track.album_title) {
+                                                    Some(mat) => {
+                                                        if mat.range().start == 0 {
+                                                            if mat.range().end == track.album_title.len() {
+                                                                // Summary equals search phrase
+                                                                Some(3)
+                                                            } else {
+                                                                // Summary starts with search phrase
+                                                                Some(4)
+                                                            }
+                                                        } else {
+                                                            // Summary contains search phrase
+                                                            Some(5)
+                                                        }
+                                                    }
+                                                    None => match regex.find(&track.artist) {
+                                                        Some(mat) => {
+                                                            if mat.range().start == 0 {
+                                                                if mat.range().end == track.artist.len() {
+                                                                    // Description equals search phrase
+                                                                    Some(6)
+                                                                } else {
+                                                                    // Description starts with search phrase
+                                                                    Some(7)
+                                                                }
+                                                            } else {
+                                                                // Description contains search phrase
+                                                                Some(8)
+                                                            }
+                                                        }
+                                                        None => None,
+                                                    },
+                                                }
+                                            }
+                                            Some(mat) => {
+                                                if mat.range().start == 0 {
+                                                    if mat.range().end == track.title.len() {
+                                                        // Name equals search phrase
+                                                        Some(0)
+                                                    } else {
+                                                        // Name starts with search phrase
+                                                        Some(1)
+                                                    }
+                                                } else {
+                                                    // Name contains search phrase
+                                                    Some(2)
+                                                }
+
+                                            }
+                                        };
+
+                                    (track,  result)
+                                }).collect::<Vec<(&AppTrack, Option<i32>)>>();
+
+                                results.par_sort_by(|a, b| b.1.cmp(&a.1));
+                                
+                                let final_list = results.iter().map(|a| a.0.clone()).collect::<Vec<AppTrack>>();
+                                
+                                return action::app(Message::SearchResults(final_list));
+                            }).await.expect("Failed to perform action");
 
                             return action;
                         },
@@ -757,7 +832,7 @@ from track
                             .map(cosmic::Action::App);
                     }
                     TrackPageState::Loaded => {
-                        log::info!("Loaded");
+                        
                     }
                 },
             },
@@ -766,7 +841,7 @@ from track
                 let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
 
                 if let Page::Tracks(dat) = data {
-                    dat.tracks = track
+                    dat.tracks = track.into()
                 }
             }
             Message::TracksLoaded => {
@@ -846,7 +921,6 @@ from track
             }
             app::Message::SeekTrack(val) => {
                 self.sink.set_volume(0.0);
-                log::info!("volume: {}", self.sink.volume());
                 match self.sink.try_seek(Duration::from_secs_f64(val)) {
                     Ok(_) => {}
                     Err(_) => {}
@@ -1208,7 +1282,18 @@ from track
             Message::CreatePlaylist => {
                 todo!()
             }
-            Message::SearchResults => {}
+            Message::SearchResults(tracks) => {
+                match self.nav.active_data_mut::<Page>().expect("Pages should exist always") {
+                    Page::NowPlaying(_) => {}
+                    Page::Artists => {}
+                    Page::Albums(_) => {}
+                    Page::Playlists => {}
+                    Page::Tracks(track_list) => {
+                        
+                        track_list.tracks = Arc::new(tracks)
+                    }
+                }
+            }
         };
 
         Task::none()

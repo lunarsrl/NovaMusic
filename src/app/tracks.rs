@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::app;
 use crate::app::{AppTrack, Message};
 use cosmic::iced::{Alignment, ContentFit, Element, Length};
@@ -6,7 +7,7 @@ use std::num::Wrapping;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
-    pub tracks: Vec<AppTrack>,
+    pub tracks: Arc<Vec<AppTrack>>,
     pub track_page_state: TrackPageState,
 }
 
@@ -19,7 +20,7 @@ pub enum TrackPageState {
 impl TrackPage {
     pub fn new() -> Self {
         TrackPage {
-            tracks: Vec::<AppTrack>::new(),
+            tracks: Arc::from(Vec::<AppTrack>::new()),
             track_page_state: TrackPageState::Loading,
         }
     }
@@ -89,7 +90,7 @@ fn track_list_display(tracks: &Vec<AppTrack>) -> cosmic::Element<'static, app::M
                         ])
                         .spacing(cosmic::theme::spacing().space_xxxs)
                         .align_y(Alignment::Center)
-                        
+
                     )),
                 )
             }
