@@ -49,7 +49,7 @@ impl AlbumPage {
         &self,
         grid_item_size: &u32,
         grid_item_spacing: &u32,
-    ) -> Element<'static, Message> {
+    ) -> Element<Message> {
         let page_margin = cosmic::theme::spacing().space_m;
         match &self.page_state {
             AlbumPageState::Loading | AlbumPageState::Loaded => {
@@ -179,7 +179,7 @@ impl AlbumPage {
                             // Art Area?
                             match &albumpage.album.cover_art {
                                 None => {
-                                    
+
                                     cosmic::widget::icon::from_name("applications-audio-symbolic")
                                         .size(128)
                                         .into()
@@ -284,7 +284,7 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                             .into(),
                             cosmic::widget::horizontal_space().into(),
                             cosmic::widget::button::icon(
-                                
+
                                     cosmic::widget::icon::from_name(
                                         "media-playback-start-symbolic",
                                     )
@@ -296,7 +296,7 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                 )
             }
             None => {
-                print!("idc")
+
             }
         }
     }
@@ -395,14 +395,15 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
     }
 }
 
-pub async fn get_top_album_info(
+pub fn get_top_album_info(
     tx: &mut Sender<Message>,
     album_iter: Vec<(String, String, u32, u32, Option<Vec<u8>>)>,
 ) {
     // Prepare and execute query in a separate scope
     // Process results and send them
+    let mut albums: Vec<Album> = vec![];
     for album_result in album_iter {
-        let album = Album {
+        albums.push(Album {
             name: album_result.0,
             artist: album_result.1,
             disc_number: album_result.2,
@@ -411,10 +412,8 @@ pub async fn get_top_album_info(
                 None => None,
                 Some(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
             },
-        };
-
-        tx.send(Message::AlbumProcessed(album))
-            .await
-            .expect("Failed to send album");
+        })
     }
+
+    tx.start_send(Message::AlbumProcessed(albums)).expect("Failed to send album process");
 }

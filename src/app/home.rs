@@ -59,6 +59,39 @@ impl HomePage {
             }
         }
 
+        let play_pause_button: cosmic::Element<Message> = match model.queue.is_empty() {
+            true => {
+                model.sink.clear();
+                cosmic::widget::button::icon(
+                    match model.sink.is_paused() {
+                        true => cosmic::widget::icon::from_name(
+                            "media-playback-start-symbolic",
+                        ),
+                        false => cosmic::widget::icon::from_name(
+                            "media-playback-pause-symbolic",
+                        ),
+                    },
+                )
+                    .into()
+            }
+            false => {
+                cosmic::widget::button::icon(
+                    match model.sink.is_paused() {
+                        true => cosmic::widget::icon::from_name(
+                            "media-playback-start-symbolic",
+                        ),
+                        false => cosmic::widget::icon::from_name(
+                            "media-playback-pause-symbolic",
+                        ),
+                    },
+                )
+                    .on_press(Message::PlayPause)
+                    .into()
+            }
+        };
+
+
+
         // Actual contents
         cosmic::widget::scrollable(
             cosmic::widget::container(
@@ -101,18 +134,7 @@ impl HomePage {
                                         .on_press(Message::PreviousTrack)
                                         .into(),
                                         // PLAY OR PAUSE
-                                        cosmic::widget::button::icon(
-                                            match model.sink.is_paused() {
-                                                true => cosmic::widget::icon::from_name(
-                                                    "media-playback-start-symbolic",
-                                                ),
-                                                false => cosmic::widget::icon::from_name(
-                                                    "media-playback-pause-symbolic",
-                                                ),
-                                            },
-                                        )
-                                        .on_press(Message::PlayPause)
-                                        .into(),
+                                            play_pause_button,
                                         // PLAY OR PAUSE
                                         cosmic::widget::button::icon(
                                             cosmic::widget::icon::from_name(
