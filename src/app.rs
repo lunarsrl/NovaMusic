@@ -480,8 +480,7 @@ impl cosmic::Application for AppModel {
                     };
 
                     let track: Arc<Vec<AppTrack>> = Arc::clone(&page.tracks);
-                    let results: Vec<SearchResult>;
-
+                    
                     return cosmic::iced_runtime::Task::perform(
                         async  move {
                             let action = tokio::task::spawn_blocking(move || {
@@ -490,6 +489,7 @@ impl cosmic::Application for AppModel {
                                         let result = match regex.find(&track.title)     {
                                             None => {
                                                 match regex.find(&track.album_title) {
+                                                    // thank you cosmic-store developers :)
                                                     Some(mat) => {
                                                         if mat.range().start == 0 {
                                                             if mat.range().end == track.album_title.len() {
@@ -1289,7 +1289,7 @@ from track
                     Page::Albums(_) => {}
                     Page::Playlists => {}
                     Page::Tracks(track_list) => {
-                        
+                       log::info!("Task firing");
                         track_list.tracks = Arc::new(tracks)
                     }
                 }
