@@ -66,21 +66,12 @@ impl AppModel {
                         widget::settings::item::builder("Music Directory:")
                             .description("Choose directory to scan for music.")
                             .control(
-
                                 match self.rescan_available {
                                     true => {
-                                        cosmic::widget::text_input::text_input(
-                                            "Enter directory",
-                                            &self.change_dir_filed,
-                                        )
-                                            .on_input(|val| app::Message::EditInput(val))
-                                            .on_submit(|string| app::Message::ChangeScanDir(string))
+                                        cosmic::widget::button::suggested("Select Folder").on_press(Message::ChooseFolder)
                                     }
                                     false => {
-                                        cosmic::widget::text_input::text_input(
-                                            "Enter directory",
-                                            &self.change_dir_filed,
-                                        )
+                                        cosmic::widget::button::suggested("Select Folder")
                                     }
                                 }
 
@@ -88,7 +79,7 @@ impl AppModel {
                     )
                     .add(
                         widget::settings::item::builder("Full Directory Rescan:").control(
-                            match self.rescan_available {
+                            match self.rescan_available && !self.config.scan_dir.is_empty() {
                                 true => {
 
                                     widget::button::text("Rescan")
@@ -97,7 +88,7 @@ impl AppModel {
                                 }
                                 false => {
                                     widget::button::text("Rescan")
-                                        .class(widget::button::ButtonClass::Standard)
+                                        .class(widget::button::ButtonClass::Destructive)
                                 }
                             }
 

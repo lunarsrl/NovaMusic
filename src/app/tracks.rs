@@ -4,6 +4,7 @@ use crate::app::{AppTrack, Message};
 use cosmic::iced::{Alignment, ContentFit, Element, Length};
 use cosmic::widget::dropdown::multi::list;
 use std::num::Wrapping;
+use cosmic::iced_core::image::Handle;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
@@ -63,14 +64,34 @@ impl TrackPage {
 fn track_list_display(tracks: &Vec<AppTrack>) -> cosmic::Element<'static, app::Message> {
     let mut list_widget = Some(cosmic::widget::ListColumn::new());
 
+
+    log::info!("IMAGE!");
     for track in tracks {
         //todo if track is associated with an album, display album cover. Dont know how to do this efficiently yet.
+        //
+        // let icon: cosmic::Element<Message> = match &track.cover_art {
+        //     None => {
+        //         cosmic::widget::icon::from_name("store-relax-symbolic")
+        //
+        //             .into()
+        //     }
+        //     Some(img_handle) => {
+        //         log::info!("IMAGE!");
+        //         cosmic::widget::image(img_handle)
+        //             .width(Length::FillPortion(1))
+        //             .content_fit(ContentFit::ScaleDown)
+        //
+        //             .into()
+        //     }
+        // };
+        //
         match list_widget.take() {
             Some(prev_list) => {
                 list_widget = Some(
                     // ----CONTENT---- //
                     prev_list.add(cosmic::widget::container::Container::new(
                         cosmic::widget::row::with_children(vec![
+
                             cosmic::widget::text::heading(format!("{}", track.title,))
                                 .width(Length::FillPortion(1))
                                 .into(),
