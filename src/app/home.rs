@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::app;
 use crate::app::albums::Album;
 use crate::app::{AppModel, AppTrack, LoopState, Message};
@@ -230,6 +231,7 @@ fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, Messa
                 if index == active {
                     list = Some(
                         old_list.add(
+
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::text(name).into(),
                                 cosmic::widget::horizontal_space().into(),
@@ -249,8 +251,10 @@ fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, Messa
                 } else {
                     list = Some(
                         old_list.add(
+                            cosmic::widget::dnd_destination(
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::text(name).into(),
+
                                 cosmic::widget::horizontal_space().into(),
                                 cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                     "window-close-symbolic",
@@ -266,7 +270,10 @@ fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, Messa
                                 .into(),
                             ])
                             .align_y(Vertical::Center)
-                            .spacing(cosmic::theme::spacing().space_xxxs),
+                            .spacing(cosmic::theme::spacing().space_xxxs)
+                                ,
+                            vec![]
+                    )
                         ),
                     )
                 }

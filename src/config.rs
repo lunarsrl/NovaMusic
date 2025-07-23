@@ -13,6 +13,8 @@ pub struct Config {
     pub grid_item_spacing: u32,
     pub num_files_found: u32,
     pub files_scanned: u32,
+    pub tracks_found: u32,
+    pub albums_found: u32,
 }
 
 impl Config {

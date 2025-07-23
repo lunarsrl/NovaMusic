@@ -1,10 +1,7 @@
 # Cosmic Music
 
-- A music player written in the libcosmic toolkit
+- An album focused music player written in the libcosmic toolkit
 
-## Table Of Contents
-
-![](images/player.png)
 ## Installation
 
 A [justfile](./justfile) is included by default for the [casey/just][just] command runner.

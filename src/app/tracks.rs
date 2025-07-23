@@ -1,28 +1,45 @@
 use crate::app;
 use crate::app::{AppTrack, Message};
 use cosmic::iced::{Alignment, ContentFit, Element, Length};
+use cosmic::iced_core::image::Handle;
 use cosmic::widget::dropdown::multi::list;
 use std::num::Wrapping;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
-    pub tracks: Vec<AppTrack>,
+    pub tracks: Arc<Vec<AppTrack>>,
+    pub search: Vec<SearchResult>,
     pub track_page_state: TrackPageState,
+    pub search_by_artist: bool,
+    pub search_by_album: bool,
+    pub search_by_title: bool,
 }
 
 #[derive(Debug, Clone)]
 pub enum TrackPageState {
     Loading,
     Loaded,
+    Search,
 }
 
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub tracks_index: usize,
+    pub score: u32,
+}
 impl TrackPage {
     pub fn new() -> Self {
         TrackPage {
-            tracks: Vec::<AppTrack>::new(),
+            tracks: Arc::from(Vec::<AppTrack>::new()),
+            search: vec![],
             track_page_state: TrackPageState::Loading,
+            search_by_artist: true,
+            search_by_album: true,
+            search_by_title: true,
         }
     }
+
     pub fn load<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<app::Message> {
         cosmic::widget::container::Container::new(
             cosmic::widget::column::with_children(vec![
@@ -45,7 +62,46 @@ impl TrackPage {
                     .into(),
                 ])
                 .into(),
-                cosmic::widget::scrollable::vertical(track_list_display(&self.tracks)).into(),
+                cosmic::widget::scrollable::vertical(match self.track_page_state {
+                    TrackPageState::Loading => cosmic::widget::text::title3("Loading...").into(),
+                    TrackPageState::Loaded => match self.tracks.is_empty() {
+                        true => cosmic::widget::text::title3("No Tracks Found").into(),
+                        false => track_list_display(&self.tracks),
+                    },
+                    TrackPageState::Search => cosmic::widget::column::with_children(vec![
+                        cosmic::widget::container(
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::text::heading("Search By: ").into(),
+                                cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::checkbox("Title", self.search_by_title)
+                                    .on_toggle(|a| Message::ToggleTitle(a))
+                                    .into(),
+                                cosmic::widget::checkbox("Album", self.search_by_album)
+                                    .on_toggle(|a| Message::ToggleAlbum(a))
+                                    .into(),
+                                cosmic::widget::checkbox("Artist", self.search_by_artist)
+                                    .on_toggle(|a| Message::ToggleArtist(a))
+                                    .into(),
+                            ])
+                            .spacing(cosmic::theme::spacing().space_s),
+                        )
+                        .padding(cosmic::theme::spacing().space_xxs)
+                        .class(cosmic::style::Container::Primary)
+                        .into(),
+                        search_list_display(
+                            &self.search,
+                            &self.tracks,
+                            (
+                                self.search_by_title,
+                                self.search_by_album,
+                                self.search_by_artist,
+                            ),
+                        ),
+                    ])
+                    .spacing(cosmic::theme::spacing().space_m)
+                    .into(),
+                })
+                .into(),
             ])
             .spacing(cosmic::theme::spacing().space_m),
         )
@@ -59,11 +115,101 @@ impl TrackPage {
     }
 }
 
-fn track_list_display(tracks: &Vec<AppTrack>) -> cosmic::Element<'static, app::Message> {
+fn search_list_display<'a>(
+    search_result: &'a Vec<SearchResult>,
+    tracks: &'a Vec<AppTrack>,
+    settings: (bool, bool, bool),
+) -> cosmic::Element<'a, Message> {
+    let mut title_vector: Vec<AppTrack> = vec![];
+    let mut album_vector: Vec<AppTrack> = vec![];
+    let mut artist_vector: Vec<AppTrack> = vec![];
+
+    for each in search_result {
+        if (0..=2).contains(&each.score) && settings.0 {
+            match tracks.get(each.tracks_index) {
+                None => {}
+                Some(val) => {
+                    title_vector.push(val.clone());
+                }
+            }
+        } else if (3..=5).contains(&each.score) && settings.1 {
+            match tracks.get(each.tracks_index) {
+                None => {}
+                Some(val) => {
+                    album_vector.push(val.clone());
+                }
+            }
+        } else if (6..=8).contains(&each.score) && settings.2 {
+            match tracks.get(each.tracks_index) {
+                None => {}
+                Some(val) => {
+                    artist_vector.push(val.clone());
+                }
+            }
+        }
+    }
+
+    let mut elem_vec : Vec<cosmic::Element<Message>> = Vec::with_capacity(3);
+
+    if settings.0 {
+        elem_vec.push(search_group_display(&title_vector, "Title"));
+    }
+
+    if settings.1 {
+        elem_vec.push(search_group_display(&album_vector, "Album"));
+    }
+
+    if settings.2 {
+        elem_vec.push(search_group_display(&artist_vector, "Artist"));
+    }
+
+
+    cosmic::widget::column::with_children(
+        elem_vec,
+    )
+        .spacing(cosmic::theme::spacing().space_s)
+        .width(Length::Fill)
+    .into()
+}
+
+fn search_group_display<'a>(tracks: &Vec<AppTrack>, search_title: &str) -> cosmic::Element<'a, Message> {
+    cosmic::widget::column::with_children(vec![
+        cosmic::widget::container(
+            cosmic::widget::row::with_children(vec![
+                cosmic::widget::text::heading(format!("By {}", search_title)).into(),
+            ])
+                .padding(cosmic::theme::spacing().space_xxs)
+                .width(Length::Fill)
+        )
+            .class(cosmic::theme::Container::Primary).into(),
+        track_list_display(&tracks)
+    ])
+        .into()
+}
+
+fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Message> {
     let mut list_widget = Some(cosmic::widget::ListColumn::new());
 
+    log::info!("IMAGE!");
     for track in tracks {
         //todo if track is associated with an album, display album cover. Dont know how to do this efficiently yet.
+        //
+        // let icon: cosmic::Element<Message> = match &track.cover_art {
+        //     None => {
+        //         cosmic::widget::icon::from_name("store-relax-symbolic")
+        //
+        //             .into()
+        //     }
+        //     Some(img_handle) => {
+        //         log::info!("IMAGE!");
+        //         cosmic::widget::image(img_handle)
+        //             .width(Length::FillPortion(1))
+        //             .content_fit(ContentFit::ScaleDown)
+        //
+        //             .into()
+        //     }
+        // };
+        //
         match list_widget.take() {
             Some(prev_list) => {
                 list_widget = Some(
@@ -88,8 +234,7 @@ fn track_list_display(tracks: &Vec<AppTrack>) -> cosmic::Element<'static, app::M
                             .into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_xxxs)
-                        .align_y(Alignment::Center)
-                        
+                        .align_y(Alignment::Center),
                     )),
                 )
             }
