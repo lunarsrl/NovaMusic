@@ -1,10 +1,6 @@
 # Cosmic Music
 
 - An album focused music player written in the libcosmic toolkit
-- Now usable!
-
-![](images/player.png)
-![](images/AlbumSettingsTracks.png)
 
 ## Installation
 
