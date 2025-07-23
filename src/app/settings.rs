@@ -47,12 +47,12 @@ impl AppModel {
                     .add(widget::Row::with_children([
                         text::heading("Albums Found:").into(),
                         widget::horizontal_space().into(),
-                        text::text("None").into(),
+                        text::text(self.config.albums_found.to_string()).into(),
                     ]))
                     .add(widget::Row::with_children([
                         text::heading("Tracks Found:").into(),
                         widget::horizontal_space().into(),
-                        text::text("None").into(),
+                        text::text(self.config.tracks_found.to_string()).into(),
                     ]))
                     .add(widget::Row::with_children([
                         text::heading("Playlists Found:").into(),

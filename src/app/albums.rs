@@ -291,7 +291,7 @@ fn tracks_listify(tracks: &Vec<Track>) -> Element<'static, Message> {
                             )
                             .on_press(Message::AddTrackToQueue(track.file_path.clone()))
                             .into(),
-                        ]),
+                        ]).align_y(Alignment::Center),
                     )),
                 )
             }
