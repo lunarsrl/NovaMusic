@@ -22,7 +22,9 @@ impl AppModel {
 
         let editable_settings: Section<Message> = cosmic::widget::settings::section();
         let current_settings: Section<Message> = cosmic::widget::settings::section();
+        let player_settings: Section<Message> = cosmic::widget::settings::section();
         let grid_settings: Section<Message> = cosmic::widget::settings::section();
+
 
         let contain = widget::Container::new(
             widget::column::Column::with_children([
@@ -117,6 +119,17 @@ impl AppModel {
                         widget::settings::item::builder("Grid Item Size: ")
                             .control(cosmic::widget::slider(1..=6, self.config.grid_item_size, |a| Message::GridSliderChange(a))
                                 
+                            )
+                    )
+                    .into(),
+
+                player_settings
+                    .title("Music Player")
+                    .add(
+                            widget::settings::item::builder(format!("App Volume: {}", self.config.volume.trunc()))
+                            .control(
+                                cosmic::widget::slider(0.0..=100.0, self.config.volume, |a| Message::VolumeSliderChange(a))
+
                             )
                     )
                     .into(),

@@ -91,6 +91,7 @@ use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, T
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
 use symphonia::default::get_probe;
+use crate::app::playlists::PlaylistPage;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -176,43 +177,45 @@ pub enum Message {
     AlbumPageStateAlbum(AlbumPage), // when album info is retrieved [Replaces AlbumPage with AlbumPage with new info] todo: Might be able to use this weird implementation to cache one album visit
     AlbumPageReturn,
 
-    // Home Page (Or Now Playing Page idk tbh)
+    // Home Page
     //todo Change to pathbufs for safety?
     AddTrackToQueue(String),
     //todo Make albums in queue fancier kinda like Elisa does it
     AddAlbumToQueue(Vec<String>),
 
+    // Track Page
+    TracksLoaded,
+    TrackLoaded(Vec<AppTrack>),
+    UpdateSearch(String),
+    SearchResults(Vec<crate::app::tracks::SearchResult>),
+    ToggleTitle(bool),
+    ToggleAlbum(bool),
+    ToggleArtist(bool),
+
+
     // Audio Messages
     PlayPause,
     SongFinished(QueueUpdateReason),
     AddTrackToSink(String),
+    SkipTrack,
     ChangeLoopState,
     PreviousTrack,
     SeekFinished,
     ClearQueue,
     SinkProgress(f64),
     SeekTrack(f64),
-
-    // Media Controls
-    SkipTrack,
-
-    // Settings
-    GridSliderChange(u32),
-
-    //experimenting
-    CreatePlaylist,
     ChangeActiveInQueue(usize),
     RemoveSongInQueue(usize),
-    TracksLoaded,
-    UpdateSearch(String),
-    SearchResults(Vec<crate::app::tracks::SearchResult>),
-    TrackLoaded(Vec<AppTrack>),
+
+    // Settings
     ChooseFolder,
     FolderChosen(String),
     FolderPickerFail,
-    ToggleTitle(bool),
-    ToggleAlbum(bool),
-    ToggleArtist(bool),
+    GridSliderChange(u32),
+    VolumeSliderChange(f32),
+
+    //experimenting
+    CreatePlaylist,
 }
 
 #[derive(Clone, Debug)]
@@ -281,7 +284,7 @@ impl cosmic::Application for AppModel {
         // todo Add playlist support
         nav.insert()
             .text(fl!("playlists"))
-            .data::<Page>(Page::Playlists)
+            .data::<Page>(Page::Playlists(PlaylistPage::new()))
             .icon(icon::from_name("playlist-symbolic"));
 
         // INIT CONFIG
@@ -384,17 +387,10 @@ impl cosmic::Application for AppModel {
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
         match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(home_page) => home_page.load(&self),
-            Page::Tracks(track_page) => track_page.load(self),
-            Page::Albums(album_page) => {
-                album_page.load_page(&self.config.grid_item_size, &self.config.grid_item_spacing)
-            }
-            Page::Playlists => cosmic::widget::container::Container::new(
-                cosmic::widget::text::title1(" Playlists "),
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into(),
+            Page::NowPlaying(home_page) => home_page.load_page(&self),
+            Page::Tracks(track_page) => track_page.load_page(self),
+            Page::Albums(album_page) => album_page.load_page(&self.config.grid_item_size, &self.config.grid_item_spacing).explain(cosmic::iced::Color::WHITE),
+            Page::Playlists(playlist_page) => playlist_page.load_page(),
         }
     }
 
@@ -874,7 +870,9 @@ impl cosmic::Application for AppModel {
                         //
                         // });
                     }
-                    Page::Playlists => {}
+                    Page::Playlists(page) => {
+                        //todo check db for playlists
+                    }
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
                             return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
@@ -982,7 +980,7 @@ from track
                     Page::Albums(old_page) => {
                         *old_page = new_page;
                     }
-                    Page::Playlists => {}
+                    Page::Playlists(page) => {}
                     Page::Tracks(page) => {}
                 }
             }
@@ -1394,7 +1392,7 @@ from track
                     Page::NowPlaying(_) => {}
 
                     Page::Albums(_) => {}
-                    Page::Playlists => {}
+                    Page::Playlists(page) => {}
                     Page::Tracks(track_list) => {
                         log::info!("Task firing");
                         track_list.track_page_state = TrackPageState::Search;
@@ -1419,6 +1417,10 @@ from track
                     page.search_by_artist = val
                 }
 
+            }
+            Message::VolumeSliderChange(val) => {
+                self.sink.set_volume(val/100.0);
+                self.config.set_volume(&self.config_handler, val).expect("Failed to set volume");
             }
         };
 
@@ -1503,7 +1505,7 @@ pub enum Page {
     NowPlaying(HomePage),
 
     Albums(AlbumPage),
-    Playlists,
+    Playlists(PlaylistPage),
     Tracks(TrackPage),
 }
 

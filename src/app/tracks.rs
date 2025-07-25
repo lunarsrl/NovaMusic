@@ -5,6 +5,7 @@ use cosmic::iced_core::image::Handle;
 use cosmic::widget::dropdown::multi::list;
 use std::num::Wrapping;
 use std::sync::{Arc, Mutex};
+use cosmic::iced;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
@@ -40,9 +41,10 @@ impl TrackPage {
         }
     }
 
-    pub fn load<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<app::Message> {
+    pub fn load_page<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<app::Message> {
         cosmic::widget::container::Container::new(
             cosmic::widget::column::with_children(vec![
+                cosmic::widget::container(
                 cosmic::widget::row::with_children(vec![
                     // HEADING AREA
                     cosmic::widget::row::with_children(vec![
@@ -61,8 +63,15 @@ impl TrackPage {
                     .spacing(cosmic::theme::spacing().space_s)
                     .into(),
                 ])
+                    .padding(cosmic::iced_core::Padding::from([
+                        0,
+                        cosmic::theme::spacing().space_m,
+                    ]))
+                )
                 .into(),
-                cosmic::widget::scrollable::vertical(match self.track_page_state {
+                cosmic::widget::scrollable::vertical(
+                    cosmic::widget::container(
+                    match self.track_page_state {
                     TrackPageState::Loading => cosmic::widget::text::title3("Loading...").into(),
                     TrackPageState::Loaded => match self.tracks.is_empty() {
                         true => cosmic::widget::text::title3("No Tracks Found").into(),
@@ -101,16 +110,18 @@ impl TrackPage {
                     .spacing(cosmic::theme::spacing().space_m)
                     .into(),
                 })
+                        .padding(iced::core::padding::Padding::from([
+                            0,
+                            cosmic::theme::spacing().space_m,
+                        ]))
+
+                )
                 .into(),
             ])
             .spacing(cosmic::theme::spacing().space_m),
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .padding(cosmic::iced_core::Padding::from([
-            0,
-            cosmic::theme::spacing().space_m,
-        ]))
         .into()
     }
 }
@@ -190,26 +201,9 @@ fn search_group_display<'a>(tracks: &Vec<AppTrack>, search_title: &str) -> cosmi
 fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Message> {
     let mut list_widget = Some(cosmic::widget::ListColumn::new());
 
-    log::info!("IMAGE!");
     for track in tracks {
         //todo if track is associated with an album, display album cover. Dont know how to do this efficiently yet.
-        //
-        // let icon: cosmic::Element<Message> = match &track.cover_art {
-        //     None => {
-        //         cosmic::widget::icon::from_name("store-relax-symbolic")
-        //
-        //             .into()
-        //     }
-        //     Some(img_handle) => {
-        //         log::info!("IMAGE!");
-        //         cosmic::widget::image(img_handle)
-        //             .width(Length::FillPortion(1))
-        //             .content_fit(ContentFit::ScaleDown)
-        //
-        //             .into()
-        //     }
-        // };
-        //
+
         match list_widget.take() {
             Some(prev_list) => {
                 list_widget = Some(

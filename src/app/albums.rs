@@ -1,23 +1,12 @@
-use crate::app;
+use colored::Colorize;
 use crate::app::Message;
-use cosmic::cctk::wayland_client::backend::protocol::wl_message;
-use cosmic::cosmic_theme::palette::blend::Compose;
-use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
-use cosmic::iced::application::Title;
 use cosmic::iced::futures::channel::mpsc::Sender;
-use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
 use cosmic::iced::{Alignment, ContentFit, Length, Size};
-use cosmic::iced_core::image::Handle;
-use cosmic::widget::image::Handle::Bytes;
-use cosmic::widget::row;
-use cosmic::{iced, iced_core, Apply, Element};
-use futures_util::{SinkExt, StreamExt};
+use cosmic::{iced, Element};
+use cosmic::widget::container;
+use cosmic::widget::settings::item;
+use futures_util::{StreamExt};
 use rusqlite::fallible_iterator::FallibleIterator;
-use rusqlite::{params, MappedRows, Row};
-use std::fmt::format;
-use std::path::PathBuf;
-use std::time;
-use std::time::{Duration, SystemTime};
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -45,11 +34,11 @@ impl AlbumPage {
         }
     }
 
-    pub fn load_page(
-        &self,
-        grid_item_size: &u32,
+    pub fn load_page<'a>(
+        &'a self,
+        grid_item_size: &'a u32,
         grid_item_spacing: &u32,
-    ) -> Element<Message> {
+    ) -> Element<'a, Message> {
         let page_margin = cosmic::theme::spacing().space_m;
         match &self.page_state {
             AlbumPageState::Loading | AlbumPageState::Loaded => {
@@ -67,7 +56,7 @@ impl AlbumPage {
                                 vec![
                                     cosmic::widget::text::title3("No Albums Found In Database").into(),
                                     cosmic::widget::text::text("1. Go to View -> Settings \n 2. Choose the directory where your music is located \n 3. Click on the red \"Rescan\" button to create your music database.").into(),
-                                    cosmic::widget::text::caption_heading("If the issue persists, your files may lack the metadata to be identified as albums. A tool like MusicBrainz Picard can help you add and organize music metadata.").into(),
+                                    cosmic::widget::text::caption_heading("If the issue persists, your files may lack the metadata to be identified as albums. A tool like MusicBrainz Picard or Kid3 can help you add and organize music metadata.").into(),
                                 ]
                             ).spacing(cosmic::theme::spacing().space_s)
                         )
@@ -78,52 +67,7 @@ impl AlbumPage {
                             .into()
                     };
                 }
-                let mut elements = vec![];
-                // removing some clones here would probably be big
-                for album in self.albums.as_ref().unwrap() {
-                    elements.push(
-                        cosmic::widget::button::custom(cosmic::widget::column::with_children(
-                            vec![
-                                if let Some(cover_art) = &album.cover_art {
-                                    cosmic::widget::container::Container::new(
-                                        cosmic::widget::image(cover_art),
-                                    )
-                                    .align_y(Alignment::Center)
-                                    .align_x(Alignment::Center)
-                                    .height((grid_item_size * 32) as f32)
-                                    .width((grid_item_size * 32) as f32)
-                                    .into()
-                                } else {
-                                    cosmic::widget::container(
-                                        cosmic::widget::icon::from_name("media-optical-symbolic")
-                                            .size(192),
-                                    )
-                                    .align_x(Alignment::Center)
-                                    .align_y(Alignment::Center)
-                                    .into()
-                                },
-                                cosmic::widget::column::with_children(vec![
-                                    cosmic::widget::text::text(album.name.clone())
-                                        .center()
-                                        .into(),
-                                    cosmic::widget::text::text(album.artist.clone())
-                                        .center()
-                                        .into(),
-                                ])
-                                .align_x(Alignment::Center)
-                                .width(cosmic::iced::Length::Fill)
-                                .into(),
-                            ],
-                        ))
-                        .class(cosmic::widget::button::ButtonClass::Icon)
-                        .on_press(Message::AlbumRequested((
-                            album.name.clone(),
-                            album.artist.clone(),
-                        )))
-                        .width((grid_item_size * 32) as f32)
-                        .into(),
-                    )
-                }
+
 
                 cosmic::widget::scrollable(
                     cosmic::widget::container(
@@ -135,17 +79,106 @@ impl AlbumPage {
                                 cosmic::widget::horizontal_space()
                                     .width(Length::Shrink)
                                     .into(),
-                                /* todo: Add album search
+
                                  cosmic::widget::search_input("Enter Album Name", "").width(Length::FillPortion(1)).into(),
-                                */
+
                             ])
                             .align_y(Alignment::Center)
                             .spacing(cosmic::theme::spacing().space_s)
                             .into(),
-                            cosmic::widget::container(
+                            cosmic::widget::responsive(move |size| {
                                 // Body
-                                cosmic::widget::flex_row(elements),
-                            )
+                                let mut elements: Vec<Element<Message>> = vec![];
+                                // removing some clones here would probably be big
+                                for album in self.albums.as_ref().unwrap() {
+                                    elements.push(
+                                        cosmic::widget::button::custom(
+                                            cosmic::widget::column::with_children(
+                                            vec![
+                                                if let Some(cover_art) = &album.cover_art {
+                                                    cosmic::widget::container::Container::new(
+                                                        cosmic::widget::image(cover_art),
+                                                    )
+                                                        .height((grid_item_size * 32) as f32)
+                                                        .width((grid_item_size * 32) as f32)
+                                                        .into()
+                                                } else {
+                                                    cosmic::widget::container(
+                                                        cosmic::widget::icon::from_name("media-optical-symbolic")
+                                                            .size(192),
+                                                    )
+                                                        .align_x(Alignment::Center)
+                                                        .align_y(Alignment::Center)
+                                                        .into()
+                                                },
+                                                cosmic::widget::column::with_children(vec![
+                                                    cosmic::widget::text::text(album.name.clone())
+                                                        .center()
+                                                        .into(),
+                                                    cosmic::widget::text::text(album.artist.clone())
+                                                        .center()
+                                                        .into(),
+                                                ])
+                                                    .align_x(Alignment::Center)
+                                                    .width(cosmic::iced::Length::Fill)
+                                                    .into(),
+                                            ],
+                                        ))
+                                            .class(cosmic::widget::button::ButtonClass::Icon)
+                                            .on_press(Message::AlbumRequested((
+                                                album.name.clone(),
+                                                album.artist.clone(),
+                                            )))
+                                            .width((grid_item_size * 32) as f32)
+                                            .into(),
+                                    )
+                                }
+
+                                let mut old_grid = Some(cosmic::widget::Grid::new().width(Length::Fill).height(Length::Fill));
+
+
+
+                                let width = size.width as u32;//- cosmic::theme::spacing().space_m as u32;
+                                let mut spacing: u16 = 0;
+                                let mut items_per_row = 0;
+                                let mut len_so_far  = 0;
+
+                                while width > (items_per_row * grid_item_size * 32) {
+                                    items_per_row+=1;
+                                }
+                                items_per_row -= 1;
+
+                                let check_spacing: u32 = ((items_per_row + 1) * grid_item_size * 32) .saturating_sub(width);
+                                let check_final =(grid_item_size * 32 - check_spacing);
+
+                                if items_per_row < 3 {
+                                    spacing = check_final as u16
+                                } else {
+                                    spacing = (check_final / (items_per_row - 1)) as u16;
+                                }
+
+
+
+                                for element in elements {
+                                    len_so_far += grid_item_size * 32;
+
+                                    if let Some(grid) = old_grid.take() {
+                                        if (len_so_far / (grid_item_size * 32)) % (items_per_row) == 0{
+                                            old_grid = Some(grid.push(element).insert_row());
+
+                                        } else {
+                                            old_grid = Some(
+                                                grid.push(element)
+                                            );
+                                        }
+                                    }
+                                }
+
+                                cosmic::widget::container
+                                    (
+                                        old_grid.take().unwrap().column_spacing(spacing),
+                                    ).into()
+                            })
                             .into(),
                         ])
                         .padding(iced::core::padding::Padding::from([
@@ -157,7 +190,7 @@ impl AlbumPage {
                     .align_x(Alignment::Center),
                 )
                 .width(Length::Fill)
-                .height(Length::Fill)
+
                 .into()
             }
             AlbumPageState::Album(albumpage) => {
@@ -417,3 +450,4 @@ pub fn get_top_album_info(
 
     tx.start_send(Message::AlbumProcessed(albums)).expect("Failed to send album process");
 }
+
