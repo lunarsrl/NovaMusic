@@ -389,7 +389,7 @@ impl cosmic::Application for AppModel {
         match self.nav.active_data::<Page>().unwrap() {
             Page::NowPlaying(home_page) => home_page.load_page(&self),
             Page::Tracks(track_page) => track_page.load_page(self),
-            Page::Albums(album_page) => album_page.load_page(&self.config.grid_item_size, &self.config.grid_item_spacing).explain(cosmic::iced::Color::WHITE),
+            Page::Albums(album_page) => album_page.load_page(&self.config.grid_item_size, &self.config.grid_item_spacing),
             Page::Playlists(playlist_page) => playlist_page.load_page(),
         }
     }
@@ -407,7 +407,6 @@ impl cosmic::Application for AppModel {
                         Ok(selected) => {
                             let fp = selected.url().to_owned().to_file_path().unwrap().to_str().unwrap().to_string();
                             Message::FolderChosen(fp)
-
                         }
                         Err(err) => {
                             // todo toasts for file picking errors
@@ -450,7 +449,7 @@ impl cosmic::Application for AppModel {
                 }
             },
             Message::StreamPaused => {
-                log::info!("{}", "Stream Paused At".red());
+
             }
 
             Message::ToggleContextPage(context_page) => {
@@ -471,7 +470,7 @@ impl cosmic::Application for AppModel {
                 Ok(dir) => match self.config.set_scan_dir(&self.config_handler, val) {
                     Ok(val) => {}
                     Err(err) => {
-                        log::error!("dir: {:?}", err);
+
                     }
                 },
                 Err(error) => {}
@@ -492,7 +491,7 @@ impl cosmic::Application for AppModel {
                     {
                         Ok(a) => a,
                         Err(err) => {
-                            log::error!("Search failed");
+
                             panic!("{}", err)
                         }
                     };
@@ -683,11 +682,11 @@ impl cosmic::Application for AppModel {
                         let mut files_scanned = 0;
 
                         for file in files {
-                            log::info!("file: {:?}", file);
+
                             files_scanned += 1;
                             match file {
                                 MediaFileTypes::FLAC(path) => {
-                                    log::info!("File: {:?}", path);
+
                                     let file = fs::File::open(&path).unwrap();
 
                                     let probe = get_probe();
@@ -728,7 +727,7 @@ impl cosmic::Application for AppModel {
                                 }
                                 MediaFileTypes::MP4(path) => {}
                                 MediaFileTypes::MP3(path) => {
-                                    log::info!("File: {:?}", path);
+
                                     let file = fs::File::open(&path).unwrap();
 
                                     let probe = get_probe();
@@ -848,7 +847,7 @@ impl cosmic::Application for AppModel {
                                                 match row.get::<_, Vec<u8>>("album_cover") {
                                                     Ok(val) => Some(val),
                                                     Err(e) => {
-                                                        log::info!("{}", e);
+
                                                         None
                                                     }
                                                 },
@@ -876,7 +875,7 @@ impl cosmic::Application for AppModel {
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
                             return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                                1,
+                                2,
                                 |mut tx| async move {
                                     tokio::task::spawn_blocking(move || {
                                         let conn =
@@ -898,13 +897,13 @@ from track
                                                 Ok(AppTrack {
                                                     title: row
                                                         .get("title")
-                                                        .unwrap_or("Unknown".to_string()),
+                                                        .unwrap_or("No Data".to_string()),
                                                     artist: row
                                                         .get("artist")
-                                                        .unwrap_or("Unknown".to_string()),
+                                                        .unwrap_or("N/A".to_string()),
                                                     album_title: row
                                                         .get("album_title")
-                                                        .unwrap_or("Unknown".to_string()),
+                                                        .unwrap_or("N/A".to_string()),
                                                     path_buf: PathBuf::from(
                                                         row.get::<&str, String>("path")
                                                             .expect("This should never happen"),
@@ -941,7 +940,7 @@ from track
                 }
             }
             Message::TracksLoaded => {
-                log::info!("Change should happen");
+
                 let dat_pos = self.nav.entity_at(1).expect("REASON");
                 let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
 
@@ -1059,7 +1058,7 @@ from track
                             })
                         })
                         .expect("error executing query");
-                    log::info!("HI");
+
 
                     self.queue.push(track);
                 }
@@ -1077,11 +1076,11 @@ from track
 
                         self.song_duration = match decoder.total_duration() {
                             None => {
-                                log::error!("Failed to decode song duration");
+
                                 None
                             }
                             Some(val) => {
-                                log::info!("Decoded song duration: {}", val.as_secs_f64());
+
                                 Some(val.as_secs_f64())
                             }
                         };
@@ -1394,7 +1393,6 @@ from track
                     Page::Albums(_) => {}
                     Page::Playlists(page) => {}
                     Page::Tracks(track_list) => {
-                        log::info!("Task firing");
                         track_list.track_page_state = TrackPageState::Search;
                         track_list.search = tracks;
                     }

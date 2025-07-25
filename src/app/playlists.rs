@@ -79,8 +79,11 @@ impl PlaylistPage {
 
                     let val = cosmic::iced::widget::responsive(|size| {
                       cosmic::widget::container(
+
+                          cosmic::widget::scrollable::vertical(
                           cosmic::widget::text::text(format!("size of container; y: {}, x: {}", size.height, size.width)),
 
+                          )
                       )  .into()
                     });
 
@@ -90,7 +93,8 @@ impl PlaylistPage {
             }
         };
 
-        cosmic::widget::container(cosmic::widget::scrollable::vertical(
+        cosmic::widget::container(
+
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::row::with_children(vec![
                     cosmic::widget::text::title2("Playlists").into()
@@ -99,7 +103,7 @@ impl PlaylistPage {
                 body,
             ])
             .spacing(cosmic::theme::spacing().space_s),
-        )).height(Length::Fill)
+        ).height(Length::Fill)
             .width(Length::Fill)
         .padding(iced::core::padding::Padding::from([
             0,

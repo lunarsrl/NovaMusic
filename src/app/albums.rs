@@ -3,7 +3,7 @@ use crate::app::Message;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::{Alignment, ContentFit, Length, Size};
 use cosmic::{iced, Element};
-use cosmic::widget::container;
+use cosmic::widget::{container, JustifyContent};
 use cosmic::widget::settings::item;
 use futures_util::{StreamExt};
 use rusqlite::fallible_iterator::FallibleIterator;
@@ -69,7 +69,6 @@ impl AlbumPage {
                 }
 
 
-                cosmic::widget::scrollable(
                     cosmic::widget::container(
                         cosmic::widget::column::with_children(vec![
                             cosmic::widget::row::with_children(vec![
@@ -83,13 +82,18 @@ impl AlbumPage {
                                  cosmic::widget::search_input("Enter Album Name", "").width(Length::FillPortion(1)).into(),
 
                             ])
+                                .padding(iced::core::padding::Padding::from([
+                                    0,
+                                    cosmic::theme::spacing().space_m,
+                                ]))
                             .align_y(Alignment::Center)
                             .spacing(cosmic::theme::spacing().space_s)
                             .into(),
+                           cosmic::widget::container(
                             cosmic::widget::responsive(move |size| {
                                 // Body
                                 let mut elements: Vec<Element<Message>> = vec![];
-                                // removing some clones here would probably be big
+
                                 for album in self.albums.as_ref().unwrap() {
                                     elements.push(
                                         cosmic::widget::button::custom(
@@ -112,10 +116,10 @@ impl AlbumPage {
                                                         .into()
                                                 },
                                                 cosmic::widget::column::with_children(vec![
-                                                    cosmic::widget::text::text(album.name.clone())
+                                                    cosmic::widget::text::text(album.name.as_str())
                                                         .center()
                                                         .into(),
-                                                    cosmic::widget::text::text(album.artist.clone())
+                                                    cosmic::widget::text::text(album.artist.as_str())
                                                         .center()
                                                         .into(),
                                                 ])
@@ -134,14 +138,15 @@ impl AlbumPage {
                                     )
                                 }
 
-                                let mut old_grid = Some(cosmic::widget::Grid::new().width(Length::Fill).height(Length::Fill));
+                                let mut old_grid = Some(cosmic::widget::Grid::new()
+                                    .width(Length::Fill)
+                                    .height(Length::Shrink)
+                                );
 
-
-
-                                let width = size.width as u32;//- cosmic::theme::spacing().space_m as u32;
+                                let width = size.width as u32 - cosmic::theme::spacing().space_m as u32;
                                 let mut spacing: u16 = 0;
                                 let mut items_per_row = 0;
-                                let mut len_so_far  = 0;
+                                let mut index  = 0;
 
                                 while width > (items_per_row * grid_item_size * 32) {
                                     items_per_row+=1;
@@ -160,10 +165,9 @@ impl AlbumPage {
 
 
                                 for element in elements {
-                                    len_so_far += grid_item_size * 32;
-
+                                    index += 1;
                                     if let Some(grid) = old_grid.take() {
-                                        if (len_so_far / (grid_item_size * 32)) % (items_per_row) == 0{
+                                        if (index % items_per_row) == 0 {
                                             old_grid = Some(grid.push(element).insert_row());
 
                                         } else {
@@ -174,24 +178,33 @@ impl AlbumPage {
                                     }
                                 }
 
+                                cosmic::widget::scrollable::vertical(
                                 cosmic::widget::container
                                     (
-                                        old_grid.take().unwrap().column_spacing(spacing),
-                                    ).into()
+                                        old_grid.take().unwrap().column_spacing(spacing)
+                                            .column_alignment(Alignment::Center)
+                                            .justify_content(JustifyContent::Center)
+                                            .row_alignment(Alignment::Center)
+                                        ,
+                                    )
+                                    .align_x(Alignment::Center)
+
+
+
+                                ).into()
                             })
-                            .into(),
+
+                           )
+
+
+                               .height(Length::Fill)
+                               .into(),
                         ])
-                        .padding(iced::core::padding::Padding::from([
-                            0,
-                            cosmic::theme::spacing().space_m,
-                        ]))
+                            .align_x(Alignment::Center)
+
                         .spacing(cosmic::theme::spacing().space_s),
                     )
-                    .align_x(Alignment::Center),
-                )
-                .width(Length::Fill)
-
-                .into()
+                    .align_x(Alignment::Center).into()
             }
             AlbumPageState::Album(albumpage) => {
                 cosmic::widget::container(
