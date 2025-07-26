@@ -191,10 +191,10 @@ impl HomePage {
                                     .on_press(Message::ClearQueue)
                                     .into(),
                                 // todo: create playlist from queue
-                                // cosmic::widget::button::text("Create Playlist")
-                                //     .class(cosmic::widget::button::ButtonClass::Standard)
-                                //     .on_press(Message::CreatePlaylist)
-                                //     .into(),
+                                cosmic::widget::button::text("Create Playlist")
+                                    .class(cosmic::widget::button::ButtonClass::Standard)
+                                    .on_press(Message::CreatePlaylist)
+                                    .into(),
                             ])
                             .align_y(Vertical::Center)
                             .spacing(cosmic::theme::spacing().space_xxs),

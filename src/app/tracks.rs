@@ -74,7 +74,19 @@ impl TrackPage {
                     match self.track_page_state {
                     TrackPageState::Loading => cosmic::widget::text::title3("Loading...").into(),
                     TrackPageState::Loaded => match self.tracks.is_empty() {
-                        true => cosmic::widget::text::title3("No Tracks Found").into(),
+                        true => cosmic::widget::container(
+                            cosmic::widget::column::with_children(vec![
+                                cosmic::widget::text::title3("No Tracks Found In Database").into(),
+                                cosmic::widget::text::text("1. Go to View -> Settings \n 2. Choose the directory where your music is located \n 3. Click on the red \"Rescan\" button to create your music database.").into(),
+                                cosmic::widget::text::caption_heading("Cosmic Music currently support FLAC & MP3 files").into(),
+                            ])
+                                .spacing(cosmic::theme::spacing().space_s)
+                        )
+                            .align_x(Alignment::Center)
+
+                            .width(Length::Fill)
+                            .into(),
+
                         false => track_list_display(&self.tracks),
                     },
                     TrackPageState::Search => cosmic::widget::column::with_children(vec![
