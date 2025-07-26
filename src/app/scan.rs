@@ -36,7 +36,7 @@ async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, files: &mut Vec<Media
         Ok(dir) => {
             for entry in dir {
 
-                log::info!("entry in dir");
+
                 match entry {
                     Ok(dir) => {
                         match dir.metadata().unwrap().is_dir() {
@@ -45,10 +45,9 @@ async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, files: &mut Vec<Media
                                 Box::pin(read_dir(found_path, tx, files)).await;
                             }
                             false => {
-                                log::info!("not dir");
+
                                 match filter_files(dir.path()).await {
                                     Some(dir) => {
-
                                         files.push(dir);
                                     }
                                     None => {
@@ -70,8 +69,11 @@ async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, files: &mut Vec<Media
     }
 }
 async fn filter_files(path: PathBuf) -> Option<MediaFileTypes> {
+    log::info!("Filtering files: {:?}", path);
     match path.extension() {
+
         None => {
+            log::info!("Failed to extract extension");
             None
         }
         Some(extension) => {
@@ -84,6 +86,9 @@ async fn filter_files(path: PathBuf) -> Option<MediaFileTypes> {
                 }
                 "flac" =>{
                     Some(MediaFileTypes::FLAC(path))
+                }
+                "m4a" => {
+                    Some(MediaFileTypes::MP4(path))
                 }
                 _ => {
                     None

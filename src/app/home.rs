@@ -27,7 +27,7 @@ use humantime::format_duration;
 pub(crate) struct HomePage;
 
 impl HomePage {
-    pub fn load(&self, model: &AppModel) -> Element<'static, app::Message> {
+    pub fn load_page(&self, model: &AppModel) -> Element<'static, app::Message> {
         // Time ELapsed
         let mut time_elapsed = format_time(model.song_progress);
 
@@ -191,10 +191,10 @@ impl HomePage {
                                     .on_press(Message::ClearQueue)
                                     .into(),
                                 // todo: create playlist from queue
-                                // cosmic::widget::button::text("Create Playlist")
-                                //     .class(cosmic::widget::button::ButtonClass::Standard)
-                                //     .on_press(Message::CreatePlaylist)
-                                //     .into(),
+                                cosmic::widget::button::text("Create Playlist")
+                                    .class(cosmic::widget::button::ButtonClass::Standard)
+                                    .on_press(Message::CreatePlaylist)
+                                    .into(),
                             ])
                             .align_y(Vertical::Center)
                             .spacing(cosmic::theme::spacing().space_xxs),

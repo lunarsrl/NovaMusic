@@ -1055,6 +1055,7 @@ name = "cosmic-music"
 version = "0.1.0"
 dependencies = [
  "colored",
+ "dirs 6.0.0",
  "event-listener-strategy",
  "fern",
  "futures",

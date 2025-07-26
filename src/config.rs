@@ -5,7 +5,7 @@ use cosmic::cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, Cosmi
 use cosmic::Application;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Default, Clone, CosmicConfigEntry, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, CosmicConfigEntry, PartialEq)]
 #[version = 1]
 pub struct Config {
     pub scan_dir: String,
@@ -15,6 +15,7 @@ pub struct Config {
     pub files_scanned: u32,
     pub tracks_found: u32,
     pub albums_found: u32,
+    pub volume: f32,
 }
 
 impl Config {
