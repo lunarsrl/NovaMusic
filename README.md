@@ -2,9 +2,10 @@
 
 An album focused music player written in the libcosmic toolkit
 
-Playlist implementation may be unstable, so I wouldnt rely on it. Other than that the software should be usable. Please feel free to request features and report bugs. I'll do my best to stay on top of them inbetween school work.
 
 ## Installation
+
+NOTE: Playlist implementation may be unstable, so I wouldnt rely on it. Other than that the software should be usable. Please feel free to request features and report bugs. I'll do my best to stay on top of them inbetween school work.
 
 A [justfile](./justfile) is included by default for the [casey/just][just] command runner.
 
