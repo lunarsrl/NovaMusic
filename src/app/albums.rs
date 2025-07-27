@@ -572,14 +572,9 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
     let mut track_vector = vec![];
 
     // Select all tracks with a certain album ID and count them
-    let num_tracks = conn.query_row(
-        "SELECT COUNT(*) FROM album_tracks where album_id = ?",
-        [row_num.0.as_ref().unwrap_or(&0)],
-        |row| row.get::<usize, u32>(0),
-    );
 
     let mut value = conn
-        .prepare("SELECT * FROM album_tracks where album_id = ?")
+        .prepare("select * from album_tracks where album_id = ?")
         .expect("error preparing sql to fetch album tracks of a certain album id");
     let mut rows = value
         .query([row_num.0.expect("No row num, shouldve exited by now")])

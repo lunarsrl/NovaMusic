@@ -63,7 +63,6 @@ pub fn create_database() {
         DROP TABLE IF EXISTS album;
         DROP TABLE IF EXISTS album_tracks;
         DROP TABLE IF EXISTS artists;
-        DROP TABLE IF EXISTS playlists;
         DROP TABLE IF EXISTS track;
     ",
     )
@@ -81,13 +80,31 @@ pub fn create_database() {
 
     conn.execute(
         "
-    CREATE TABLE playlists (
+        CREATE TABLE IF NOT EXISTS playlists (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            track_number INTEGER,
+            album_cover BLOB
+        )",
+        [],
+    )
+        .unwrap();
+
+    conn.execute(
+        "
+    CREATE TABLE IF NOT EXISTS playlist_tracks (
         id INTEGER PRIMARY KEY,
-        name TEXT
+        track_id INTEGER,
+        playlist_id INTEGER,
+        FOREIGN KEY(playlist_id) REFERENCES playlists(id),
+        FOREIGN KEY(track_id) REFERENCES tracks(id)
     )",
         [],
     )
-    .unwrap();
+        .unwrap();
+
+
+
 
     conn.execute(
         "
@@ -97,7 +114,7 @@ pub fn create_database() {
         track_id INTEGER,
         track_number INTEGER,
         disc_number INTEGER,
-        FOREIGN KEY(album_id) REFERENCES albums(id),
+        FOREIGN KEY(album_id) REFERENCES album(id),
         FOREIGN KEY(track_id) REFERENCES tracks(id)
     )",
         [],
@@ -132,6 +149,7 @@ pub fn create_database() {
     )
     .unwrap();
 }
+//todo: Theres probably a better way to do this.
 pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     let conn = rusqlite::Connection::open(
         dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("cosmic_music.db")
@@ -166,6 +184,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     for tag in metadata_tags {
         if let Some(key) = tag.std_key {
             match key {
+                //todo: maybe one day account for most of these tags somewhere
                 StandardTagKey::AcoustidFingerprint => {}
                 StandardTagKey::AcoustidId => {}
                 StandardTagKey::Album => match tag.value {

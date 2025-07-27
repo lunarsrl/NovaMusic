@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-
-
 use rayon::iter::IndexedParallelIterator;
 use cosmic::dialog::file_chooser::{self, Error, FileFilter};
 
@@ -26,7 +24,7 @@ use crate::app::home::HomePage;
 use crate::app::scan::{scan_directory, MediaFileTypes};
 use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
 
-use crate::app::Message::{AddTrackToSink, AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, SearchResults, SongFinished, StreamPaused, UpdateScanProgress};
+use crate::app::Message::{AddTrackToSink, AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, SearchResults, SongFinished, UpdateScanProgress};
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
 use crate::{app, config, fl, StandardTagKeyExt};
@@ -51,7 +49,7 @@ use cosmic::iced_core::widget::operation::map;
 use cosmic::iced_wgpu::window::compositor::new;
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
-use cosmic::widget::{self, container, icon, menu, nav_bar, progress_bar, toaster, JustifyContent};
+use cosmic::widget::{self, container, dialog, icon, menu, nav_bar, progress_bar, toaster, JustifyContent};
 use cosmic::{action, cosmic_theme, iced, iced_futures, theme};
 use futures::channel::mpsc;
 use futures::channel::mpsc::{Receiver, SendError, Sender, TrySendError};
@@ -80,6 +78,7 @@ use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
+use cosmic::cctk::wayland_protocols::ext::session_lock::v1::client::ext_session_lock_manager_v1::ExtSessionLockManagerV1;
 use cosmic::dialog::file_chooser::open::FileResponse;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, Track};
@@ -88,7 +87,7 @@ use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, T
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
 use symphonia::default::get_probe;
-use crate::app::playlists::PlaylistPage;
+use crate::app::playlists::{get_playlist_info, FullPlaylist, Playlist, PlaylistPage, PlaylistPageState};
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -102,6 +101,7 @@ pub struct AppModel {
     context_page: ContextPage,
     /// Contains items assigned to the nav bar panel.
     nav: nav_bar::Model,
+    /// Dialog
     /// Key bindings for the application's menu bar.
     key_binds: HashMap<menu::KeyBind, Action>,
     // Configuration data that persists between application runs.
@@ -123,19 +123,23 @@ pub struct AppModel {
     pub clear: bool,
     pub task_handle: Option<Vec<Handle>>,
 
+    pub playlist_dialog: bool,
+
     // Searches
     pub search_field: String,
+    pub playlist_dialog_text: String,
+    pub playlist_cover: Vec<u8>
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppTrack {
+    pub id: u32,
     pub title: String,
     pub artist: String,
     pub album_title: String,
     pub path_buf: PathBuf,
     pub cover_art: Option<cosmic::widget::image::Handle>,
 }
-
 
 
 /// Messages emitted by the application and its widgets.
@@ -149,7 +153,6 @@ pub enum LoopState {
 #[derive(Debug, Clone)]
 pub enum Message {
     OpenRepositoryUrl,
-    StreamPaused,
     ToggleContextPage(ContextPage),
     UpdateConfig(Config),
     LaunchUrl(String),
@@ -189,7 +192,6 @@ pub enum Message {
     ToggleAlbum(bool),
     ToggleArtist(bool),
 
-
     // Audio Messages
     PlayPause,
     SongFinished(QueueUpdateReason),
@@ -212,8 +214,18 @@ pub enum Message {
     VolumeSliderChange(f32),
 
     //experimenting
+    AddToPlaylist,
     CreatePlaylist,
+    PlaylistDialogue,
+    UpdatePlaylistName(String),
+    PlaylistRequested(Playlist),
+    PlaylistsLoaded,
+    PlaylistLoaded(Vec<Playlist>),
+    PlaylistInfoRetrieved(FullPlaylist),
+    PLaylistPageReturn,
 }
+
+
 
 #[derive(Clone, Debug)]
 enum QueueUpdateReason {
@@ -257,10 +269,12 @@ impl cosmic::Application for AppModel {
     ) -> (Self, Task<cosmic::Action<Self::Message>>) {
         // store data & first time set up
         match dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).is_dir() {
-            true => {}
+            true => {
+
+            }
             false => {
                 fs::create_dir(dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID)).unwrap()
-            },
+            }
         }
 
         // Create a nav bar with three page items.
@@ -323,7 +337,10 @@ impl cosmic::Application for AppModel {
             queue_pos: 0,
             clear: false,
             task_handle: None,
+            playlist_dialog: false,
             search_field: "".to_string(),
+            playlist_dialog_text: "".to_string(),
+            playlist_cover: vec![],
         };
 
         // Create a startup command that sets the window title.
@@ -366,6 +383,55 @@ impl cosmic::Application for AppModel {
         Some(&self.nav)
     }
 
+    fn dialog(&self) -> Option<Element<Self::Message>> {
+        if !dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("cosmic_music.db").exists() {
+            return Some(
+                cosmic::widget::dialog::Dialog::new()
+                    .title("Cosmic Music: First Time Setup")
+                    .body("Please choose a directory to scan")
+                    .control(
+                        cosmic::widget::container(
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::text::heading(format!("Current Directory: {}", self.config.scan_dir.as_str())).into(),
+                                cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::button::text("Select Folder").on_press(Message::ChooseFolder).into()
+                            ])
+                        )
+                    )
+                    .primary_action(
+                        cosmic::widget::button::text("Scan Folder & Create Database")
+                            .class(cosmic::theme::Button::Suggested)
+                            .on_press(Message::RescanDir)
+                    ).into()
+            );
+        }
+
+        if self.playlist_dialog {
+            return Some(
+                cosmic::widget::dialog::Dialog::new()
+                    .title("Create A New Playlist")
+                    .icon(icon::from_name("applications-audio-symbolic"))
+                    .control(
+                        cosmic::widget::container(
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::text::heading(format!("Playlist Title: ")).into(),
+                                cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::text_input("Enter Title", self.playlist_dialog_text.as_str())
+                                    .on_input(|input| Message::UpdatePlaylistName(input))
+                                    .into()
+                            ])
+                        )
+                    )
+                    .primary_action(
+                        cosmic::widget::button::text("Create Playlist")
+                            .class(cosmic::theme::Button::Suggested)
+                            .on_press(Message::CreatePlaylist)
+                    ).into()
+            );
+        }
+        None
+    }
+
     /// Display a context drawer if the context page is requested.
     fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Self::Message>> {
         if !self.core.window.show_context {
@@ -377,12 +443,12 @@ impl cosmic::Application for AppModel {
                 self.about(),
                 Message::ToggleContextPage(ContextPage::About),
             )
-            .title(fl!("about")),
+                .title(fl!("about")),
             ContextPage::Settings => context_drawer::context_drawer(
                 self.settings(),
                 Message::ToggleContextPage(ContextPage::Settings),
             )
-            .title(fl!("settings")),
+                .title(fl!("settings")),
         })
     }
 
@@ -391,40 +457,14 @@ impl cosmic::Application for AppModel {
     /// Application events will be processed through the view. Any messages emitted by
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
-        if !dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("cosmic_music.db").exists() {
-            cosmic::widget::container(
-                cosmic::widget::dialog::Dialog::new()
-                    .title("Cosmic Music: First Time Setup")
-                    .body("Please choose a directory to scan")
-                    .control(
-                        cosmic::widget::container(
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading(format!("Choose a music directory: {}", self.config.scan_dir.as_str())).into(),
-                                cosmic::widget::horizontal_space().into(),
-                                cosmic::widget::button::text("Select Folder").on_press(Message::ChooseFolder).into()
-                            ])
-                        )
-                    )
-                    .primary_action(
-                        cosmic::widget::button::text("Scan Folder & Create Databse")
-                            .class(cosmic::theme::Button::Suggested)
-                            .on_press(Message::RescanDir)
-                    )
-            )
-                .align_x(Horizontal::Center)
-                .align_y(Vertical::Center)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into()
 
-        } else {
             match self.nav.active_data::<Page>().unwrap() {
                 Page::NowPlaying(home_page) => home_page.load_page(&self),
                 Page::Tracks(track_page) => track_page.load_page(self),
                 Page::Albums(album_page) => album_page.load_page(self),
-                Page::Playlists(playlist_page) => playlist_page.load_page(),
+                Page::Playlists(playlist_page) => playlist_page.load_page(self),
             }
-        }
+
     }
 
     /// Handles messages emitted by the application and its widgets.
@@ -433,6 +473,9 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::UpdatePlaylistName(val) => {
+                self.playlist_dialog_text = val
+            }
             Message::ChooseFolder => {
                 return cosmic::task::future(async move {
                     let dialog = cosmic::dialog::file_chooser::open::Dialog::new();
@@ -481,10 +524,6 @@ impl cosmic::Application for AppModel {
                     self.loop_state = LoopState::LoopingQueue;
                 }
             },
-            Message::StreamPaused => {
-
-            }
-
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -502,9 +541,7 @@ impl cosmic::Application for AppModel {
             Message::ChangeScanDir(val) => match fs::read_dir(&val) {
                 Ok(dir) => match self.config.set_scan_dir(&self.config_handler, val) {
                     Ok(val) => {}
-                    Err(err) => {
-
-                    }
+                    Err(err) => {}
                 },
                 Err(error) => {}
             },
@@ -521,7 +558,6 @@ impl cosmic::Application for AppModel {
                 {
                     Ok(a) => a,
                     Err(err) => {
-
                         panic!("{}", err)
                     }
                 };
@@ -550,14 +586,14 @@ impl cosmic::Application for AppModel {
                                                         return SearchResult {
                                                             tracks_index: index,
                                                             score: 0,
-                                                        }
+                                                        };
                                                     }
                                                     // Matches at the beginning
 
                                                     return SearchResult {
                                                         tracks_index: index,
                                                         score: 1,
-                                                    }
+                                                    };
                                                 }
                                                 // Matches somewhere else
                                                 SearchResult {
@@ -565,15 +601,14 @@ impl cosmic::Application for AppModel {
                                                     score: 2,
                                                 }
                                             }
-                                        }
+                                        };
                                     }).collect::<Vec<SearchResult>>();
 
                                     albums.sort_by(|a, b| a.score.cmp(&b.score));
                                     tx.try_send(Message::SearchResults(albums))
                                 });
                                 ()
-                            }).map(action::Action::App))
-
+                            }).map(action::Action::App));
                     }
                     Page::Playlists(_) => {}
                     Page::Tracks(page) => {
@@ -591,7 +626,7 @@ impl cosmic::Application for AppModel {
                                                         match regex.find(&track.artist) {
                                                             None => {
                                                                 SearchResult {
-                                                                    tracks_index: index ,
+                                                                    tracks_index: index,
                                                                     score: 999,
                                                                 }
                                                             }
@@ -600,22 +635,22 @@ impl cosmic::Application for AppModel {
                                                                     if val.range().end == track.artist.len() {
                                                                         // Exact Match
                                                                         return SearchResult {
-                                                                            tracks_index: index ,
+                                                                            tracks_index: index,
                                                                             score: 6,
-                                                                        }
+                                                                        };
                                                                     }
                                                                     // Matches at the beginning
 
                                                                     return SearchResult {
-                                                                        tracks_index: index ,
+                                                                        tracks_index: index,
                                                                         score: 7,
-                                                                    }
+                                                                    };
                                                                 }
                                                                 // Matches somewhere else
                                                                 return SearchResult {
-                                                                    tracks_index: index ,
+                                                                    tracks_index: index,
                                                                     score: 8,
-                                                                }
+                                                                };
                                                             }
                                                         }
                                                     }
@@ -624,22 +659,22 @@ impl cosmic::Application for AppModel {
                                                             if val.range().end == track.album_title.len() {
                                                                 // Exact Match
                                                                 return SearchResult {
-                                                                    tracks_index: index ,
+                                                                    tracks_index: index,
                                                                     score: 3,
-                                                                }
+                                                                };
                                                             }
                                                             // Matches at the beginning
 
                                                             return SearchResult {
-                                                                tracks_index: index ,
+                                                                tracks_index: index,
                                                                 score: 4,
-                                                            }
+                                                            };
                                                         }
                                                         // Matches somewhere else
                                                         return SearchResult {
-                                                            tracks_index: index ,
+                                                            tracks_index: index,
                                                             score: 5,
-                                                        }
+                                                        };
                                                     }
                                                 }
                                             }
@@ -648,22 +683,22 @@ impl cosmic::Application for AppModel {
                                                     if val.range().end == track.title.len() {
                                                         // Exact Match
                                                         return SearchResult {
-                                                            tracks_index: index ,
+                                                            tracks_index: index,
                                                             score: 0,
-                                                        }
+                                                        };
                                                     }
                                                     // Matches at the beginning
 
                                                     return SearchResult {
-                                                        tracks_index: index ,
+                                                        tracks_index: index,
                                                         score: 1,
-                                                    }
+                                                    };
                                                 }
                                                 // Matches somewhere else
                                                 return SearchResult {
-                                                    tracks_index: index ,
+                                                    tracks_index: index,
                                                     score: 2,
-                                                }
+                                                };
                                             }
                                         }
                                     }).collect::<Vec<SearchResult>>();
@@ -672,8 +707,7 @@ impl cosmic::Application for AppModel {
                                     tx.try_send(Message::SearchResults(tracks))
                                 });
                                 ()
-                            }).map(action::Action::App))
-
+                            }).map(action::Action::App));
                     }
                 }
             }
@@ -722,7 +756,6 @@ impl cosmic::Application for AppModel {
                 let track_pos = self.nav.entity_at(1).unwrap();
                 let track_dat = self.nav.data_mut::<Page>(track_pos).unwrap();
                 if let Page::Tracks(page) = track_dat {
-
                     page.track_page_state = TrackPageState::Loading
                 }
 
@@ -736,11 +769,9 @@ impl cosmic::Application for AppModel {
                         let mut files_scanned = 0;
 
                         for file in files {
-
                             files_scanned += 1;
                             match file {
                                 MediaFileTypes::FLAC(path) => {
-
                                     let file = fs::File::open(&path).unwrap();
 
                                     let probe = get_probe();
@@ -764,7 +795,7 @@ impl cosmic::Application for AppModel {
                                             continue;
                                         }
                                     }
-                                    .format;
+                                        .format;
 
                                     if let Some(metadata_rev) = reader.metadata().current() {
                                         let metadata_tags = metadata_rev
@@ -817,7 +848,6 @@ impl cosmic::Application for AppModel {
                                     } else {
                                         log::info!("no metadata found")
                                     }
-
                                 }
                                 MediaFileTypes::MP3(path) => {
                                     let file = fs::File::open(&path).unwrap();
@@ -856,9 +886,7 @@ impl cosmic::Application for AppModel {
                                         } else {
                                             log::warn!("no metadata found")
                                         }
-                                    } else {
-
-                                    }
+                                    } else {}
                                 }
                             }
                         }
@@ -881,8 +909,8 @@ impl cosmic::Application for AppModel {
                         tx.send(Message::OnNavEnter).await.expect("de")
                     },
                 ))
-                // Must wrap our app type in `cosmic::Action`.
-                .map(cosmic::Action::App);
+                    // Must wrap our app type in `cosmic::Action`.
+                    .map(cosmic::Action::App);
             }
             Message::UpdateScanProgress((album, tracks, files)) => {
                 self.config.set_albums_found(&self.config_handler, album).expect("Failed to save to config");
@@ -899,8 +927,6 @@ impl cosmic::Application for AppModel {
 
             // PAGE TASK RESPONSES
             Message::AlbumProcessed(new_album) => {
-
-
                 let dat_pos = self.nav.entity_at(2).expect("REASON");
                 let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
                 if let Page::Albums(dat) = data {
@@ -913,74 +939,149 @@ impl cosmic::Application for AppModel {
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(HomePage) => {}
                     Page::Albums(val) => {
+                        log::info!("ALBUMS PAGE ACCESS");
                         match &mut val.page_state {
-                            AlbumPageState::Loading => {}
-                            AlbumPageState::Album(page) => {}
-                            AlbumPageState::Loaded => return Task::none(),
-                            AlbumPageState::Search(results) => return Task::none(),
+                            AlbumPageState::Loading => {
+                                log::info!("LOADING STATE")
+                            }
+                            AlbumPageState::Album(page) => {
+                                log::info!("ALBUM STATE")
+                            }
+                            AlbumPageState::Loaded =>
+                                {
+                                    log::info!("LOADED STATE");
+                                    return Task::none();
+                                }
+                            AlbumPageState::Search(results) =>
+                                {
+                                    log::info!("SEARCHING STATE");
+                                    return Task::none();
+                                }
                         }
 
+
                         return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                            5,
+                            100,
                             |mut tx| async move {
                                 tokio::task::spawn_blocking(move || {
                                     let conn =
-                                        rusqlite::Connection::open(
+                                        match rusqlite::Connection::open(
                                             dirs::data_local_dir().unwrap().join(Self::APP_ID).join("cosmic_music.db")
-                                        ).unwrap();
+                                        ) {
+                                            Ok(conn) => conn,
+                                            Err(err) => {
+                                                panic!("{}", err)
+                                            }
+                                        };
 
-                                    let mut stmt = conn
+                                    log::info!("Dir exists? {}", dirs::data_local_dir().unwrap().join(Self::APP_ID).join("cosmic_music.db").exists());
+
+                                    let mut stmt = match conn
                                         .prepare(
                                             "
                                             SELECT a.id, a.name,
-                                         a.disc_number, a.track_number, a.album_cover, art.name as artist_name
-                                         FROM album a
-                                         left JOIN artists art ON a.artist_id = art.id",
-                                        );
+                                            a.disc_number, a.track_number, a.album_cover, art.name as artist_name
+                                            FROM album a
+                                            left JOIN artists art ON a.artist_id = art.id",
+                                        ) {
+                                        Ok(stmt) => stmt,
+                                        Err(err) => {
+                                            panic!("{}", err)
+                                        }
+                                    };
 
-                                    if let Ok(mut stmt) = stmt {
-                                        let album_iter = stmt
-                                            .query_map([], |row| {
-                                                Ok((
-                                                    row.get::<_, String>("name").unwrap_or("None".to_string()),
-                                                    row.get::<_, String>("artist_name").unwrap_or_default(),
-                                                    row.get::<_, u32>("disc_number").unwrap_or(0),
-                                                    row.get::<_, u32>("track_number").unwrap_or(0),
-                                                    match row.get::<_, Vec<u8>>("album_cover") {
-                                                        Ok(val) => Some(val),
-                                                        Err(e) => {
-                                                            log::info!("Nothing");
-                                                            None
-                                                        }
-                                                    },
-                                                ))
-                                            })
-                                            .expect("error executing query");
-
-                                        let albums: Vec<(String, String, u32, u32, Option<Vec<u8>>)> =
-                                            album_iter.filter_map(|a| {
-                                                a.ok()
-                                            }).collect();
-
-                                        get_top_album_info(&mut tx, albums);
+                                    let album_iter = stmt
+                                        .query_map([], |row| {
+                                            Ok((
+                                                row.get::<_, String>("name").unwrap_or("None".to_string()),
+                                                row.get::<_, String>("artist_name").unwrap_or_default(),
+                                                row.get::<_, u32>("disc_number").unwrap_or(0),
+                                                row.get::<_, u32>("track_number").unwrap_or(0),
+                                                match row.get::<_, Vec<u8>>("album_cover") {
+                                                    Ok(val) => Some(val),
+                                                    Err(e) => {
+                                                        log::info!("Nothing");
+                                                        None
+                                                    }
+                                                },
+                                            ))
+                                        })
+                                        .expect("error executing query");
 
 
-                                        tx.try_send(Message::AlbumsLoaded)
-                                    } else {
-                                        log::info!("Statement failed somehow");
-                                        tx.try_send(Message::AlbumsLoaded)
+                                    let albums: Vec<(String, String, u32, u32, Option<Vec<u8>>)> =
+                                        album_iter.filter_map(|a| {
+                                            a.ok()
+                                        }).collect();
+                                    for each in &albums {
+                                        log::info!("ALBUM: {:?}", each.0);
                                     }
+                                    get_top_album_info(&mut tx, albums);
+
+
+                                    log::info!("ALBUM INFO");
+
+                                    tx.try_send(Message::AlbumsLoaded)
                                 });
                             },
                         ))
-                        .map(cosmic::Action::App);
-
-                        // return cosmic::task::future(async move {
-                        //
-                        // });
+                            .map(cosmic::Action::App);
                     }
                     Page::Playlists(page) => {
-                        //todo check db for playlists
+                       match page.playlist_page_state {
+                           PlaylistPageState::Loading => {
+                               return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                                   2,
+                                   |mut tx| async move {
+                                       tokio::task::spawn_blocking(move || {
+                                           let conn =
+                                               rusqlite::Connection::open(
+                                                   dirs::data_local_dir().unwrap().join(Self::APP_ID).join("cosmic_music.db")
+                                               ).unwrap();
+                                           let mut stmt = conn
+                                               .prepare(
+                                                   "
+select playlists.id as id, playlists.name as title, playlists.track_number as track_number, playlists.album_cover as cover_art
+from playlists
+                        ",
+                                               );
+
+                                           if let Ok(mut stmt) = stmt {
+                                               let playlists = stmt
+                                                   .query_map([], |row| {
+                                                       Ok(Playlist {
+                                                           id: row.get("id").unwrap_or(0),
+                                                           title: row
+                                                               .get("title")
+                                                               .unwrap_or("No Data".to_string()),
+                                                           track_count: row
+                                                               .get("track_number")
+                                                               .unwrap_or(0),
+                                                           cover_art: None,
+                                                       })
+                                                   })
+                                                   .expect("error executing query");
+
+                                               let playlists = playlists.into_iter().filter_map(|a| a.ok()).collect::<Vec<Playlist>>();
+
+                                               tx.start_send(Message::PlaylistLoaded(playlists))
+                                                   .expect("Failed to send");
+                                               tx.start_send(Message::PlaylistsLoaded)
+                                                   .expect("Failed to send");
+                                           } else {
+                                               log::error!("SQL ERROR - OnNavEnter: Playlists");
+                                               tx.start_send(Message::PlaylistsLoaded)
+                                                   .expect("Failed to send");
+                                           }
+                                       });
+                                   },
+                               ))
+                                   .map(cosmic::Action::App);
+                           }
+                           PlaylistPageState::Loaded => {}
+                           PlaylistPageState::PlaylistPage(_) => {}
+                       }
+
                     }
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
@@ -995,7 +1096,7 @@ impl cosmic::Application for AppModel {
                                         let mut stmt = conn
                                             .prepare(
                                                 "
-select track.name as title, art.name as artist, track.path, a.name as album_title
+select track.id as id, track.name as title, art.name as artist, track.path, a.name as album_title
 from track
          left join main.album_tracks at on track.id = at.track_id
          left join main.artists art on track.artist_id = art.id
@@ -1003,48 +1104,60 @@ from track
                         ",
                                             );
 
-                                  if let Ok(mut stmt) = stmt {
-                                      let tracks = stmt
-                                          .query_map([], |row| {
-                                              Ok(AppTrack {
-                                                  title: row
-                                                      .get("title")
-                                                      .unwrap_or("No Data".to_string()),
-                                                  artist: row
-                                                      .get("artist")
-                                                      .unwrap_or("N/A".to_string()),
-                                                  album_title: row
-                                                      .get("album_title")
-                                                      .unwrap_or("N/A".to_string()),
-                                                  path_buf: PathBuf::from(
-                                                      row.get::<&str, String>("path")
-                                                          .expect("This should never happen"),
-                                                  ),
-                                                  cover_art: None,
-                                              })
-                                          })
-                                          .expect("error executing query");
+                                        if let Ok(mut stmt) = stmt {
+                                            let tracks = stmt
+                                                .query_map([], |row| {
+                                                    Ok(AppTrack {
+                                                        id: row.get("id").unwrap_or(0),
+                                                        title: row
+                                                            .get("title")
+                                                            .unwrap_or("No Data".to_string()),
+                                                        artist: row
+                                                            .get("artist")
+                                                            .unwrap_or("N/A".to_string()),
+                                                        album_title: row
+                                                            .get("album_title")
+                                                            .unwrap_or("N/A".to_string()),
+                                                        path_buf: PathBuf::from(
+                                                            row.get::<&str, String>("path")
+                                                                .expect("This should never happen"),
+                                                        ),
+                                                        cover_art: None,
+                                                    })
+                                                })
+                                                .expect("error executing query");
 
-                                      let tracks = tracks.into_iter().filter_map(|a| a.ok()).collect();
+                                            let tracks = tracks.into_iter().filter_map(|a| a.ok()).collect();
 
-                                      tx.start_send(Message::TrackLoaded(tracks))
-                                          .expect("Failed to send");
-                                      tx.start_send(Message::TracksLoaded)
-                                          .expect("Failed to send");
-                                  } else {
-                                      tx.start_send(Message::TracksLoaded)
-                                          .expect("Failed to send");
-                                  }
+                                            tx.start_send(Message::TrackLoaded(tracks))
+                                                .expect("Failed to send");
+                                            tx.start_send(Message::TracksLoaded)
+                                                .expect("Failed to send");
+                                        } else {
+                                            tx.start_send(Message::TracksLoaded)
+                                                .expect("Failed to send");
+                                        }
                                     });
                                 },
                             ))
-                            .map(cosmic::Action::App);
+                                .map(cosmic::Action::App);
                         }
-                        TrackPageState::Loaded => {},
+                        TrackPageState::Loaded => {}
                         TrackPageState::Search => {
                             page.track_page_state = TrackPageState::Loaded;
                         }
                     },
+                }
+            }
+            Message::PlaylistLoaded(val) => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+
+                    page.playlists = Arc::new(val);
+                }
+            }
+            Message::PlaylistsLoaded => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
             Message::TrackLoaded(mut track) => {
@@ -1056,7 +1169,6 @@ from track
                 }
             }
             Message::TracksLoaded => {
-
                 let dat_pos = self.nav.entity_at(1).expect("REASON");
                 let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
 
@@ -1100,6 +1212,7 @@ from track
                 }
             }
             Message::AlbumInfoRetrieved(albuminfopage) => {
+                log::info!("ALBUM INFO RETRIEVED: {:?}", albuminfopage);
                 let pos = self.nav.entity_at(2).expect("REASON");
                 let album_page = self.nav.data_mut::<Page>(pos).unwrap();
                 if let Page::Albums(page) = album_page {
@@ -1118,7 +1231,7 @@ from track
                                     .expect("send")
                             },
                         ))
-                        .map(cosmic::Action::App)
+                            .map(cosmic::Action::App)
                     }
                     _ => {
                         // should never happen
@@ -1149,7 +1262,7 @@ from track
                     let mut stmt = conn
                         .prepare(
                             "
-                                select track.name as title, art.name as artist, track.path, a.album_cover, a.name as album_title
+                                select track.id as id, track.name as title, art.name as artist, track.path, a.album_cover, a.name as album_title
                                 from track
                                 left join main.album_tracks at on track.id = at.track_id
                                 left join main.artists art on track.artist_id = art.id
@@ -1162,6 +1275,7 @@ from track
                     let track = stmt
                         .query_row([&filepath], |row| {
                             Ok(AppTrack {
+                                id: row.get("id").unwrap_or(0),
                                 title: row.get("title").unwrap_or("".to_string()),
                                 artist: row.get("artist").unwrap_or("".to_string()),
                                 album_title: row.get("album_title").unwrap_or("".to_string()),
@@ -1194,11 +1308,9 @@ from track
 
                         self.song_duration = match decoder.total_duration() {
                             None => {
-
                                 None
                             }
                             Some(val) => {
-
                                 Some(val.as_secs_f64())
                             }
                         };
@@ -1215,11 +1327,11 @@ from track
                                         QueueUpdateReason::ThreadKilled
                                     }
                                 })
-                                .await
-                                .expect("cosmic_music.db"),
+                                    .await
+                                    .expect("cosmic_music.db"),
                             )
                         })
-                        .abortable();
+                            .abortable();
 
                         match &mut self.task_handle {
                             None => {
@@ -1244,7 +1356,7 @@ from track
                                 });
                             }),
                         )
-                        .abortable();
+                            .abortable();
 
                         match &mut self.task_handle {
                             None => self.task_handle = Some(vec![progress_thread.1]),
@@ -1435,11 +1547,11 @@ from track
                             task_sink.sleep_until_end();
                             QueueUpdateReason::None
                         })
-                        .await
-                        .expect("cosmic_music.db"),
+                            .await
+                            .expect("cosmic_music.db"),
                     )
                 })
-                .abortable();
+                    .abortable();
 
                 match &mut self.task_handle {
                     None => self.task_handle = Some(vec![handle]),
@@ -1486,7 +1598,7 @@ from track
                         }
                     },
                 ))
-                .map(cosmic::Action::App)
+                    .map(cosmic::Action::App)
             }
 
             Message::PlayPause => match self.sink.is_paused() {
@@ -1497,8 +1609,41 @@ from track
                     self.sink.pause();
                 }
             },
+            Message::AddToPlaylist => {
+                self.playlist_dialog = true
+            }
             Message::CreatePlaylist => {
-                todo!()
+
+                let conn = rusqlite::Connection::open(
+                    dirs::data_local_dir().unwrap().join(Self::APP_ID).join("cosmic_music.db")
+                ).unwrap();
+
+                match conn.execute("insert into playlists (name, track_number, album_cover) values (?, ?, ?)", (self.playlist_dialog_text.as_str(), &(self.queue.len() as u32) , &self.playlist_cover)) {
+                    Ok(_) => {
+                        log::info!("PLaylists insert success")
+                    }
+                    Err(err) => {
+                        log::error!("Playlists insert issue: {}", err)
+                    }
+                }
+
+                let playlist_id = conn.last_insert_rowid();
+                for track in &self.queue {
+
+                    match conn.execute("insert into playlist_tracks (track_id, playlist_id) values (?,?)", (&track.id, &playlist_id)) {
+                        Ok(db_result) => {
+                            log::info!("Success")
+                        }
+                        Err(err) => {
+                            log::error!("problem: {}", err);
+                        }
+                    }
+                }
+
+                self.playlist_dialog = false;
+                if let Page::Playlists(page) = self.access_nav_data(3)  {
+                    page.playlist_page_state = PlaylistPageState::Loading
+                }
             }
             Message::SearchResults(tracks) => {
                 match self
@@ -1519,29 +1664,44 @@ from track
                 }
             }
             Message::ToggleTitle(val) => {
-               if let Page::Tracks(page) = self.access_nav_data(1) {
-                   page.search_by_title = val
+                if let Page::Tracks(page) = self.access_nav_data(1) {
+                    page.search_by_title = val
                 }
             }
             Message::ToggleAlbum(val) => {
-
                 if let Page::Tracks(page) = self.access_nav_data(1) {
                     page.search_by_album = val
                 }
             }
             Message::ToggleArtist(val) => {
-
                 if let Page::Tracks(page) = self.access_nav_data(1) {
                     page.search_by_artist = val
                 }
-
             }
             Message::VolumeSliderChange(val) => {
-                self.sink.set_volume(val/100.0);
+                self.sink.set_volume(val / 100.0);
                 self.config.set_volume(&self.config_handler, val).expect("Failed to set volume");
+            },
+            app::Message::PlaylistDialogue => todo!(),
+            Message::PlaylistRequested(playlist) => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    return cosmic::task::future(async move {
+                        let album = get_playlist_info(playlist).await;
+                        Message::PlaylistInfoRetrieved(album)
+                    });
+                }
+            }
+            Message::PlaylistInfoRetrieved(fullplaylist) => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    page.playlist_page_state = PlaylistPageState::PlaylistPage(fullplaylist)
+                }
+            }
+            Message::PLaylistPageReturn => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    page.playlist_page_state = PlaylistPageState::Loaded
+                }
             }
         };
-
         Task::none()
     }
 
@@ -1554,10 +1714,8 @@ from track
 }
 
 
-
 impl AppModel {
-
-    fn access_nav_data(&mut self, pos: u16) -> &mut Page{
+    fn access_nav_data(&mut self, pos: u16) -> &mut Page {
         let dat_pos = self.nav.entity_at(pos).expect("REASON");
         let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
         data
@@ -1588,8 +1746,8 @@ impl AppModel {
                     hash = short_hash.as_str(),
                     date = date
                 ))
-                .on_press(Message::LaunchUrl(format!("{REPOSITORY}/commits/{hash}")))
-                .padding(0),
+                    .on_press(Message::LaunchUrl(format!("{REPOSITORY}/commits/{hash}")))
+                    .padding(0),
             )
             .align_x(Alignment::Center)
             .spacing(space_xxs)
@@ -1607,7 +1765,8 @@ impl AppModel {
 
         fn do_thing() -> Task<cosmic::Action<Message>> {
             return cosmic::task::future(async move { Message::OnNavEnter });
-        };
+        }
+        ;
 
         if let Some(id) = self.core.main_window_id() {
             return cosmic::Task::batch(vec![self.set_window_title(window_title, id), do_thing()]);
