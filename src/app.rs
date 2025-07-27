@@ -87,7 +87,7 @@ use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, T
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
 use symphonia::default::get_probe;
-use crate::app::playlists::PlaylistPage;
+use crate::app::playlists::{Playlist, PlaylistPage, PlaylistPageState};
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -218,7 +218,12 @@ pub enum Message {
     CreatePlaylist,
     PlaylistDialogue,
     UpdatePlaylistName(String),
+    PlaylistRequested(String),
+    PlaylistsLoaded,
+    PlaylistLoaded(Vec<Playlist>),
 }
+
+
 
 #[derive(Clone, Debug)]
 enum QueueUpdateReason {
@@ -455,7 +460,7 @@ impl cosmic::Application for AppModel {
                 Page::NowPlaying(home_page) => home_page.load_page(&self),
                 Page::Tracks(track_page) => track_page.load_page(self),
                 Page::Albums(album_page) => album_page.load_page(self),
-                Page::Playlists(playlist_page) => playlist_page.load_page(),
+                Page::Playlists(playlist_page) => playlist_page.load_page(self),
             }
 
     }
@@ -1021,7 +1026,59 @@ impl cosmic::Application for AppModel {
                             .map(cosmic::Action::App);
                     }
                     Page::Playlists(page) => {
-                        //todo check db for playlists
+                       match page.playlist_page_state {
+                           PlaylistPageState::Loading => {
+                               return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                                   2,
+                                   |mut tx| async move {
+                                       tokio::task::spawn_blocking(move || {
+                                           let conn =
+                                               rusqlite::Connection::open(
+                                                   dirs::data_local_dir().unwrap().join(Self::APP_ID).join("cosmic_music.db")
+                                               ).unwrap();
+                                           let mut stmt = conn
+                                               .prepare(
+                                                   "
+select playlists.name as title, playlists.track_number as track_number, playlists.album_cover as cover_art
+from playlists
+
+                        ",
+                                               );
+
+                                           if let Ok(mut stmt) = stmt {
+                                               let playlists = stmt
+                                                   .query_map([], |row| {
+                                                       Ok(Playlist {
+                                                           title: row
+                                                               .get("title")
+                                                               .unwrap_or("No Data".to_string()),
+                                                           track_count: row
+                                                               .get("track_number")
+                                                               .unwrap_or(0),
+                                                           cover_art: None,
+                                                       })
+                                                   })
+                                                   .expect("error executing query");
+
+                                               let playlists = playlists.into_iter().filter_map(|a| a.ok()).collect::<Vec<Playlist>>();
+
+                                               tx.start_send(Message::PlaylistLoaded(playlists))
+                                                   .expect("Failed to send");
+                                               tx.start_send(Message::PlaylistsLoaded)
+                                                   .expect("Failed to send");
+                                           } else {
+                                               log::error!("SQL ERROR - OnNavEnter: Playlists");
+                                               tx.start_send(Message::PlaylistsLoaded)
+                                                   .expect("Failed to send");
+                                           }
+                                       });
+                                   },
+                               ))
+                                   .map(cosmic::Action::App);
+                           }
+                           PlaylistPageState::Loaded => {}
+                       }
+
                     }
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
@@ -1087,6 +1144,17 @@ from track
                             page.track_page_state = TrackPageState::Loaded;
                         }
                     },
+                }
+            }
+            Message::PlaylistLoaded(val) => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+
+                    page.playlists = Arc::new(val);
+                }
+            }
+            Message::PlaylistsLoaded => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
             Message::TrackLoaded(mut track) => {
@@ -1541,12 +1609,38 @@ from track
                 self.playlist_dialog = true
             }
             Message::CreatePlaylist => {
-                let conn = rusqlite::Connection::open(dirs::data_local_dir().unwrap().join(PathBuf::from("cosmic_music.db"))).unwrap();
 
-                conn.execute("insert into playlists (name, track_number, album_cover) values (?, ?, ?)", (self.playlist_dialog_text.as_str(), &(self.queue.len() as u32) , &self.playlist_cover)).expect("FIll out good");
+                let conn = rusqlite::Connection::open(
+                    dirs::data_local_dir().unwrap().join(Self::APP_ID).join("cosmic_music.db")
+                ).unwrap();
+
+                match conn.execute("insert into playlists (name, track_number, album_cover) values (?, ?, ?)", (self.playlist_dialog_text.as_str(), &(self.queue.len() as u32) , &self.playlist_cover)) {
+                    Ok(_) => {
+                        log::info!("PLaylists insert success")
+                    }
+                    Err(err) => {
+                        log::error!("Playlists insert issue: {}", err)
+                    }
+                }
+
                 let playlist_id = conn.last_insert_rowid();
                 for track in &self.queue {
-                    conn.execute("insert into playlist_tracks (track_id, playlist_id)", (&track.id, &playlist_id)).expect("Problem");
+                    log::info!("track id: {}", &track.id);
+                    log::info!("playlist id: {}", &playlist_id);
+
+                    match conn.execute("insert into playlist_tracks (track_id, playlist_id) values (?,?)", (&track.id, &playlist_id)) {
+                        Ok(db_result) => {
+                            log::info!("Success")
+                        }
+                        Err(err) => {
+                            log::error!("problem: {}", err);
+                        }
+                    }
+                }
+
+                self.playlist_dialog = false;
+                if let Page::Playlists(page) = self.access_nav_data(3)  {
+                    page.playlist_page_state = PlaylistPageState::Loading
                 }
             }
             Message::SearchResults(tracks) => {
@@ -1586,7 +1680,8 @@ from track
                 self.sink.set_volume(val / 100.0);
                 self.config.set_volume(&self.config_handler, val).expect("Failed to set volume");
             },
-            app::Message::PlaylistDialogue => todo!()
+            app::Message::PlaylistDialogue => todo!(),
+            Message::PlaylistRequested(_) => {}
         };
 
         Task::none()

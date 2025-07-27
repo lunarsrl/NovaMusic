@@ -63,10 +63,7 @@ pub fn create_database() {
         DROP TABLE IF EXISTS album;
         DROP TABLE IF EXISTS album_tracks;
         DROP TABLE IF EXISTS artists;
-        DROP TABLE IF EXISTS playlists;
         DROP TABLE IF EXISTS track;
-        DROP TABLE IF EXISTS playlists;
-        DROP TABLE IF EXISTS playlist_tracks;
     ",
     )
     .unwrap();
@@ -83,9 +80,9 @@ pub fn create_database() {
 
     conn.execute(
         "
-        CREATE TABLE playlists (
+        CREATE TABLE IF NOT EXISTS playlists (
             id INTEGER PRIMARY KEY,
-            name TEXT UNIQUE,
+            name TEXT,
             track_number INTEGER,
             album_cover BLOB
         )",
@@ -95,7 +92,7 @@ pub fn create_database() {
 
     conn.execute(
         "
-    CREATE TABLE playlist_tracks (
+    CREATE TABLE IF NOT EXISTS playlist_tracks (
         id INTEGER PRIMARY KEY,
         track_id INTEGER,
         playlist_id INTEGER,
