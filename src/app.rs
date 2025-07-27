@@ -87,7 +87,7 @@ use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, T
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
 use symphonia::default::get_probe;
-use crate::app::playlists::{Playlist, PlaylistPage, PlaylistPageState};
+use crate::app::playlists::{get_playlist_info, FullPlaylist, Playlist, PlaylistPage, PlaylistPageState};
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -218,9 +218,11 @@ pub enum Message {
     CreatePlaylist,
     PlaylistDialogue,
     UpdatePlaylistName(String),
-    PlaylistRequested(String),
+    PlaylistRequested(Playlist),
     PlaylistsLoaded,
     PlaylistLoaded(Vec<Playlist>),
+    PlaylistInfoRetrieved(FullPlaylist),
+    PLaylistPageReturn,
 }
 
 
@@ -1039,9 +1041,8 @@ impl cosmic::Application for AppModel {
                                            let mut stmt = conn
                                                .prepare(
                                                    "
-select playlists.name as title, playlists.track_number as track_number, playlists.album_cover as cover_art
+select playlists.id as id, playlists.name as title, playlists.track_number as track_number, playlists.album_cover as cover_art
 from playlists
-
                         ",
                                                );
 
@@ -1049,6 +1050,7 @@ from playlists
                                                let playlists = stmt
                                                    .query_map([], |row| {
                                                        Ok(Playlist {
+                                                           id: row.get("id").unwrap_or(0),
                                                            title: row
                                                                .get("title")
                                                                .unwrap_or("No Data".to_string()),
@@ -1077,6 +1079,7 @@ from playlists
                                    .map(cosmic::Action::App);
                            }
                            PlaylistPageState::Loaded => {}
+                           PlaylistPageState::PlaylistPage(_) => {}
                        }
 
                     }
@@ -1209,6 +1212,7 @@ from track
                 }
             }
             Message::AlbumInfoRetrieved(albuminfopage) => {
+                log::info!("ALBUM INFO RETRIEVED: {:?}", albuminfopage);
                 let pos = self.nav.entity_at(2).expect("REASON");
                 let album_page = self.nav.data_mut::<Page>(pos).unwrap();
                 if let Page::Albums(page) = album_page {
@@ -1625,8 +1629,6 @@ from track
 
                 let playlist_id = conn.last_insert_rowid();
                 for track in &self.queue {
-                    log::info!("track id: {}", &track.id);
-                    log::info!("playlist id: {}", &playlist_id);
 
                     match conn.execute("insert into playlist_tracks (track_id, playlist_id) values (?,?)", (&track.id, &playlist_id)) {
                         Ok(db_result) => {
@@ -1681,9 +1683,25 @@ from track
                 self.config.set_volume(&self.config_handler, val).expect("Failed to set volume");
             },
             app::Message::PlaylistDialogue => todo!(),
-            Message::PlaylistRequested(_) => {}
+            Message::PlaylistRequested(playlist) => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    return cosmic::task::future(async move {
+                        let album = get_playlist_info(playlist).await;
+                        Message::PlaylistInfoRetrieved(album)
+                    });
+                }
+            }
+            Message::PlaylistInfoRetrieved(fullplaylist) => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    page.playlist_page_state = PlaylistPageState::PlaylistPage(fullplaylist)
+                }
+            }
+            Message::PLaylistPageReturn => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    page.playlist_page_state = PlaylistPageState::Loaded
+                }
+            }
         };
-
         Task::none()
     }
 

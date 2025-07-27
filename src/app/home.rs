@@ -186,14 +186,13 @@ impl HomePage {
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::text::heading("Queue: ").center().into(),
                                 cosmic::widget::horizontal_space().into(),
-                                cosmic::widget::button::text("Clear All")
-                                    .class(cosmic::widget::button::ButtonClass::Destructive)
-                                    .on_press(Message::ClearQueue)
-                                    .into(),
-                                // todo: create playlist from queue
                                 cosmic::widget::button::text("Create Playlist")
                                     .class(cosmic::widget::button::ButtonClass::Standard)
                                     .on_press(Message::AddToPlaylist)
+                                    .into(),
+                                cosmic::widget::button::text("Clear All")
+                                    .class(cosmic::widget::button::ButtonClass::Destructive)
+                                    .on_press(Message::ClearQueue)
                                     .into(),
                             ])
                             .align_y(Vertical::Center)
