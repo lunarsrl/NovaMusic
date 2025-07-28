@@ -1,7 +1,8 @@
 use std::arch::x86_64::_mm_stream_sd;
 use std::ffi::OsStr;
-use std::io;
+use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use futures_util::SinkExt;
@@ -24,33 +25,30 @@ pub enum MediaFileTypes {
 pub async fn scan_directory(path: PathBuf, tx: &mut Sender<Message>) -> Vec<MediaFileTypes> {
     let mut files = vec![];
 
-    let mut viewed_files: u32 = 0;
-    read_dir(path, tx, &mut files, &mut viewed_files).await;
+    log::info!("Scanning directory: {:?}", path);
+    read_dir(path, tx, &mut files).await;
     tx.send(Message::UpdateScanDirSize(files.len() as u32)).await.unwrap();
     files
 }
 
-async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, files: &mut Vec<MediaFileTypes>, index: &mut u32){
+async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, files: &mut Vec<MediaFileTypes>){
     match path.read_dir() {
         Ok(dir) => {
-            log::info!("Current Directory: {}", path.display());
             for entry in dir {
+
+
                 match entry {
                     Ok(dir) => {
                         match dir.metadata().unwrap().is_dir() {
                             true => {
                                 let found_path = dir.path();
-                                log::info!("Found Next Directory: {}", found_path.display());
-                                Box::pin(read_dir(found_path, tx, files, index)).await;
-
+                                Box::pin(read_dir(found_path, tx, files)).await;
                             }
                             false => {
-                                log::info!("Found A File: {}", dir.path().display());
 
                                 match filter_files(dir.path()).await {
                                     Some(dir) => {
                                         files.push(dir);
-
                                     }
                                     None => {
                                     }
@@ -71,26 +69,28 @@ async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, files: &mut Vec<Media
     }
 }
 async fn filter_files(path: PathBuf) -> Option<MediaFileTypes> {
+    log::info!("Filtering files: {:?}", path);
     match path.extension() {
+
         None => {
+            log::info!("Failed to extract extension");
             None
         }
         Some(extension) => {
             match extension.to_str().unwrap().to_lowercase().as_str() {
                 "mp4" => {
-                    log::info!("--- It's a mp4!");
                     Some(MediaFileTypes::MP4(path))
                 }
                 "mp3" => {
-                    log::info!("--- It's a mp3!");
                     Some(MediaFileTypes::MP3(path))
                 }
                 "flac" =>{
-                    log::info!("--- It's a flac!");
                     Some(MediaFileTypes::FLAC(path))
                 }
+                "m4a" => {
+                    Some(MediaFileTypes::MP4(path))
+                }
                 _ => {
-                    log::info!("--- Unknown/unsupported filetype :(");
                     None
                 }
             }

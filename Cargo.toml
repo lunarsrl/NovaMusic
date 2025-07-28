@@ -1,10 +1,10 @@
 [package]
-name = "cosmic-music"
+name = "nova-music"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-or-later"
 description = "A music player written in the libcosmic toolkit"
-repository = "https://github.com/SRiverol/CosmicMusic.git"
+repository = "https://github.com/SRiverol/NovaMusic.git"
 
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }
@@ -19,14 +19,14 @@ log = "0.4.27"
 humantime = "2.2.0"
 fern = "0.7.1"
 rodio = { version = "0.21.1", features = ["symphonia", "symphonia-all", "playback"], default-features=false }
-tokio-stream = "0.1.17"
 symphonia = {version = "0.5.4", features = ["all-codecs"]}
-strum = "0.27.1"
 strum_macros = "0.27.1"
 rusqlite = "0.35.0"
-event-listener-strategy = "0.5.4"
 colored = "3.0.0"
 futures = "0.3.31"
+rayon = "1.10.0"
+dirs = "6.0.0"
+regex = "1.11.1"
 
 [dependencies.i18n-embed]
 version = "0.15"
@@ -38,6 +38,7 @@ git = "https://github.com/pop-os/libcosmic.git"
 features = [
     # Accessibility support
     "a11y",
+    "xdg-portal",
     # Uses cosmic-settings-daemon to watch for config file changes
     "dbus-config",
     # Support creating additional application windows.
