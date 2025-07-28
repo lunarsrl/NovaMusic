@@ -22,7 +22,9 @@ impl AppModel {
 
         let editable_settings: Section<Message> = cosmic::widget::settings::section();
         let current_settings: Section<Message> = cosmic::widget::settings::section();
+        let player_settings: Section<Message> = cosmic::widget::settings::section();
         let grid_settings: Section<Message> = cosmic::widget::settings::section();
+
 
         let contain = widget::Container::new(
             widget::column::Column::with_children([
@@ -47,12 +49,12 @@ impl AppModel {
                     .add(widget::Row::with_children([
                         text::heading("Albums Found:").into(),
                         widget::horizontal_space().into(),
-                        text::text("None").into(),
+                        text::text(self.config.albums_found.to_string()).into(),
                     ]))
                     .add(widget::Row::with_children([
                         text::heading("Tracks Found:").into(),
                         widget::horizontal_space().into(),
-                        text::text("None").into(),
+                        text::text(self.config.tracks_found.to_string()).into(),
                     ]))
                     .add(widget::Row::with_children([
                         text::heading("Playlists Found:").into(),
@@ -66,21 +68,12 @@ impl AppModel {
                         widget::settings::item::builder("Music Directory:")
                             .description("Choose directory to scan for music.")
                             .control(
-
                                 match self.rescan_available {
                                     true => {
-                                        cosmic::widget::text_input::text_input(
-                                            "Enter directory",
-                                            &self.change_dir_filed,
-                                        )
-                                            .on_input(|val| app::Message::EditInput(val))
-                                            .on_submit(|string| app::Message::ChangeScanDir(string))
+                                        cosmic::widget::button::suggested("Select Folder").on_press(Message::ChooseFolder)
                                     }
                                     false => {
-                                        cosmic::widget::text_input::text_input(
-                                            "Enter directory",
-                                            &self.change_dir_filed,
-                                        )
+                                        cosmic::widget::button::suggested("Select Folder")
                                     }
                                 }
 
@@ -88,7 +81,7 @@ impl AppModel {
                     )
                     .add(
                         widget::settings::item::builder("Full Directory Rescan:").control(
-                            match self.rescan_available {
+                            match self.rescan_available && !self.config.scan_dir.is_empty() {
                                 true => {
 
                                     widget::button::text("Rescan")
@@ -97,7 +90,7 @@ impl AppModel {
                                 }
                                 false => {
                                     widget::button::text("Rescan")
-                                        .class(widget::button::ButtonClass::Standard)
+                                        .class(widget::button::ButtonClass::Destructive)
                                 }
                             }
 
@@ -126,6 +119,17 @@ impl AppModel {
                         widget::settings::item::builder("Grid Item Size: ")
                             .control(cosmic::widget::slider(1..=6, self.config.grid_item_size, |a| Message::GridSliderChange(a))
                                 
+                            )
+                    )
+                    .into(),
+
+                player_settings
+                    .title("Music Player")
+                    .add(
+                            widget::settings::item::builder(format!("App Volume: {}", self.config.volume.trunc()))
+                            .control(
+                                cosmic::widget::slider(0.0..=100.0, self.config.volume, |a| Message::VolumeSliderChange(a))
+
                             )
                     )
                     .into(),

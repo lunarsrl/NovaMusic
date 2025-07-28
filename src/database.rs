@@ -7,6 +7,7 @@ use std::fmt::{format, Debug, Pointer};
 use std::fs;
 use std::panic::panic_any;
 use std::path::PathBuf;
+use cosmic::Application;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
@@ -52,7 +53,9 @@ struct PlaylistTracks {
 }
 
 pub fn create_database() {
-    let conn = rusqlite::Connection::open("cosmic_music.db").unwrap();
+    let conn = rusqlite::Connection::open(
+        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
+    ).unwrap();
 
     conn.execute_batch(
         "
@@ -60,7 +63,6 @@ pub fn create_database() {
         DROP TABLE IF EXISTS album;
         DROP TABLE IF EXISTS album_tracks;
         DROP TABLE IF EXISTS artists;
-        DROP TABLE IF EXISTS playlists;
         DROP TABLE IF EXISTS track;
     ",
     )
@@ -78,13 +80,31 @@ pub fn create_database() {
 
     conn.execute(
         "
-    CREATE TABLE playlists (
+        CREATE TABLE IF NOT EXISTS playlists (
+            id INTEGER PRIMARY KEY,
+            name TEXT,
+            track_number INTEGER,
+            album_cover BLOB
+        )",
+        [],
+    )
+        .unwrap();
+
+    conn.execute(
+        "
+    CREATE TABLE IF NOT EXISTS playlist_tracks (
         id INTEGER PRIMARY KEY,
-        name TEXT
+        track_id INTEGER,
+        playlist_id INTEGER,
+        FOREIGN KEY(playlist_id) REFERENCES playlists(id),
+        FOREIGN KEY(track_id) REFERENCES tracks(id)
     )",
         [],
     )
-    .unwrap();
+        .unwrap();
+
+
+
 
     conn.execute(
         "
@@ -94,7 +114,7 @@ pub fn create_database() {
         track_id INTEGER,
         track_number INTEGER,
         disc_number INTEGER,
-        FOREIGN KEY(album_id) REFERENCES albums(id),
+        FOREIGN KEY(album_id) REFERENCES album(id),
         FOREIGN KEY(track_id) REFERENCES tracks(id)
     )",
         [],
@@ -129,8 +149,11 @@ pub fn create_database() {
     )
     .unwrap();
 }
+//todo: Theres probably a better way to do this.
 pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
-    let conn = rusqlite::Connection::open("cosmic_music.db").unwrap();
+    let conn = rusqlite::Connection::open(
+        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
+    ).unwrap();
 
     let mut track = Track {
         id: 0,
@@ -161,6 +184,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     for tag in metadata_tags {
         if let Some(key) = tag.std_key {
             match key {
+                //todo: maybe one day account for most of these tags somewhere
                 StandardTagKey::AcoustidFingerprint => {}
                 StandardTagKey::AcoustidId => {}
                 StandardTagKey::Album => match tag.value {
@@ -181,7 +205,6 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                             }
                             Err(_) => {
                                 log::warn!("Artist: {} already created", name);
-
                                 album.artist_id =
                                     conn.query_row(
                                         "SELECT id FROM artists WHERE name = ?",
@@ -189,7 +212,6 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                                         |row| row.get::<usize, u32>(0),
                                     )
                                     .unwrap() as u64;
-
                                 log::info!("ARTIST ID:  {}", album.artist_id);
                             }
                         }
@@ -216,6 +238,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                 StandardTagKey::Description => {}
                 StandardTagKey::DiscNumber => match tag.value {
                     Value::String(val) => {
+                        log::info!("DISC NUMBER");
                         let mut final_val = val;
 
                         if final_val.contains("/") {
@@ -231,9 +254,14 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                             .parse::<u64>()
                             .expect(format!("Invalid track number: {}", final_val).as_str());
                     }
-                    _ => {
-                        log::error!("Disc number is not a number");
+                    Value::UnsignedInt(val) => {
+                        log::info!("{}: {}", "DISC NUMBER unsigned int".red(), val);
+                        album_tracks.disc_number = val
                     }
+                    _ => {
+                        log::error!("DISC NUMBER");
+                    }
+
                 },
                 StandardTagKey::DiscSubtitle => {}
                 StandardTagKey::DiscTotal => match tag.value {
@@ -316,6 +344,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                 StandardTagKey::TaggingDate => {}
                 StandardTagKey::TrackNumber => match tag.value {
                     Value::String(val) => {
+
                         let mut final_val = val;
 
                         if final_val.contains("/") {
@@ -326,12 +355,34 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
                                 .parse()
                                 .unwrap();
                         }
+                        log::info!("FINAL VAL: {}", final_val.on_red());
 
                         album_tracks.track_number = final_val
                             .parse::<u64>()
                             .expect(format!("Invalid track number: {}", final_val).as_str());
                     }
-                    _ => {}
+                    Value::UnsignedInt(val) => {
+                        album_tracks.track_number = val
+                    }
+
+                    Value::Binary(_) => {
+                        log::info!("{}", "TRACK NUMBER binary".red());
+                    }
+                    Value::Boolean(_) => {
+                        log::info!("{}", "TRACK NUMBER  boolean".red());
+                    }
+                    Value::Flag => {
+                        log::info!("{}", "TRACK NUMBER  flag".red());
+
+                    }
+                    Value::Float(_) => {
+                        log::info!("{}", "TRACK NUMBER  float".red());
+
+                    }
+                    Value::SignedInt(_) => {
+                        log::info!("{}", "TRACK NUMBER  signed int".red());
+
+                    }
                 },
                 StandardTagKey::TrackSubtitle => {}
                 StandardTagKey::TrackTitle => match tag.value {

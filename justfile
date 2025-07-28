@@ -1,5 +1,5 @@
-name := 'cosmic-music'
-appid := 'dev.riveroluna.cosmicmusic'
+name := 'nova-music'
+appid := 'dev.riveroluna.novamusic'
 
 rootdir := ''
 prefix := '/usr'
