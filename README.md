@@ -1,7 +1,7 @@
 # Nova Music
 
 - An album focused music player written in the libcosmic toolkit
-- Now usable!
+
 
 ![GIF Demo of the project](images/Demo.GIF)
 
