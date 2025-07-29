@@ -581,7 +581,7 @@ impl cosmic::Application for AppModel {
         if !dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db").exists() {
             return Some(
                 cosmic::widget::dialog::Dialog::new()
-                    .title("Cosmic Music: First Time Setup")
+                    .title("Nova Music: First Time Setup")
                     .body("Please choose a directory to scan")
                     .control(
                         cosmic::widget::container(
