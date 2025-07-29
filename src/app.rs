@@ -1277,7 +1277,7 @@ from playlists
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
                             return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                                2,
+                                100,
                                 |mut tx| async move {
                                     tokio::task::spawn_blocking(move || {
                                         let conn =
@@ -1320,12 +1320,12 @@ from track
 
                                             let tracks = tracks.into_iter().filter_map(|a| a.ok()).collect();
 
-                                            tx.start_send(Message::TrackLoaded(tracks))
+                                            tx.try_send(Message::TrackLoaded(tracks))
                                                 .expect("Failed to send");
-                                            tx.start_send(Message::TracksLoaded)
+                                            tx.try_send(Message::TracksLoaded)
                                                 .expect("Failed to send");
                                         } else {
-                                            tx.start_send(Message::TracksLoaded)
+                                            tx.try_send(Message::TracksLoaded)
                                                 .expect("Failed to send");
                                         }
                                     });
@@ -1537,9 +1537,9 @@ from track
 
                         let reporting_task_sink = Arc::clone(&self.sink);
                         let progress_thread = cosmic::Task::stream(
-                            cosmic::iced_futures::stream::channel(10, |mut tx| async move {
+                            cosmic::iced_futures::stream::channel(1, |mut tx| async move {
                                 tokio::task::spawn_blocking(move || loop {
-                                    sleep(Duration::from_millis(10));
+                                    sleep(Duration::from_millis(200));
                                     match tx.try_send(Message::SinkProgress(
                                         reporting_task_sink.get_pos().as_secs_f64(),
                                     )) {

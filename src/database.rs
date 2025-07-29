@@ -166,7 +166,7 @@ pub fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
         id: 0,
         name: "".to_string(),
         artist_id: 0,
-        num_of_discs: 0,
+        num_of_discs: 1,
         num_of_tracks: 0,
         album_cover: None,
     };
