@@ -3,7 +3,7 @@
 - An album focused music player written in the libcosmic toolkit
 
 TODO
-- [!] Replace current playlist implementation with m3u
+- [ ! ] Replace current playlist implementation with m3u
 - Localization update
 - Crossfade support
 ## Installation
