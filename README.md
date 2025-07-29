@@ -5,7 +5,7 @@
 TODO
 - [!] Replace current playlist implementation with m3u
 - Localization upate
-- Crossplay support
+- Crossfade support
 ## Installation
 NOTE: Playlist implementation will be replaced soon dont rely on it. Other than that the software should be usable. Please feel free to request features and report bugs. I'll do my best to stay on top of them inbetween school work.
 
