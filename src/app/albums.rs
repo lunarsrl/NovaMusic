@@ -43,7 +43,6 @@ impl AlbumPage {
         match &self.page_state {
             AlbumPageState::Loading | AlbumPageState::Loaded => {
                 if self.albums.is_empty() {
-                    log::info!("EMPTY ALBUMS");
                     return if let AlbumPageState::Loading = self.page_state {
                         cosmic::widget::container(cosmic::widget::text::title3("Loading..."))
                             .align_x(Alignment::Center)
@@ -52,7 +51,6 @@ impl AlbumPage {
                             .height(Length::Fill)
                             .into()
                     } else {
-                        log::info!("Not empty albums");
                         cosmic::widget::container(
 
                             cosmic::widget::column::with_children(
@@ -506,16 +504,22 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
         log::info!("{}: {}", "Disc number".red(), track.disc_number);
         match discs.get_mut((track.disc_number - 1 )as usize) {
             None => {
-                discs.push(vec![container]);
+                discs.push(vec![
+                    container
+                ]);
             }
             Some(val) => {
-                val.push(container);
+                val.push(
+                    container
+                );
             }
         }
     }
 
     let mut disc_lists = vec![];
+    let mut disc_num = 0;
     for disc in discs {
+        disc_num+=1;
         let mut list = Some(cosmic::widget::ListColumn::new());
         for element in disc {
             if let Some(new_list) = list.take() {
@@ -523,10 +527,20 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
                list = Some(new_list);
             }
         }
-        disc_lists.push(list.unwrap().into_element());
+        disc_lists.push(
+            cosmic::widget::container(
+                cosmic::widget::column::with_children(vec![
+                    cosmic::widget::text::heading(format!("Disc {}", disc_num)).into(),
+                    list.unwrap().into_element()
+                ])
+            ).into()
+        );
     }
 
-    cosmic::widget::column::with_children(disc_lists)
+    cosmic::widget::column::with_children(
+        disc_lists
+    )
+        .spacing(cosmic::theme::spacing().space_s)
         .into()
 }
 

@@ -390,7 +390,7 @@ impl cosmic::Application for AppModel {
                     cosmic::widget::row::with_children(vec![
                         cosmic::widget::horizontal_space().into(),
                         cosmic::widget::button::icon(cosmic::widget::icon::from_name("go-down-symbolic")).on_press(Message::FooterToggle).into(),
-                    ])
+                    ]).padding(cosmic::theme::spacing().space_xxs)
                 )
                     .into()
             )
@@ -409,7 +409,7 @@ impl cosmic::Application for AppModel {
         const FOOTER_IMAGE_SIZE: f32 = 64.0;
         let data = match self.queue.is_empty() {
             true => {
-                let cover = cosmic::widget::icon::from_name("media-playback-start-symbolic")
+                let cover = cosmic::widget::icon::from_name("applications-audio-symbolic")
                     .size(FOOTER_IMAGE_SIZE as u16)
                     .into();
 

@@ -16,8 +16,9 @@
   <component name="ChangeListManager">
     <list default="true" id="152ba708-cd46-4fc3-ab0c-616e9212beb1" name="Changes" comment="Settings menu is mostly done, added progress bar for file scanning (a file is considered scanned only after it is checled for metadata currently which is only done after initially gathering a list of all the files, probably super inefficient and it looks like nothing is progressing to the user until initial scan is done)&#10;&#10;Signed-off-by: Samuel Rivero Luna &lt;riveroluna@protonmail.com&gt;">
       <changelist_data name="Samuel RIvero Luna" email="riveroluna@protonmail.com" automatic="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/albums.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/albums.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,36 +61,38 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;Cargo.Build `Run`.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.Just.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.Run cosmic-music.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.Run.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.fetch.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.generate-lockfile.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.update.executor&quot;: &quot;Run&quot;,
-    &quot;Just.Run.executor&quot;: &quot;Run&quot;,
-    &quot;Just.Unnamed.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;testing&quot;,
-    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/srl/Programming/nova-music&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
-    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
-    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "Cargo.Build `Run`.executor": "Run",
+    "Cargo.Just.executor": "Run",
+    "Cargo.Run cosmic-music.executor": "Run",
+    "Cargo.Run.executor": "Run",
+    "Cargo.fetch.executor": "Run",
+    "Cargo.generate-lockfile.executor": "Run",
+    "Cargo.update.executor": "Run",
+    "Just.Run.executor": "Run",
+    "Just.Unnamed.executor": "Run",
+    "Just.build-release.executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "git-widget-placeholder": "main",
+    "junie.onboarding.icon.badge.shown": "true",
+    "last_opened_file_path": "/home/srl/Programming/nova-music",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
+    "org.rust.first.attach.projects": "true",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/src" />
@@ -197,6 +200,13 @@
       <option name="recipeName" value="run" />
       <method v="2" />
     </configuration>
+    <configuration name="build-release" type="JustRunConfiguration" factoryName="JustRunConfiguration">
+      <option name="envVariables" />
+      <option name="fileName" value="justfile" />
+      <option name="recipeArgs" />
+      <option name="recipeName" value="default" />
+      <method v="2" />
+    </configuration>
     <list>
       <item itemvalue="Cargo.Run" />
       <item itemvalue="Cargo.Test cosmic-music" />
@@ -204,6 +214,7 @@
       <item itemvalue="Cargo.generate-lockfile" />
       <item itemvalue="Cargo.update" />
       <item itemvalue="Just.Run" />
+      <item itemvalue="Just.build-release" />
     </list>
     <recent_temporary>
       <list>
@@ -330,6 +341,7 @@
       <workItem from="1753732935234" duration="4596000" />
       <workItem from="1753737649318" duration="93000" />
       <workItem from="1753738312304" duration="299000" />
+      <workItem from="1753797366153" duration="1712000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />
