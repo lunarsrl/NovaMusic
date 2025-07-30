@@ -1,11 +1,15 @@
 use std::arch::x86_64::_mm_stream_sd;
 use std::ffi::OsStr;
 use std::fs;
+use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
+use cosmic::dialog::file_chooser::open::file;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use futures_util::SinkExt;
+use rust_embed::utils::FileEntry;
 use tokio::fs::DirEntry;
 use crate::app;
 use crate::app::{AppModel, Message};
@@ -97,8 +101,9 @@ async fn filter_files(path: PathBuf) -> Option<MediaFileTypes> {
         }
 
     }
+}
 
-
+fn read_m3u(mut file_entry: File) {
 
 }
 

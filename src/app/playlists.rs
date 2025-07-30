@@ -14,15 +14,20 @@ pub struct PlaylistPage {
 
 #[derive(Clone, Debug)]
 pub struct Playlist {
-    pub id: u32,
     pub title: String,
-    pub track_count: u32,
-    pub cover_art: Option<cosmic::widget::image::Handle>,
+    pub path: String,
+    pub thumbnail: Option<cosmic::widget::image::Handle>,
 }
 #[derive(Debug, Clone)]
 pub struct FullPlaylist {
     pub playlist: Playlist,
-    pub tracks: Vec<AppTrack>,
+    pub tracks: Vec<PlaylistTrack>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlaylistTrack {
+    pub(crate) title: String,
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -75,7 +80,7 @@ impl PlaylistPage {
                             elements.push(
                                 cosmic::widget::button::custom(
                                     cosmic::widget::column::with_children(vec![
-                                        if let Some(cover_art) = &playlist.cover_art {
+                                        if let Some(cover_art) = &playlist.thumbnail {
                                             cosmic::widget::container::Container::new(
                                                 cosmic::widget::image(cover_art),
                                             )
@@ -104,8 +109,8 @@ impl PlaylistPage {
                                     ])
                                     .align_x(Alignment::Center),
                                 )
+                                    .on_press(Message::PlaylistSelected(playlist.clone()))
                                 .class(cosmic::widget::button::ButtonClass::Icon)
-                                .on_press(Message::PlaylistRequested(playlist.clone()))
                                 .width((model.config.grid_item_size * 32) as f32)
                                 .into(),
                             )
@@ -180,10 +185,10 @@ impl PlaylistPage {
                             .align_y(Alignment::Center),
                         )
                         .class(cosmic::widget::button::ButtonClass::Link)
-                        .on_press(Message::PLaylistPageReturn)
+                            .on_press(Message::PlaylistPageReturn)
                         .into(),
                         cosmic::widget::Row::with_children([
-                            match &playlist.playlist.cover_art {
+                            match &playlist.playlist.thumbnail {
                                 None => {
                                     cosmic::widget::icon::from_name("applications-audio-symbolic")
                                         .size(128)
@@ -215,7 +220,7 @@ impl PlaylistPage {
                                     playlist
                                         .tracks
                                         .iter()
-                                        .map(|a| a.path_buf.to_string_lossy().to_string())
+                                        .map(|a| a.path.clone())
                                         .collect::<Vec<String>>(),
                                 ))
                                 .class(cosmic::widget::button::ButtonClass::Suggested)
@@ -263,7 +268,7 @@ impl PlaylistPage {
         .into()
     }
 }
-fn tracks_listify(tracks: &Vec<AppTrack>) -> Element<'static, Message> {
+fn tracks_listify(tracks: &Vec<PlaylistTrack>) -> Element<'static, Message> {
     let mut list_widget = Some(cosmic::widget::ListColumn::new());
 
     for track in tracks {
@@ -279,7 +284,7 @@ fn tracks_listify(tracks: &Vec<AppTrack>) -> Element<'static, Message> {
                                 "media-playback-start-symbolic",
                             ))
                             .on_press(Message::AddTrackToQueue(
-                                track.path_buf.to_string_lossy().to_string(),
+                                track.path.clone(),
                             ))
                             .into(),
                         ])
@@ -292,51 +297,4 @@ fn tracks_listify(tracks: &Vec<AppTrack>) -> Element<'static, Message> {
         }
     }
     list_widget.take().unwrap().into_element()
-}
-
-pub async fn get_playlist_info(playlist: Playlist) -> FullPlaylist {
-    let conn = rusqlite::Connection::open(
-        dirs::data_local_dir()
-            .unwrap()
-            .join(crate::app::AppModel::APP_ID)
-            .join("nova_music.db"),
-    )
-    .unwrap();
-
-    let stmt = conn.prepare(
-        "
-select main.track.id as id, track.name as title, path as path, artists.name
-
-from playlist_tracks
-left join track on playlist_tracks.track_id = track.id
-left join artists on track.artist_id = artists.id
-where playlist_id = ?
-    ",
-    );
-    log::info!("{}", playlist.id);
-
-    if let Ok(mut stmt) = stmt {
-        let tracks = stmt
-            .query_map([playlist.id], |a| {
-                Ok(AppTrack {
-                    id: a.get("id").unwrap_or(0),
-                    title: a.get("title").unwrap_or(String::new()),
-                    artist: a.get("name").unwrap_or(String::new()),
-                    album_title: String::new(),
-                    path_buf: PathBuf::from(a.get("path").unwrap_or(String::new())),
-                    cover_art: None,
-                })
-            })
-            .unwrap();
-
-        let tracks = tracks
-            .into_iter()
-            .filter_map(Result::ok)
-            .collect::<Vec<AppTrack>>();
-
-        log::info!("{:?}", tracks);
-        FullPlaylist { playlist, tracks }
-    } else {
-        panic!("Problem")
-    }
 }
