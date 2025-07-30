@@ -18,8 +18,6 @@
       <changelist_data name="Samuel RIvero Luna" email="riveroluna@protonmail.com" automatic="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/playlists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/playlists.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/scan.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/scan.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -346,7 +344,7 @@
       <workItem from="1753803916201" duration="2815000" />
       <workItem from="1753816051155" duration="9130000" />
       <workItem from="1753831613265" duration="916000" />
-      <workItem from="1753899744864" duration="14368000" />
+      <workItem from="1753899744864" duration="14940000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />

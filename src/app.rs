@@ -294,6 +294,7 @@ impl cosmic::Application for AppModel {
         let sink = rodio::Sink::connect_new(stream.mixer());
 
         let sink = Arc::new(sink);
+
         nav.insert()
             .text(fl!("home"))
             .data::<Page>(Page::NowPlaying(HomePage))
@@ -326,6 +327,8 @@ impl cosmic::Application for AppModel {
         };
         let config = config.1;
 
+
+        sink.set_volume(config.volume / 100.0);
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
@@ -1563,7 +1566,7 @@ from track
                     Err(_) => {}
                 }
             }
-            Message::SeekFinished => self.sink.set_volume(1.0),
+            Message::SeekFinished => self.sink.set_volume(self.config.volume/100.0),
             app::Message::AddTrackToQueue(filepath) => {
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
@@ -2000,6 +2003,7 @@ from track
                 }
             }
             Message::VolumeSliderChange(val) => {
+                log::info!("volume: {}", val);
                 self.sink.set_volume(val / 100.0);
                 self.config
                     .set_volume(&self.config_handler, val)
