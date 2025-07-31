@@ -69,7 +69,7 @@ use cosmic::cctk::wayland_protocols::ext::session_lock::v1::client::ext_session_
 use cosmic::dialog::file_chooser::open::FileResponse;
 use cosmic::iced::task::Handle;
 use cosmic::iced::Alignment::Start;
-use m3u8_rs::{MediaPlaylist, MediaPlaylistType, MediaSegment};
+
 use rayon::iter::{IntoParallelIterator, ParallelBridge};
 use rayon::slice::ParallelSliceMut;
 use regex::Match;
