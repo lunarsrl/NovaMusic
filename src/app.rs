@@ -138,6 +138,7 @@ pub struct AppModel {
     pub playlist_dialog_text: String,
     pub playlist_cover: Vec<u8>,
     footer_toggled: bool,
+    playlist_delete_dialog: bool
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -230,6 +231,8 @@ pub enum Message {
     PlaylistFound(Vec<Playlist>),
     PlaylistSelected(Playlist),
     PlaylistPageReturn,
+    PLaylistDeleteSafety,
+    PlaylistDeleteConfirmed,
 }
 
 #[derive(Clone, Debug)]
@@ -355,6 +358,7 @@ impl cosmic::Application for AppModel {
             playlist_dialog_text: "".to_string(),
             playlist_cover: vec![],
             footer_toggled: true,
+            playlist_delete_dialog: false,
         };
 
         // Create a startup command that sets the window title.
@@ -626,6 +630,36 @@ impl cosmic::Application for AppModel {
                     .into(),
             );
         }
+
+        if self.playlist_delete_dialog {
+            if let Page::Playlists(page) = self.nav.active_data().unwrap() {
+                if let PlaylistPageState::PlaylistPage(page)  = &page.playlist_page_state {
+                    return Some(
+                        cosmic::widget::dialog::Dialog::new()
+                            .title("Delete Playlist?")
+                            .icon(icon::from_name("applications-audio-symbolic"))
+                            .body(
+                                format!("Delete {}?", page.playlist.path.as_str())
+                            )
+                            .primary_action(
+                                cosmic::widget::button::text("Delete Playlist").class(cosmic::theme::Button::Destructive)
+                                    .on_press(
+                                        Message::PlaylistDeleteConfirmed
+                                    )
+                            )
+                            .secondary_action(
+                                cosmic::widget::button::text("Cancel").class(cosmic::theme::Button::Standard)
+                                    .on_press(
+                                        Message::PLaylistDeleteSafety
+                                    )
+                            )
+                            .into()
+                    )
+                }
+            }
+
+
+        }
         None
     }
 
@@ -668,6 +702,30 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::PlaylistDeleteConfirmed => {
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    if let PlaylistPageState::PlaylistPage(page) = &page.playlist_page_state {
+                        std::fs::remove_file(&page.playlist.path).unwrap();
+                    }
+                    page.playlist_page_state = PlaylistPageState::Loading
+                }
+                self.playlist_delete_dialog = false;
+                return cosmic::Task::future(async move {
+                    Message::OnNavEnter
+                }).map(cosmic::Action::App)
+
+            }
+            Message::PLaylistDeleteSafety => {
+                match self.playlist_delete_dialog {
+                    true => {
+                        self.playlist_delete_dialog = false
+                    }
+                    false => {
+                        self.playlist_delete_dialog = true
+                    }
+                }
+
+            }
             Message::UpdatePlaylistName(val) => self.playlist_dialog_text = val,
             Message::ChooseFolder => {
                 return cosmic::task::future(async move {
@@ -969,6 +1027,11 @@ impl cosmic::Application for AppModel {
                 let track_dat = self.nav.data_mut::<Page>(track_pos).unwrap();
                 if let Page::Tracks(page) = track_dat {
                     page.track_page_state = TrackPageState::Loading
+                }
+
+                // Playlists: FUll reset
+                if let Page::Playlists(page) = self.access_nav_data(3) {
+                    page.playlist_page_state = PlaylistPageState::Loading
                 }
 
                 create_database();

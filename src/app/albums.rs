@@ -3,13 +3,13 @@ use crate::app::{AppModel, Message};
 use colored::Colorize;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::{Alignment, ContentFit, Length, Size};
+use cosmic::iced_widget::Container;
 use cosmic::widget::settings::item;
 use cosmic::widget::{container, JustifyContent};
 use cosmic::{iced, widget, Application, Element, Theme};
 use futures_util::{SinkExt, StreamExt};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::sync::Arc;
-use cosmic::iced_widget::Container;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -266,27 +266,19 @@ impl AlbumPage {
                                     albumpage.album.artist.as_str()
                                 ))
                                 .into(),
-                                cosmic::widget::button::custom(
-                                    cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::icon::from_name(
-                                            "media-playback-start-symbolic",
-                                        )
-                                        .into(),
-                                        cosmic::widget::text::text("Add Album To Queue").into(),
-                                    ])
-                                    .spacing(cosmic::theme::spacing().space_xxs)
-                                    .align_y(Alignment::Center),
-                                )
-                                .padding(cosmic::theme::spacing().space_xxs)
-                                .on_press(Message::AddAlbumToQueue(
-                                    albumpage
-                                        .tracks
-                                        .iter()
-                                        .map(|a| a.file_path.clone())
-                                        .collect::<Vec<String>>(),
-                                ))
-                                .class(cosmic::widget::button::ButtonClass::Suggested)
-                                .into(),
+                                cosmic::widget::button::text("Add To Playlist")
+                                    .leading_icon(cosmic::widget::icon::from_name(
+                                        "media-playback-start-symbolic",
+                                    ))
+                                    .class(cosmic::theme::Button::Suggested)
+                                    .on_press(Message::AddAlbumToQueue(
+                                        albumpage
+                                            .tracks
+                                            .iter()
+                                            .map(|a| a.file_path.clone())
+                                            .collect::<Vec<String>>(),
+                                    ))
+                                    .into(),
                             ])
                             .spacing(cosmic::theme::spacing().space_xxxs)
                             .into(),
@@ -297,8 +289,8 @@ impl AlbumPage {
                         cosmic::widget::scrollable(cosmic::widget::container::Container::new(
                             tracks_listify(&albumpage.tracks, albumpage.album.disc_number),
                         ))
-                            .width(Length::Fill)
-                            .height(Length::Fill)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
                         .into(),
                     ])
                     .spacing(page_margin),
@@ -482,36 +474,29 @@ struct Track {
 
 fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Message> {
     log::info!("Number of discs: {}", num_of_discs);
-    let mut discs: Vec< Vec<cosmic::widget::Container<Message, Theme> > > = vec![vec![]];
+    let mut discs: Vec<Vec<cosmic::widget::Container<Message, Theme>>> = vec![vec![]];
 
     for track in tracks {
         let container = cosmic::widget::container::Container::new(
             cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::heading(format!(
-                    "{}. {}",
-                    track.track_number, track.name
-                ))
+                cosmic::widget::text::heading(format!("{}. {}", track.track_number, track.name))
                     .into(),
                 cosmic::widget::horizontal_space().into(),
                 cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                     "media-playback-start-symbolic",
                 ))
-                    .on_press(Message::AddTrackToQueue(track.file_path.clone()))
-                    .into(),
+                .on_press(Message::AddTrackToQueue(track.file_path.clone()))
+                .into(),
             ])
-                .align_y(Alignment::Center),
+            .align_y(Alignment::Center),
         );
         log::info!("{}: {}", "Disc number".red(), track.disc_number);
-        match discs.get_mut((track.disc_number - 1 )as usize) {
+        match discs.get_mut((track.disc_number - 1) as usize) {
             None => {
-                discs.push(vec![
-                    container
-                ]);
+                discs.push(vec![container]);
             }
             Some(val) => {
-                val.push(
-                    container
-                );
+                val.push(container);
             }
         }
     }
@@ -519,27 +504,24 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
     let mut disc_lists = vec![];
     let mut disc_num = 0;
     for disc in discs {
-        disc_num+=1;
+        disc_num += 1;
         let mut list = Some(cosmic::widget::ListColumn::new());
         for element in disc {
             if let Some(new_list) = list.take() {
                 let new_list = new_list.add(element);
-               list = Some(new_list);
+                list = Some(new_list);
             }
         }
         disc_lists.push(
-            cosmic::widget::container(
-                cosmic::widget::column::with_children(vec![
-                    cosmic::widget::text::heading(format!("Disc {}", disc_num)).into(),
-                    list.unwrap().into_element()
-                ])
-            ).into()
+            cosmic::widget::container(cosmic::widget::column::with_children(vec![
+                cosmic::widget::text::heading(format!("Disc {}", disc_num)).into(),
+                list.unwrap().into_element(),
+            ]))
+            .into(),
         );
     }
 
-    cosmic::widget::column::with_children(
-        disc_lists
-    )
+    cosmic::widget::column::with_children(disc_lists)
         .spacing(cosmic::theme::spacing().space_s)
         .into()
 }
@@ -558,8 +540,12 @@ impl Track {
 pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
     log::info!("Before DB");
     let conn = rusqlite::Connection::open(
-        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
-    ).expect("Nothing");
+        dirs::data_local_dir()
+            .unwrap()
+            .join(crate::app::AppModel::APP_ID)
+            .join("nova_music.db"),
+    )
+    .expect("Nothing");
 
     log::info!("After DB");
     let row_num = conn
@@ -639,14 +625,11 @@ pub fn get_top_album_info(
     tx: &mut Sender<Message>,
     album_iter: Vec<(String, String, u32, u32, Option<Vec<u8>>)>,
 ) {
-
     // Prepare and execute query in a separate scope
     // Process results and send them
     let mut albums: Vec<Album> = vec![];
 
     for album_result in album_iter {
-
-
         albums.push(Album {
             name: album_result.0,
             artist: album_result.1,
@@ -659,5 +642,6 @@ pub fn get_top_album_info(
         })
     }
 
-    tx.try_send(Message::AlbumProcessed(albums)).expect("Failed to send album process");
+    tx.try_send(Message::AlbumProcessed(albums))
+        .expect("Failed to send album process");
 }
