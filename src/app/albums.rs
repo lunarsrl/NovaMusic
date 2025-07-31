@@ -490,8 +490,16 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
             ])
             .align_y(Alignment::Center),
         );
-        log::info!("{}: {}", "Disc number".red(), track.disc_number);
-        match discs.get_mut((track.disc_number - 1) as usize) {
+
+        let mut disc_num = 1;
+        if (track.disc_number as i32 - 1) < 0 {
+            disc_num = 1;
+        } else {
+            disc_num = track.disc_number
+        }
+
+        match discs.get_mut((disc_num - 1) as usize) {
+
             None => {
                 discs.push(vec![container]);
             }
@@ -499,6 +507,7 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
                 val.push(container);
             }
         }
+        log::info!("{}", discs.len())
     }
 
     let mut disc_lists = vec![];
