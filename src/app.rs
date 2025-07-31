@@ -609,7 +609,6 @@ impl cosmic::Application for AppModel {
             return Some(
                 cosmic::widget::dialog::Dialog::new()
                     .title("Create A New Playlist")
-                    .icon(icon::from_name("applications-audio-symbolic"))
                     .control(cosmic::widget::container(
                         cosmic::widget::row::with_children(vec![
                             cosmic::widget::text::heading(format!("Playlist Title: ")).into(),
@@ -637,7 +636,6 @@ impl cosmic::Application for AppModel {
                     return Some(
                         cosmic::widget::dialog::Dialog::new()
                             .title("Delete Playlist?")
-                            .icon(icon::from_name("applications-audio-symbolic"))
                             .body(
                                 format!("Delete {}?", page.playlist.path.as_str())
                             )
