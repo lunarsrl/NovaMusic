@@ -1,3 +1,4 @@
+use crate::app::widget::scrollable::horizontal;
 use crate::app::albums::FullAlbum;
 use crate::app::{AppModel, AppTrack, Message};
 use cosmic::iced::{Alignment, ContentFit, Length, Size};
@@ -204,29 +205,34 @@ impl PlaylistPage {
                                 // Album Title and Author Column
                                 cosmic::widget::text::title2(playlist.playlist.title.as_str())
                                     .into(),
-                                cosmic::widget::button::custom(
-                                    cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::icon::from_name(
-                                            "media-playback-start-symbolic",
-                                        )
+                                cosmic::widget::divider::horizontal::default().into(),
+                                cosmic::widget::row::with_children(vec![
+
+                                    cosmic::widget::button::text("Add To Playlist")
+                                        .leading_icon(cosmic::widget::icon::from_name("media-playback-start-symbolic"))
+                                        .class(cosmic::theme::Button::Suggested)
+                                        .on_press(Message::AddAlbumToQueue(
+                                            playlist
+                                                .tracks
+                                                .iter()
+                                                .map(|a| a.path.clone())
+                                                .collect::<Vec<String>>(),
+                                        ))
                                         .into(),
-                                        cosmic::widget::text::text("Add Album To Queue").into(),
-                                    ])
-                                    .spacing(cosmic::theme::spacing().space_xxs)
-                                    .align_y(Alignment::Center),
-                                )
-                                .padding(cosmic::theme::spacing().space_xxs)
-                                .on_press(Message::AddAlbumToQueue(
-                                    playlist
-                                        .tracks
-                                        .iter()
-                                        .map(|a| a.path.clone())
-                                        .collect::<Vec<String>>(),
-                                ))
-                                .class(cosmic::widget::button::ButtonClass::Suggested)
-                                .into(),
+
+                                    cosmic::widget::button::text("Delete Playlist")
+                                        .leading_icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                                        .on_press(Message::PLaylistDeleteSafety)
+                                        .class(cosmic::theme::Button::Destructive)
+                                        .into(),
+
+                                ])
+                                    .spacing(cosmic::theme::spacing().space_s)
+                                    .align_y(Alignment::Center)
+                                    .into()
+
                             ])
-                            .spacing(cosmic::theme::spacing().space_xxxs)
+                            .spacing(cosmic::theme::spacing().space_s)
                             .into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_s)
