@@ -266,7 +266,7 @@ impl AlbumPage {
                                     albumpage.album.artist.as_str()
                                 ))
                                 .into(),
-                                cosmic::widget::button::text("Add To Playlist")
+                                cosmic::widget::button::text("Add to queue")
                                     .leading_icon(cosmic::widget::icon::from_name(
                                         "media-playback-start-symbolic",
                                     ))

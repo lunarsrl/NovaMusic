@@ -208,7 +208,7 @@ impl PlaylistPage {
                                 cosmic::widget::divider::horizontal::default().into(),
                                 cosmic::widget::row::with_children(vec![
 
-                                    cosmic::widget::button::text("Add To Playlist")
+                                    cosmic::widget::button::text("Add to queue")
                                         .leading_icon(cosmic::widget::icon::from_name("media-playback-start-symbolic"))
                                         .class(cosmic::theme::Button::Suggested)
                                         .on_press(Message::AddAlbumToQueue(
