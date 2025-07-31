@@ -6,6 +6,8 @@ use cosmic::widget::{Grid, JustifyContent, Widget};
 use cosmic::{iced, Application, Element, Theme};
 use std::path::PathBuf;
 use std::sync::Arc;
+use crate::app;
+use crate::app::tracks::SearchResult;
 
 #[derive(Debug, Clone)]
 pub struct PlaylistPage {
@@ -36,6 +38,7 @@ pub enum PlaylistPageState {
     Loading,
     Loaded,
     PlaylistPage(FullPlaylist),
+    Search(Vec<SearchResult>),
 }
 
 impl PlaylistPage {
@@ -62,8 +65,9 @@ impl PlaylistPage {
                     return cosmic::widget::container(
                         cosmic::widget::column::with_children(
                             vec![
-                                cosmic::widget::text::title3("No Playlists Found In Database").into(),
+                                cosmic::widget::text::title3("No playlists found in playlists folder").into(),
                                 cosmic::widget::text::text("1. Add some music to your queue \n 2. Hit the \"Create Playlist\" button when you're ready \n 3. Enter some basic info and return to this page").into(),
+                                cosmic::widget::text::caption_heading(format!("Checking: {}", dirs::data_local_dir().unwrap().join(app::AppModel::APP_ID).join("Playlists").to_string_lossy().to_string())).into(),
                             ]
                         ).spacing(cosmic::theme::spacing().space_s)
                     )
@@ -220,7 +224,7 @@ impl PlaylistPage {
                                         ))
                                         .into(),
 
-                                    cosmic::widget::button::text("Delete Playlist")
+                                    cosmic::widget::button::text("Delete playlist")
                                         .leading_icon(cosmic::widget::icon::from_name("window-close-symbolic"))
                                         .on_press(Message::PLaylistDeleteSafety)
                                         .class(cosmic::theme::Button::Destructive)
@@ -252,15 +256,142 @@ impl PlaylistPage {
                     cosmic::theme::spacing().space_m,
                 ]))
                 .into();
+            },
+            PlaylistPageState::Search(search_results) => {
+                cosmic::widget::container(cosmic::widget::responsive(move |size| {
+                    // Body
+                    let mut elements: Vec<Element<Message>> = vec![];
+                    let mut playlists: Vec<Playlist> = vec![];
+
+                    for each in search_results {
+                        if (0..=2).contains(&each.score) {
+                            match self.playlists.get(each.tracks_index) {
+                                None => {}
+                                Some(val) => {
+                                    playlists.push(val.clone());
+                                }
+                            }
+                        }
+                    }
+
+                    for playlist in &playlists {
+                        elements.push(
+                            cosmic::widget::button::custom(
+                                cosmic::widget::column::with_children(vec![
+                                    if let Some(cover_art) = &playlist.thumbnail {
+                                        cosmic::widget::container::Container::new(
+                                            cosmic::widget::image(cover_art),
+                                        )
+                                            .height((model.config.grid_item_size * 32) as f32)
+                                            .width((model.config.grid_item_size * 32) as f32)
+                                            .into()
+                                    } else {
+                                        cosmic::widget::container(
+                                            cosmic::widget::icon::from_name(
+                                                "media-optical-symbolic",
+                                            )
+                                                .size((model.config.grid_item_size * 32) as u16),
+                                        )
+                                            .align_x(Alignment::Center)
+                                            .align_y(Alignment::Center)
+                                            .into()
+                                    },
+                                    cosmic::widget::column::with_children(vec![
+                                        cosmic::widget::text::text(playlist.title.to_string())
+                                            .center()
+                                            .into(),
+                                    ])
+                                        .align_x(Alignment::Center)
+                                        .width(cosmic::iced::Length::Fill)
+                                        .into(),
+                                ])
+                                    .align_x(Alignment::Center),
+                            )
+                                .on_press(Message::PlaylistSelected(playlist.clone()))
+                                .class(cosmic::widget::button::ButtonClass::Icon)
+                                .width((model.config.grid_item_size * 32) as f32)
+                                .into(),
+                        )
+                    }
+
+                    let mut old_grid = Some(
+                        cosmic::widget::Grid::new()
+                            .width(Length::Fill)
+                            .height(Length::Shrink),
+                    );
+
+                    let width = size.width as u32;
+                    let mut spacing: u16 = 0;
+                    let mut items_per_row = 0;
+                    let mut index = 0;
+
+                    while width > (items_per_row * model.config.grid_item_size * 32) {
+                        items_per_row += 1;
+                    }
+                    items_per_row -= 1;
+
+                    let check_spacing: u32 =
+                        ((items_per_row + 1) * model.config.grid_item_size * 32)
+                            .saturating_sub(width);
+                    let check_final = (model.config.grid_item_size * 32 - check_spacing);
+
+                    if items_per_row < 3 {
+                        spacing = check_final as u16
+                    } else {
+                        spacing = (check_final / (items_per_row - 1)) as u16;
+                    }
+
+                    for element in elements {
+                        index += 1;
+                        if let Some(grid) = old_grid.take() {
+                            if (index % items_per_row) == 0 {
+                                old_grid = Some(grid.push(element).insert_row());
+                            } else {
+                                old_grid = Some(grid.push(element));
+                            }
+                        }
+                    }
+
+                    cosmic::widget::scrollable::vertical(
+                        cosmic::widget::container(
+                            old_grid
+                                .take()
+                                .unwrap()
+                                .column_spacing(spacing)
+                                .column_alignment(Alignment::Center)
+                                .justify_content(JustifyContent::Center)
+                                .row_alignment(Alignment::Center),
+                        )
+                            .align_x(Alignment::Center),
+                    )
+                        .into()
+                }))
+                    .height(Length::Fill)
+                    .into()
             }
         };
 
         cosmic::widget::container(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::row::with_children(vec![
-                    cosmic::widget::text::title2("Playlists").into()
+                    cosmic::widget::text::title2("Album Library")
+                    .width(Length::FillPortion(2))
+                    .into(),
+                cosmic::widget::horizontal_space()
+                    .width(Length::Shrink)
+                    .into(),
+                cosmic::widget::search_input(
+                    "Enter Album Name",
+                    model.search_field.as_str(),
+                )
+                    .on_input(|input| Message::UpdateSearch(input))
+                    .width(Length::FillPortion(1))
+                    .into(),
                 ])
-                .into(),
+                    .align_y(Alignment::Center)
+                    .spacing(cosmic::theme::spacing().space_s)
+                    .into(),
+
                 body,
             ])
             .spacing(cosmic::theme::spacing().space_s),

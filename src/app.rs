@@ -871,7 +871,55 @@ impl cosmic::Application for AppModel {
                             .map(action::Action::App),
                         );
                     }
-                    Page::Playlists(_) => {}
+                    Page::Playlists(page) => {
+                        let cloned_playlists = page.playlists.clone();
+
+                        return cosmic::Task::stream(
+                            cosmic::iced_futures::stream::channel(0, |mut tx| async move {
+                                tokio::task::spawn_blocking(move || {
+                                    let mut playlists = cloned_playlists
+                                        .par_iter()
+                                        .enumerate()
+                                        .map(|(index, playlist)| {
+                                            return match regex.find(&playlist.title) {
+                                                None => SearchResult {
+                                                    tracks_index: index,
+                                                    score: 999,
+                                                },
+                                                Some(val) => {
+                                                    if val.range().start == 0 {
+                                                        if val.range().end == playlist.title.len() {
+                                                            // Exact Match
+                                                            return SearchResult {
+                                                                tracks_index: index,
+                                                                score: 0,
+                                                            };
+                                                        }
+                                                        // Matches at the beginning
+
+                                                        return SearchResult {
+                                                            tracks_index: index,
+                                                            score: 1,
+                                                        };
+                                                    }
+                                                    // Matches somewhere else
+                                                    SearchResult {
+                                                        tracks_index: index,
+                                                        score: 2,
+                                                    }
+                                                }
+                                            };
+                                        })
+                                        .collect::<Vec<SearchResult>>();
+
+                                    playlists.sort_by(|a, b| a.score.cmp(&b.score));
+                                    tx.try_send(Message::SearchResults(playlists))
+                                });
+                                ()
+                            })
+                                .map(action::Action::App),
+                        );
+                    }
                     Page::Tracks(page) => {
                         let cloned_tracks = page.tracks.clone();
 
@@ -1388,7 +1436,8 @@ impl cosmic::Application for AppModel {
                             .map(cosmic::Action::App);
                         }
                         PlaylistPageState::Loaded => {}
-                        PlaylistPageState::PlaylistPage(_) => {}
+                        PlaylistPageState::PlaylistPage(_) => {},
+                        PlaylistPageState::Search(_) => todo!()
                     },
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
@@ -2041,7 +2090,7 @@ from track
                     Page::NowPlaying(_) => {}
 
                     Page::Albums(page) => page.page_state = AlbumPageState::Search(tracks),
-                    Page::Playlists(page) => {}
+                    Page::Playlists(page) => {page.playlist_page_state = PlaylistPageState::Search(tracks)}
                     Page::Tracks(track_list) => {
                         track_list.track_page_state = TrackPageState::Search;
                         track_list.search = tracks;
