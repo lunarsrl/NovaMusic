@@ -224,8 +224,7 @@ impl PlaylistPage {
                                         ))
                                         .into(),
 
-                                    cosmic::widget::button::text("Delete playlist")
-                                        .leading_icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name("user-trash-symbolic"))
                                         .on_press(Message::PLaylistDeleteSafety)
                                         .class(cosmic::theme::Button::Destructive)
                                         .into(),

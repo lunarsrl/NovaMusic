@@ -41,16 +41,8 @@ struct AlbumTracks {
     disc_number: u64,
 }
 
-struct Playlist {
-    id: u64,
-    name: String,
-}
 
-struct PlaylistTracks {
-    id: u64,
-    playlist_id: u64,
-    track_id: u64,
-}
+
 
 pub fn create_database() {
     let conn = rusqlite::Connection::open(
@@ -77,34 +69,6 @@ pub fn create_database() {
         [],
     )
     .unwrap();
-
-    conn.execute(
-        "
-        CREATE TABLE IF NOT EXISTS playlists (
-            id INTEGER PRIMARY KEY,
-            name TEXT,
-            track_number INTEGER,
-            album_cover BLOB
-        )",
-        [],
-    )
-        .unwrap();
-
-    conn.execute(
-        "
-    CREATE TABLE IF NOT EXISTS playlist_tracks (
-        id INTEGER PRIMARY KEY,
-        track_id INTEGER,
-        playlist_id INTEGER,
-        FOREIGN KEY(playlist_id) REFERENCES playlists(id),
-        FOREIGN KEY(track_id) REFERENCES tracks(id)
-    )",
-        [],
-    )
-        .unwrap();
-
-
-
 
     conn.execute(
         "
