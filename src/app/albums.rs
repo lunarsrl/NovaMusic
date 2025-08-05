@@ -10,12 +10,15 @@ use cosmic::{iced, widget, Application, Element, Theme};
 use futures_util::{SinkExt, StreamExt};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::sync::Arc;
+use cosmic::iced_widget::scrollable::Viewport;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
     pub albums: Arc<Vec<Album>>,
     pub page_state: AlbumPageState,
     pub has_fully_loaded: bool,
+    pub viewport: Option<Viewport>,
+    pub scrollbar_id: cosmic::iced_core::widget::Id,
 }
 
 #[derive(Clone, Debug)]
@@ -35,11 +38,14 @@ impl AlbumPage {
             albums: Arc::from(album_list),
             page_state: AlbumPageState::Loading,
             has_fully_loaded: false,
+            viewport: None,
+            scrollbar_id: cosmic::iced_core::widget::Id::unique()
         }
     }
 
     pub fn load_page<'a>(&'a self, model: &'a AppModel) -> Element<'a, Message> {
         let page_margin = cosmic::theme::spacing().space_m;
+
         match &self.page_state {
             AlbumPageState::Loading | AlbumPageState::Loaded => {
                 if self.albums.is_empty() {
@@ -218,6 +224,8 @@ impl AlbumPage {
                                 )
                                 .align_x(Alignment::Center),
                             )
+                                .id(self.scrollbar_id.clone())
+                                .on_scroll(|view| Message::ScrollView(view))
                             .into()
                         }))
                         .height(Length::Fill)

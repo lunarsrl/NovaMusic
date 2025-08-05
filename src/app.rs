@@ -91,6 +91,7 @@ use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
+use cosmic::iced_widget::scrollable::Viewport;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, Track};
 use symphonia::core::io::MediaSourceStream;
@@ -98,6 +99,7 @@ use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, T
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
 use symphonia::default::get_probe;
+use crate::app::Page::Playlists;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -237,6 +239,7 @@ pub enum Message {
     PlaylistDeleteConfirmed,
     AddToDatabase(PathBuf),
     ProbeFail,
+    ScrollView(Viewport),
 }
 
 #[derive(Clone, Debug)]
@@ -697,6 +700,22 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::ScrollView(view) => {
+               match self.nav.active_data_mut::<Page>().unwrap() {
+                   Page::NowPlaying(_) => {
+                       return cosmic::task::none();
+                   }
+                   Page::Albums(page) => {
+                       page.viewport = Some(view);
+                   }
+                   Page::Playlists(_) => {
+                       return cosmic::task::none();
+                   }
+                   Page::Tracks(_) => {
+                       return cosmic::task::none();
+                   }
+               }
+            }
             Message::PlaylistDeleteConfirmed => {
                 if let Page::Playlists(page) = self.access_nav_data(3) {
                     if let PlaylistPageState::PlaylistPage(page) = &page.playlist_page_state {
@@ -1130,12 +1149,23 @@ impl cosmic::Application for AppModel {
                                 tx.send(Message::UpdateScanProgress).await.unwrap();
                             }
                         } else {
-                            tx.send(Message::ProbeFail).await.unwrap();
-                            log::info!(
+
+                            if path.with_extension("m3u") == path || path.with_extension("m3u8") == path {
+                                let dir = dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("Playlists");
+                                let name = path.file_name().unwrap().to_string_lossy().to_string();
+                                // let new_path = fs::File::create(dir.as_path().join(name)).expect("Failed to create file = AddToDatabase");
+                                fs::copy(path, dir.as_path().join(name)).unwrap();
+                                tx.send(Message::UpdateScanProgress).await.unwrap();
+                            } else {
+                                tx.send(Message::ProbeFail).await.unwrap();
+
+                                log::info!(
                                     "ERROR: Probe failure \nErred Path: {}",
 
                                     path.to_str().unwrap().to_string()
                                 );
+                            }
+
                         }
                     },
                 ))
@@ -1511,6 +1541,11 @@ from track
                         false => {
                             dat.page_state = AlbumPageState::Loading;
                         }
+                    }
+                    if let Some(view) = dat.viewport {
+                        return cosmic::iced_widget::scrollable::scroll_to(dat.scrollbar_id.clone(), view.absolute_offset())
+                    } else {
+                        return cosmic::task::none()
                     }
                 }
             }
