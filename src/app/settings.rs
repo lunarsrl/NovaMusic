@@ -28,6 +28,8 @@ impl AppModel {
 
         let contain = widget::Container::new(
             widget::column::Column::with_children([
+
+                cosmic::widget::toaster(&self.toasts, cosmic::widget::horizontal_space()).into(),
                 current_settings
                     .title("Current Scan Results")
                     .add(widget::Row::with_children([

@@ -48,13 +48,13 @@ impl TrackPage {
                 cosmic::widget::row::with_children(vec![
                     // HEADING AREA
                     cosmic::widget::row::with_children(vec![
-                        cosmic::widget::text::title2("All Tracks")
+                        cosmic::widget::text::title2("Track Library")
                             .width(Length::FillPortion(2))
                             .into(),
                         cosmic::widget::horizontal_space()
                             .width(Length::Shrink)
                             .into(),
-                        cosmic::widget::search_input("Enter Track Title", &model.search_field)
+                        cosmic::widget::search_input("Enter Track Information", &model.search_field)
                             .on_input(|a| Message::UpdateSearch(a))
                             .width(Length::FillPortion(1))
                             .into(),

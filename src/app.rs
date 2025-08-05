@@ -143,6 +143,9 @@ pub struct AppModel {
     pub playlist_cover: Vec<u8>,
     footer_toggled: bool,
     playlist_delete_dialog: bool,
+
+    // Error Handling
+    toasts: cosmic::widget::toaster::Toasts<Message>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -175,12 +178,18 @@ pub enum Message {
     RescanDir,
 
     // Filesystem scan related
+    ChooseFolder,
+    FolderChosen(String),
+    FolderPickerFail(String),
     ChangeScanDir(String),
     UpdateScanProgress,
     UpdateScanDirSize,
+    AddToDatabase(PathBuf),
+    ProbeFail,
 
     // Page Rendering
     OnNavEnter,
+    ScrollView(Viewport),
 
     // Album Page
     AlbumRequested((String, String)), // when an album icon is clicked [gets title & artist of album]
@@ -191,7 +200,6 @@ pub enum Message {
     AlbumPageReturn,
 
     // Home Page
-    //todo Change to pathbufs for safety?
     AddTrackToQueue(String),
     //todo Make albums in queue fancier kinda like Elisa does it
     AddAlbumToQueue(Vec<String>),
@@ -204,6 +212,16 @@ pub enum Message {
     ToggleTitle(bool),
     ToggleAlbum(bool),
     ToggleArtist(bool),
+
+    // Playlist Page
+    AddToPlaylist,
+    CreatePlaylist,
+    UpdatePlaylistName(String),
+    PlaylistFound(Vec<Playlist>),
+    PlaylistSelected(Playlist),
+    PlaylistPageReturn,
+    PlaylistDeleteSafety,
+    PlaylistDeleteConfirmed,
 
     // Audio Messages
     PlayPause,
@@ -220,26 +238,16 @@ pub enum Message {
     RemoveSongInQueue(usize),
 
     // Settings
-    ChooseFolder,
-    FolderChosen(String),
-    FolderPickerFail,
     GridSliderChange(u32),
     VolumeSliderChange(f32),
 
-    //experimenting
-    AddToPlaylist,
-    CreatePlaylist,
-    UpdatePlaylistName(String),
-
+   // Footer
     FooterToggle,
-    PlaylistFound(Vec<Playlist>),
-    PlaylistSelected(Playlist),
-    PlaylistPageReturn,
-    PLaylistDeleteSafety,
-    PlaylistDeleteConfirmed,
-    AddToDatabase(PathBuf),
-    ProbeFail,
-    ScrollView(Viewport),
+
+    // Error Reporting
+    Toasts(cosmic::widget::toaster::ToastId),
+
+    //experimenting
 }
 
 #[derive(Clone, Debug)]
@@ -321,7 +329,6 @@ impl cosmic::Application for AppModel {
             .data::<Page>(Page::Albums(AlbumPage::new(vec![])))
             .icon(icon::from_name("media-optical-symbolic"));
 
-        // todo Add playlist support
         nav.insert()
             .text(fl!("playlists"))
             .data::<Page>(Page::Playlists(PlaylistPage::new()))
@@ -336,6 +343,9 @@ impl cosmic::Application for AppModel {
             Some(som) => som,
         };
         let config = config.1;
+
+        // init toasts
+
 
         sink.set_volume(config.volume / 100.0);
         // Construct the app model with the runtime's core.
@@ -365,6 +375,7 @@ impl cosmic::Application for AppModel {
             playlist_cover: vec![],
             footer_toggled: true,
             playlist_delete_dialog: false,
+            toasts: cosmic::widget::toaster::Toasts::new(|a| Message::Toasts(a)),
         };
 
         // Create a startup command that sets the window title.
@@ -651,7 +662,7 @@ impl cosmic::Application for AppModel {
                             .secondary_action(
                                 cosmic::widget::button::text("Cancel")
                                     .class(cosmic::theme::Button::Standard)
-                                    .on_press(Message::PLaylistDeleteSafety),
+                                    .on_press(Message::PlaylistDeleteSafety),
                             )
                             .into(),
                     );
@@ -686,12 +697,21 @@ impl cosmic::Application for AppModel {
     /// Application events will be processed through the view. Any messages emitted by
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
+        let body;
         match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(home_page) => home_page.load_page(&self),
-            Page::Tracks(track_page) => track_page.load_page(self),
-            Page::Albums(album_page) => album_page.load_page(self),
-            Page::Playlists(playlist_page) => playlist_page.load_page(self),
+            Page::NowPlaying(home_page) => body = home_page.load_page(self),
+            Page::Tracks(track_page) => body = track_page.load_page(self),
+            Page::Albums(album_page) => body = album_page.load_page(self),
+            Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
         }
+
+        cosmic::widget::container(
+            cosmic::widget::column::with_children(vec![
+                cosmic::widget::toaster(&self.toasts, cosmic::widget::horizontal_space()).into(),
+                body
+            ]
+            )
+        ).into()
     }
 
     /// Handles messages emitted by the application and its widgets.
@@ -700,6 +720,9 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::Toasts(id) => {
+                self.toasts.remove(id)
+            }
             Message::ScrollView(view) => {
                match self.nav.active_data_mut::<Page>().unwrap() {
                    Page::NowPlaying(_) => {
@@ -727,7 +750,7 @@ impl cosmic::Application for AppModel {
                 return cosmic::Task::future(async move { Message::OnNavEnter })
                     .map(cosmic::Action::App);
             }
-            Message::PLaylistDeleteSafety => match self.playlist_delete_dialog {
+            Message::PlaylistDeleteSafety => match self.playlist_delete_dialog {
                 true => self.playlist_delete_dialog = false,
                 false => self.playlist_delete_dialog = true,
             },
@@ -749,16 +772,48 @@ impl cosmic::Application for AppModel {
                         }
                         Err(err) => {
                             // todo toasts for file picking errors
-                            log::info!("folder picker fail: {}", err);
-                            Message::FolderPickerFail
+                            let error: String;
+                            match err {
+                                Error::Cancelled => {
+                                    error = String::from("Cancelled File Picker: Keeping scan directory the same")
+                                }
+                                Error::Close(err) => {
+                                    error = String::from(format!("Closer: {}", err.to_string()))
+                                }
+                                Error::Open(err) => {
+                                    error = String::from(format!("Open: {}", err.to_string()))
+                                }
+                                Error::Response(err) => {
+                                    error = String::from(format!("Response: {}", err.to_string()))
+                                }
+                                Error::Save(err) => {
+                                    error = String::from(format!("Save: {}", err.to_string()))
+                                }
+                                Error::SetDirectory(err) => {
+                                    error = String::from(format!("Set Directory: {}", err.to_string()))
+                                }
+                                Error::SetAbsolutePath(err) => {
+                                    error = String::from(format!("Set Absolute Path: {}", err.to_string()))
+                                }
+                                Error::UrlAbsolute => {
+                                    error = String::from("URL Absolute")
+                                }
+                            }
+                            Message::FolderPickerFail(error)
                         }
                     }
                 })
                 .map(action::Action::App);
             }
-            Message::FolderPickerFail => {
-                self.config
-                    .set_scan_dir(&self.config_handler, "".to_string());
+            Message::FolderPickerFail(error) => {
+                if !(error.contains("Cancelled File Picker: Keeping scan directory the same")) {
+                    self.config
+                        .set_scan_dir(&self.config_handler, "".to_string());
+                } else {}
+
+                return self.toasts.push(
+                    cosmic::widget::toaster::Toast::new(error)
+                ).map(cosmic::Action::App);
             }
             Message::FolderChosen(fp) => {
                 self.rescan_available = true;
@@ -1175,7 +1230,6 @@ impl cosmic::Application for AppModel {
                 self.config
                     .set_files_scanned(&self.config_handler, self.config.files_scanned + 1)
                     .expect("Failed to save to config");
-
                 self.rescan_available = true;
             }
             Message::ProbeFail => {
@@ -1367,7 +1421,9 @@ impl cosmic::Application for AppModel {
                         }
                         PlaylistPageState::Loaded => {}
                         PlaylistPageState::PlaylistPage(_) => {}
-                        PlaylistPageState::Search(_) => todo!(),
+                        PlaylistPageState::Search(_) => {
+                            page.playlist_page_state = PlaylistPageState::Loaded
+                        },
                     },
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
@@ -1625,8 +1681,9 @@ from track
                         )
                         .expect("error preparing sql");
 
-                    let track = stmt
-                        .query_row([&filepath], |row| {
+
+
+                        if let Ok(track) = stmt.query_row([&filepath], |row| {
                             Ok(AppTrack {
                                 id: row.get("id").unwrap_or(0),
                                 title: row.get("title").unwrap_or("".to_string()),
@@ -1641,10 +1698,16 @@ from track
                                     Err(_) => None,
                                 },
                             })
-                        })
-                        .expect("error executing query");
+                        }) {
+                            self.queue.push(track);
+                        } else {
+                            return self.toasts.push(
+                                cosmic::widget::toaster::Toast::new(format!("Track at \"{}\" not found in database", filepath))
+                            ).map(cosmic::Action::App);
+                        }
 
-                    self.queue.push(track);
+
+
                 }
 
                 match self.sink.empty() {

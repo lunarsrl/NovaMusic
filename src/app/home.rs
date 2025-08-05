@@ -27,7 +27,7 @@ use humantime::format_duration;
 pub(crate) struct HomePage;
 
 impl HomePage {
-    pub fn load_page(&self, model: &AppModel) -> Element<'static, app::Message> {
+    pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
         // Time ELapsed
         let mut time_elapsed = format_time(model.song_progress);
 

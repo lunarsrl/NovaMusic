@@ -225,7 +225,7 @@ impl PlaylistPage {
                                         .into(),
 
                                     cosmic::widget::button::icon(cosmic::widget::icon::from_name("user-trash-symbolic"))
-                                        .on_press(Message::PLaylistDeleteSafety)
+                                        .on_press(Message::PlaylistDeleteSafety)
                                         .class(cosmic::theme::Button::Destructive)
                                         .into(),
 
@@ -373,14 +373,14 @@ impl PlaylistPage {
         cosmic::widget::container(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::row::with_children(vec![
-                    cosmic::widget::text::title2("Album Library")
+                    cosmic::widget::text::title2("Playlists")
                     .width(Length::FillPortion(2))
                     .into(),
                 cosmic::widget::horizontal_space()
                     .width(Length::Shrink)
                     .into(),
                 cosmic::widget::search_input(
-                    "Enter Album Name",
+                    "Enter Playlist Name",
                     model.search_field.as_str(),
                 )
                     .on_input(|input| Message::UpdateSearch(input))
