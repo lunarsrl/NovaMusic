@@ -9,6 +9,7 @@ use std::task::Poll;
 use cosmic::dialog::file_chooser::open::file;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use futures_util::SinkExt;
+use rusqlite::fallible_iterator::FallibleIterator;
 use rust_embed::utils::FileEntry;
 use tokio::fs::DirEntry;
 use crate::app;
@@ -26,50 +27,29 @@ pub enum MediaFileTypes {
 }
 
 
-pub async fn scan_directory(path: PathBuf, tx: &mut Sender<Message>) -> Vec<MediaFileTypes> {
-    let mut files = vec![];
-
-    log::info!("Scanning directory: {:?}", path);
-    read_dir(path, tx, &mut files).await;
-    tx.send(Message::UpdateScanDirSize(files.len() as u32)).await.unwrap();
-    files
+pub async fn scan_directory(path: PathBuf, tx: &mut Sender<Message>) {
+    let mut index = 0;
+    read_dir(path, tx, &mut index).await
 }
 
-async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, files: &mut Vec<MediaFileTypes>){
-    match path.read_dir() {
-        Ok(dir) => {
-            for entry in dir {
+async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, index: &mut u32){
+    if let Ok(dir) = path.read_dir() {
+       for entry in dir {
+           if let Ok(entry) = entry {
+               let path = entry.path();
+              if let Ok(entry) = entry.metadata() {
+                  if entry.is_dir() {
+                      Box::pin(read_dir(path, tx, index)).await;
+                  } else {
+                      tx.send(Message::UpdateScanDirSize).await.unwrap();
+                      tx.send(Message::AddToDatabase(path.clone())).await.unwrap();
 
-
-                match entry {
-                    Ok(dir) => {
-                        match dir.metadata().unwrap().is_dir() {
-                            true => {
-                                let found_path = dir.path();
-                                Box::pin(read_dir(found_path, tx, files)).await;
-                            }
-                            false => {
-
-                                match filter_files(dir.path()).await {
-                                    Some(dir) => {
-                                        files.push(dir);
-                                    }
-                                    None => {
-                                    }
-                                }
-
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        log::error!("Scan directory could not be opened");
-                    }
-                }
-            }
-        }
-        Err(err) => {
-            log::error!("ERROR: Reading Dir Path in Config{:?}", err);
-        }
+                  }
+              }
+           }
+       }
+    } else {
+        todo!("error toast")
     }
 }
 async fn filter_files(path: PathBuf) -> Option<MediaFileTypes> {

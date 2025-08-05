@@ -64,7 +64,9 @@ use futures_util::{SinkExt, StreamExt};
 use log::info;
 use rodio::source::SeekError::SymphoniaDecoder;
 
-use crate::app::playlists::{FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack};
+use crate::app::playlists::{
+    FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
+};
 use cosmic::cctk::wayland_protocols::ext::session_lock::v1::client::ext_session_lock_manager_v1::ExtSessionLockManagerV1;
 use cosmic::dialog::file_chooser::open::FileResponse;
 use cosmic::iced::task::Handle;
@@ -78,8 +80,7 @@ use rodio::{OutputStream, Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
 use std::fmt::{format, Debug};
-use std::{fs, io};
-use std::fs::File;
+use std::fs::{create_dir, File};
 use std::future::Future;
 use std::io::{BufRead, BufReader, Write};
 use std::ops::DerefMut;
@@ -89,6 +90,7 @@ use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
+use std::{fs, io};
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, Track};
 use symphonia::core::io::MediaSourceStream;
@@ -138,7 +140,7 @@ pub struct AppModel {
     pub playlist_dialog_text: String,
     pub playlist_cover: Vec<u8>,
     footer_toggled: bool,
-    playlist_delete_dialog: bool
+    playlist_delete_dialog: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -172,8 +174,8 @@ pub enum Message {
 
     // Filesystem scan related
     ChangeScanDir(String),
-    UpdateScanProgress((u32, u32, u32)),
-    UpdateScanDirSize(u32),
+    UpdateScanProgress,
+    UpdateScanDirSize,
 
     // Page Rendering
     OnNavEnter,
@@ -233,6 +235,8 @@ pub enum Message {
     PlaylistPageReturn,
     PLaylistDeleteSafety,
     PlaylistDeleteConfirmed,
+    AddToDatabase(PathBuf),
+    ProbeFail,
 }
 
 #[derive(Clone, Debug)]
@@ -329,7 +333,6 @@ impl cosmic::Application for AppModel {
             Some(som) => som,
         };
         let config = config.1;
-
 
         sink.set_volume(config.volume / 100.0);
         // Construct the app model with the runtime's core.
@@ -632,31 +635,25 @@ impl cosmic::Application for AppModel {
 
         if self.playlist_delete_dialog {
             if let Page::Playlists(page) = self.nav.active_data().unwrap() {
-                if let PlaylistPageState::PlaylistPage(page)  = &page.playlist_page_state {
+                if let PlaylistPageState::PlaylistPage(page) = &page.playlist_page_state {
                     return Some(
                         cosmic::widget::dialog::Dialog::new()
                             .title("Delete Playlist?")
-                            .body(
-                                format!("Delete {}?", page.playlist.path.as_str())
-                            )
+                            .body(format!("Delete {}?", page.playlist.path.as_str()))
                             .primary_action(
-                                cosmic::widget::button::text("Delete Playlist").class(cosmic::theme::Button::Destructive)
-                                    .on_press(
-                                        Message::PlaylistDeleteConfirmed
-                                    )
+                                cosmic::widget::button::text("Delete Playlist")
+                                    .class(cosmic::theme::Button::Destructive)
+                                    .on_press(Message::PlaylistDeleteConfirmed),
                             )
                             .secondary_action(
-                                cosmic::widget::button::text("Cancel").class(cosmic::theme::Button::Standard)
-                                    .on_press(
-                                        Message::PLaylistDeleteSafety
-                                    )
+                                cosmic::widget::button::text("Cancel")
+                                    .class(cosmic::theme::Button::Standard)
+                                    .on_press(Message::PLaylistDeleteSafety),
                             )
-                            .into()
-                    )
+                            .into(),
+                    );
                 }
             }
-
-
         }
         None
     }
@@ -708,22 +705,13 @@ impl cosmic::Application for AppModel {
                     page.playlist_page_state = PlaylistPageState::Loading
                 }
                 self.playlist_delete_dialog = false;
-                return cosmic::Task::future(async move {
-                    Message::OnNavEnter
-                }).map(cosmic::Action::App)
-
+                return cosmic::Task::future(async move { Message::OnNavEnter })
+                    .map(cosmic::Action::App);
             }
-            Message::PLaylistDeleteSafety => {
-                match self.playlist_delete_dialog {
-                    true => {
-                        self.playlist_delete_dialog = false
-                    }
-                    false => {
-                        self.playlist_delete_dialog = true
-                    }
-                }
-
-            }
+            Message::PLaylistDeleteSafety => match self.playlist_delete_dialog {
+                true => self.playlist_delete_dialog = false,
+                false => self.playlist_delete_dialog = true,
+            },
             Message::UpdatePlaylistName(val) => self.playlist_dialog_text = val,
             Message::ChooseFolder => {
                 return cosmic::task::future(async move {
@@ -917,7 +905,7 @@ impl cosmic::Application for AppModel {
                                 });
                                 ()
                             })
-                                .map(action::Action::App),
+                            .map(action::Action::App),
                         );
                     }
                     Page::Tracks(page) => {
@@ -1054,10 +1042,18 @@ impl cosmic::Application for AppModel {
 
                 // Settings: No rescan until current rescan finishes
                 self.rescan_available = false;
-                self.config.set_num_files_found(&self.config_handler, 0);
-                self.config.set_files_scanned(&self.config_handler, 0);
-                self.config.set_tracks_found(&self.config_handler, 0);
-                self.config.set_albums_found(&self.config_handler, 0);
+                self.config
+                    .set_num_files_found(&self.config_handler, 0)
+                    .expect("Failed to change config");
+                self.config
+                    .set_files_scanned(&self.config_handler, 0)
+                    .expect("Failed to change config");
+                self.config
+                    .set_tracks_found(&self.config_handler, 0)
+                    .expect("Failed to change config");
+                self.config
+                    .set_albums_found(&self.config_handler, 0)
+                    .expect("Failed to change config");
 
                 // Albums: Full reset
                 let album_pos = self.nav.entity_at(2).unwrap();
@@ -1084,183 +1080,81 @@ impl cosmic::Application for AppModel {
 
                 let path = self.config.scan_dir.clone().parse().unwrap();
                 return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                    10,
+                    100,
                     |mut tx| async move {
-                        let files = scan_directory(path, &mut tx).await;
-                        let mut files_scanned = 0;
-
-                        for file in files {
-                            files_scanned += 1;
-                            match file {
-                                MediaFileTypes::FLAC(path) => {
-                                    let file = fs::File::open(&path).unwrap();
-
-                                    let probe = get_probe();
-                                    let mss = symphonia::core::io::MediaSourceStream::new(
-                                        Box::new(file),
-                                        Default::default(),
-                                    );
-
-                                    let mut hint = Hint::new();
-                                    hint.with_extension("flac");
-
-                                    let mut reader = match probe.format(
-                                        &hint,
-                                        mss,
-                                        &Default::default(),
-                                        &Default::default(),
-                                    ) {
-                                        Ok(read) => read,
-                                        Err(err) => {
-                                            eprintln!("{}", err);
-                                            continue;
-                                        }
-                                    }
-                                    .format;
-
-                                    if let Some(metadata_rev) = reader.metadata().current() {
-                                        let metadata_tags = metadata_rev
-                                            .tags()
-                                            .into_iter()
-                                            .filter(|val| val.is_known())
-                                            .map(|val| val.clone())
-                                            .collect::<Vec<Tag>>();
-
-                                        create_database_entry(metadata_tags, &path)
-                                    } else {
-                                        log::info!("no metadata found")
-                                    }
-                                }
-                                MediaFileTypes::MP4(path) => {
-                                    let file = fs::File::open(&path).unwrap();
-
-                                    let probe = get_probe();
-                                    let mss = symphonia::core::io::MediaSourceStream::new(
-                                        Box::new(file),
-                                        Default::default(),
-                                    );
-
-                                    let mut hint = Hint::new();
-                                    hint.with_extension("flac");
-
-                                    let mut reader = match probe.format(
-                                        &hint,
-                                        mss,
-                                        &Default::default(),
-                                        &Default::default(),
-                                    ) {
-                                        Ok(read) => read,
-                                        Err(err) => {
-                                            eprintln!("{}", err);
-                                            continue;
-                                        }
-                                    }
-                                    .format;
-
-                                    if let Some(metadata_rev) = reader.metadata().current() {
-                                        let metadata_tags = metadata_rev
-                                            .tags()
-                                            .into_iter()
-                                            .filter(|val| val.is_known())
-                                            .map(|val| val.clone())
-                                            .collect::<Vec<Tag>>();
-
-                                        create_database_entry(metadata_tags, &path)
-                                    } else {
-                                        log::info!("no metadata found")
-                                    }
-                                }
-                                MediaFileTypes::MP3(path) => {
-                                    let file = fs::File::open(&path).unwrap();
-                                    let probe = get_probe();
-                                    let mss = symphonia::core::io::MediaSourceStream::new(
-                                        Box::new(file),
-                                        Default::default(),
-                                    );
-
-                                    let mut hint = Hint::new();
-                                    hint.with_extension("mp3");
-
-                                    let mut reader = match probe.format(
-                                        &hint,
-                                        mss,
-                                        &Default::default(),
-                                        &Default::default(),
-                                    ) {
-                                        Ok(read) => read,
-                                        Err(err) => {
-                                            log::warn!("Something went wrong: {}", err);
-                                            continue;
-                                        }
-                                    };
-
-                                    // ID3v1 metadata is stored at the end while ID3v2 is stored at the beginning. I don't know how to fix that.
-                                    if let Some(mdat_revision) = reader.metadata.get() {
-                                        if let Some(mdat_revision) = mdat_revision.current() {
-                                            let metadata_tags = mdat_revision
-                                                .tags()
-                                                .iter()
-                                                .filter(|a| a.is_known())
-                                                .map(|a| a.clone())
-                                                .collect::<Vec<Tag>>();
-                                            create_database_entry(metadata_tags, &path)
-                                        } else {
-                                            log::warn!("no metadata found")
-                                        }
-                                    } else {
-                                    }
-                                }
-                            }
-                        }
-
-                        let conn = rusqlite::Connection::open(
-                            dirs::data_local_dir()
-                                .unwrap()
-                                .join(Self::APP_ID)
-                                .join("nova_music.db"),
-                        )
-                        .unwrap();
-
-                        let albums_found =
-                            conn.query_row("select count(*) from album", [], |row| {
-                                Ok(row.get::<usize, u32>(0).unwrap_or(0))
-                            });
-
-                        let tracks_found =
-                            conn.query_row("select count(*) from track", [], |row| {
-                                Ok(row.get::<usize, u32>(0).unwrap_or(0))
-                            });
-
-                        tx.send(Message::UpdateScanProgress((
-                            albums_found.unwrap_or(0),
-                            tracks_found.unwrap_or(0),
-                            files_scanned,
-                        )))
-                        .await
-                        .expect("Hello");
-
+                        scan_directory(path, &mut tx).await;
                         tx.send(Message::OnNavEnter).await.expect("de")
                     },
                 ))
-                // Must wrap our app type in `cosmic::Action`.
                 .map(cosmic::Action::App);
             }
-            Message::UpdateScanProgress((album, tracks, files)) => {
+            Message::AddToDatabase(path) => {
+                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                    100,
+                    move |mut tx| async move {
+                        let file = fs::File::open(&path).unwrap();
+                        let probe = get_probe();
+                        let mss = symphonia::core::io::MediaSourceStream::new(
+                            Box::new(file),
+                            Default::default(),
+                        );
+
+                        if let Ok(mut reader) = probe.format(
+                            &Default::default(),
+                            mss,
+                            &Default::default(),
+                            &Default::default(),
+                        ) {
+                            if let Some(mdat) = reader.metadata.get() {
+                                let tags = mdat
+                                    .current()
+                                    .unwrap()
+                                    .tags()
+                                    .iter()
+                                    .filter(|a| a.is_known())
+                                    .map(|a| a.clone())
+                                    .collect();
+                                create_database_entry(tags, &path).await;
+                                tx.send(Message::UpdateScanProgress).await.unwrap();
+                            } else {
+                                let mdat = reader.format.metadata();
+                                let tags = mdat
+                                    .current()
+                                    .unwrap()
+                                    .tags()
+                                    .iter()
+                                    .filter(|a| a.is_known())
+                                    .map(|a| a.clone())
+                                    .collect();
+                                create_database_entry(tags, &path).await;
+                                tx.send(Message::UpdateScanProgress).await.unwrap();
+                            }
+                        } else {
+                            tx.send(Message::ProbeFail).await.unwrap();
+                            log::info!(
+                                    "ERROR: Probe failure \nErred Path: {}",
+
+                                    path.to_str().unwrap().to_string()
+                                );
+                        }
+                    },
+                ))
+                    .map(cosmic::Action::App);
+            }
+            Message::UpdateScanProgress => {
                 self.config
-                    .set_albums_found(&self.config_handler, album)
+                    .set_files_scanned(&self.config_handler, self.config.files_scanned + 1)
                     .expect("Failed to save to config");
-                self.config
-                    .set_tracks_found(&self.config_handler, tracks)
-                    .expect("Failed to save to config");
-                self.config
-                    .set_files_scanned(&self.config_handler, files)
-                    .expect("Failed to save to config");
+
                 self.rescan_available = true;
             }
-
-            Message::UpdateScanDirSize(num) => {
+            Message::ProbeFail => {
+                self.config.set_num_files_found(&self.config_handler, self.config.num_files_found - 1)
+                    .expect("Failed to save to config");
+            }
+            Message::UpdateScanDirSize => {
                 self.config
-                    .set_num_files_found(&self.config_handler, num)
+                    .set_num_files_found(&self.config_handler, self.config.num_files_found + 1)
                     .expect("Config Save Failed");
             }
 
@@ -1393,22 +1287,25 @@ impl cosmic::Application for AppModel {
 
                                         for file in dir {
                                             if let Ok(file) = file {
-
-                                                let files = io::BufReader::new(fs::File::open(file.path()).unwrap());
+                                                let files = io::BufReader::new(
+                                                    fs::File::open(file.path()).unwrap(),
+                                                );
                                                 let path = file.path();
                                                 let mut is_m3u = false;
 
-                                                for (index, line) in files.lines().filter_map(Result::ok).enumerate() {
+                                                for (index, line) in
+                                                    files.lines().filter_map(Result::ok).enumerate()
+                                                {
                                                     let mut title = String::from("");
                                                     let mut cover = String::from("");
 
                                                     if !is_m3u {
-                                                    if line.contains("#EXTM3U") && index == 0 {
-                                                        is_m3u = true;
-                                                        log::info!("is m3u")
-                                                    } else {
-                                                        continue
-                                                    }
+                                                        if line.contains("#EXTM3U") && index == 0 {
+                                                            is_m3u = true;
+                                                            log::info!("is m3u")
+                                                        } else {
+                                                            continue;
+                                                        }
                                                     }
 
                                                     if is_m3u && line.contains("#PLAYLIST:") {
@@ -1417,27 +1314,30 @@ impl cosmic::Application for AppModel {
                                                         log::info!("title: {}", title);
                                                         let playlist = Playlist {
                                                             title,
-                                                            path: path.to_str().unwrap().to_string(),
+                                                            path: path
+                                                                .to_str()
+                                                                .unwrap()
+                                                                .to_string(),
                                                             thumbnail: None,
-                                                        } ;
+                                                        };
 
                                                         playlists.push(playlist);
                                                         break;
                                                     } else {
-
                                                     }
                                                 }
                                             }
                                         }
-                                        tx.try_send(Message::PlaylistFound(playlists)).expect("send error");
+                                        tx.try_send(Message::PlaylistFound(playlists))
+                                            .expect("send error");
                                     });
                                 },
                             ))
                             .map(cosmic::Action::App);
                         }
                         PlaylistPageState::Loaded => {}
-                        PlaylistPageState::PlaylistPage(_) => {},
-                        PlaylistPageState::Search(_) => todo!()
+                        PlaylistPageState::PlaylistPage(_) => {}
+                        PlaylistPageState::Search(_) => todo!(),
                     },
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
@@ -1518,22 +1418,17 @@ from track
             }
             Message::PlaylistSelected(playlist) => {
                 if let Page::Playlists(page) = self.access_nav_data(3) {
-
                     let mut tracks = vec![];
 
-                    let files = io::BufReader::new(
-                        match fs::File::open(&playlist.path) {
-                            Ok(val) => {val}
-                            Err(err) => {
-                                log::info!("{}", err);
-                                return cosmic::task::none();
-                            }
+                    let files = io::BufReader::new(match fs::File::open(&playlist.path) {
+                        Ok(val) => val,
+                        Err(err) => {
+                            log::info!("{}", err);
+                            return cosmic::task::none();
                         }
-                    );
+                    });
                     let mut is_m3u = false;
                     let mut track_title = None;
-
-
 
                     for (index, line) in files.lines().filter_map(Result::ok).enumerate() {
                         let mut title = String::from("");
@@ -1544,7 +1439,7 @@ from track
                                 is_m3u = true;
                                 log::info!("is m3u")
                             } else {
-                                continue
+                                continue;
                             }
                         }
 
@@ -1554,13 +1449,12 @@ from track
                             let line = line[title_divide + 2..].to_string();
 
                             track_title = Some(line);
-                            continue
+                            continue;
                         } else {
-
                         }
 
                         if is_m3u && track_title.is_some() {
-                            let path =  PathBuf::from(line);
+                            let path = PathBuf::from(line);
 
                             tracks.push(PlaylistTrack {
                                 title: track_title.take().unwrap().parse().unwrap(),
@@ -1569,12 +1463,7 @@ from track
                         }
                     }
 
-
-
-                    let lpay = FullPlaylist {
-                        playlist,
-                        tracks
-                    };
+                    let lpay = FullPlaylist { playlist, tracks };
                     page.playlist_page_state = PlaylistPageState::PlaylistPage(lpay);
                 }
             }
@@ -1676,7 +1565,7 @@ from track
                     Err(_) => {}
                 }
             }
-            Message::SeekFinished => self.sink.set_volume(self.config.volume/100.0),
+            Message::SeekFinished => self.sink.set_volume(self.config.volume / 100.0),
             app::Message::AddTrackToQueue(filepath) => {
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
@@ -2090,7 +1979,9 @@ from track
                     Page::NowPlaying(_) => {}
 
                     Page::Albums(page) => page.page_state = AlbumPageState::Search(tracks),
-                    Page::Playlists(page) => {page.playlist_page_state = PlaylistPageState::Search(tracks)}
+                    Page::Playlists(page) => {
+                        page.playlist_page_state = PlaylistPageState::Search(tracks)
+                    }
                     Page::Tracks(track_list) => {
                         track_list.track_page_state = TrackPageState::Search;
                         track_list.search = tracks;
@@ -2226,8 +2117,6 @@ pub enum ContextPage {
 pub enum Action {
     About,
     Settings,
-    UpdateScanProgress((u32, u32, u32)),
-    UpdateScanDirSize(u32),
 }
 
 impl menu::action::MenuAction for Action {
@@ -2237,8 +2126,7 @@ impl menu::action::MenuAction for Action {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
-            Action::UpdateScanProgress(num) => Message::UpdateScanProgress(*num),
-            Action::UpdateScanDirSize(num) => Message::UpdateScanDirSize(*num),
+            _ => {todo!()}
         }
     }
 }
