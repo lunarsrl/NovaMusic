@@ -12,34 +12,68 @@ tracks = Tracks
 artists = Artists
 albums = Albums
 playlists = Playlists
-album = Album
+Loading = Loading...
 
-scandir = Scan Directory
+# Common Terms
+album = Album
+title = Title
+artist = Artist
+
+scandir = Scan directory
 
 # First Time Setup
-currentdir = Current Directory
-folderselect = Select Folder
+currentdir = Current directory
 firsttimetitle = Welcome to Nova Music!
 firsttimebody = Please select a folder for scanning to get Nova Music ready.
 firsttimeprimary = Scan folder & continue
 
 # Playlist Creation Dialog
-DialogPlaylistTitle = Create A New Playlist
-DialogPlaylistChosenName = Playlist Title:
+DialogPlaylistTitle = Create a new playlist
+DialogPlaylistChosenName = Playlist title:
 DialogPlaylistPrimary = Create
 # Playlist Deletion Dialog
-DialogPlaylistDelete = Delete Playlist?
+DialogPlaylistDelete = Delete playlist?
 DialogPlaylistDeleteClarify = Delete {$path}?
-DialogPlaylistDeleteConfirm = Delete Playlist
+DialogPlaylistDeleteConfirm = Delete playlist
 
-# Inputs
-PlaylistInputPlaceholder = Enter Playlist Name
+# Inputs (Used Multiple Times)
+PlaylistInputPlaceholder = Enter playlist name
 
 # Common Buttons
 Cancel= Cancel
+AddToQueue = Add To Queue
+folderselect = Select folder
 
 # Home Page
 Queue = Queue
 CreatePlaylist = Create Playlist
 ClearAll = Clear ALl
 NowPlaying = Now Playing
+
+# Album Page
+AlbumLibrary = Album Library
+AlbumInputPlaceholder = Enter album name
+AlbumDiscNumber = Disc {$number}
+AlbumAttribution = {$artist}
+
+#Track Page
+TrackLibrary = Track Library
+TrackInputPlaceholder = Enter track information
+SearchFilter = Search By
+SearchFilterSpecify = By {$filter}
+
+# Settings Page
+MusicDirectory = Music Directory
+CurrentScanResults = Current Scan Results
+FilesScanned = Files Scanned
+MusicScanning = Music Scanning
+FullRescan = Full Rescan
+Rescan = Rescan
+ScanProgress = Scan Progress
+UserInterface = User Interface
+GridItemSize = Grid Item Size
+MusicPlayer = Music Player
+AppVolume = App Volume {$volume}
+
+# Error
+SearchFailed = Search failed!

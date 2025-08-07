@@ -3,12 +3,25 @@
 - An album focused music player written in the libcosmic toolkit
 
 TODO
-- ~~[ ! ] Replace current playlist implementation with m3u~~
-- Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app
-- Localization update
+~~-[ ! ] Replace current playlist implementation with m3u~~
+~~- Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
+~~- Localization update~~
+- Artist View
+- Shuffle
+- Gapless Playback
 - Crossfade support
+- Basic Keybinds 
+- Flatpak release!
+
+Updates
+- Playlists now stored in local data directory as utf8 m3u files.
+- Creating a playlist allows you to choose and icon to display. (Filepath to icon is saved in the M3U)
+- When scanning the music directory, Nova Music will detect m3u files and make a personal copy in the local data directory.
+- The user is now notified in the case of most errors rather than doing nothing or crashing.
+- All the text in the app is now utilizing localization with i18n so translations are now possible.
+
 ## Installation
-NOTE: Playlist implementation will be replaced soon dont rely on it. Other than that the software should be usable. Please feel free to request features and report bugs. I'll do my best to stay on top of them inbetween school work.
+This software is still in development! Major changes may be made in the future and it may still be buggy.
 
 A [justfile](./justfile) is included by default for the [casey/just][just] command runner.
 

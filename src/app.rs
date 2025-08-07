@@ -945,7 +945,10 @@ impl cosmic::Application for AppModel {
                 {
                     Ok(a) => a,
                     Err(err) => {
-                        panic!("{}", err)
+                        return self
+                            .toasts
+                            .push(cosmic::widget::toaster::Toast::new(fl!("SearchFailed")))
+                            .map(cosmic::Action::App);
                     }
                 };
 
@@ -1805,6 +1808,7 @@ from track
                     let decoder = rodio::Decoder::builder()
                         .with_byte_len(file.metadata().unwrap().len())
                         .with_data(file)
+                        .with_gapless(true)
                         .with_seekable(true)
                         .build()
                         .expect("Failed to build decoder");
@@ -2027,6 +2031,7 @@ from track
                 let decoder = rodio::Decoder::builder()
                     .with_byte_len(file.metadata().unwrap().len())
                     .with_data(file)
+                    .with_gapless(true)
                     .with_seekable(true)
                     .build()
                     .expect("Failed to build decoder");

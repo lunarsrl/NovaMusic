@@ -6,7 +6,7 @@ use cosmic::widget::{Grid, JustifyContent, Widget};
 use cosmic::{iced, Application, Element, Theme};
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::app;
+use crate::{app, fl};
 use crate::app::tracks::SearchResult;
 
 #[derive(Debug, Clone)]
@@ -54,7 +54,7 @@ impl PlaylistPage {
 
         body = match &self.playlist_page_state {
             PlaylistPageState::Loading => {
-                cosmic::widget::container(cosmic::widget::text::title2("Loading..."))
+                cosmic::widget::container(cosmic::widget::text::title2(fl!("Loading")))
                     .align_x(Alignment::Center)
                     .align_y(Alignment::Center)
                     .width(Length::Fill)
@@ -185,7 +185,7 @@ impl PlaylistPage {
                         cosmic::widget::button::custom(
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::icon::from_name("go-previous-symbolic").into(),
-                                cosmic::widget::text::text("Playlists").into(),
+                                cosmic::widget::text::text(fl!("playlists")).into(),
                             ])
                             .align_y(Alignment::Center),
                         )
@@ -212,7 +212,7 @@ impl PlaylistPage {
                                 cosmic::widget::divider::horizontal::default().into(),
                                 cosmic::widget::row::with_children(vec![
 
-                                    cosmic::widget::button::text("Add to queue")
+                                    cosmic::widget::button::text(fl!("AddToQueue"))
                                         .leading_icon(cosmic::widget::icon::from_name("media-playback-start-symbolic"))
                                         .class(cosmic::theme::Button::Suggested)
                                         .on_press(Message::AddAlbumToQueue(
@@ -373,14 +373,14 @@ impl PlaylistPage {
         cosmic::widget::container(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::row::with_children(vec![
-                    cosmic::widget::text::title2("Playlists")
+                    cosmic::widget::text::title2(fl!("playlists"))
                     .width(Length::FillPortion(2))
                     .into(),
                 cosmic::widget::horizontal_space()
                     .width(Length::Shrink)
                     .into(),
                 cosmic::widget::search_input(
-                    "Enter Playlist Name",
+                    fl!("PlaylistInputPlaceholder"),
                     model.search_field.as_str(),
                 )
                     .on_input(|input| Message::UpdateSearch(input))
@@ -417,7 +417,7 @@ fn tracks_listify(tracks: &Vec<PlaylistTrack>) -> Element<'static, Message> {
                             cosmic::widget::text::heading(format!("{}", track.title,)).into(),
                             cosmic::widget::horizontal_space().into(),
                             cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                "playlist-symbolic",
+                                "media-playback-start-symbolic",
                             ))
                             .on_press(Message::AddTrackToQueue(
                                 track.path.clone(),
