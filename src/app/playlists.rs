@@ -95,7 +95,7 @@ impl PlaylistPage {
                                         } else {
                                             cosmic::widget::container(
                                                 cosmic::widget::icon::from_name(
-                                                    "media-optical-symbolic",
+                                                    "playlist-symbolic",
                                                 )
                                                 .size((model.config.grid_item_size * 32) as u16),
                                             )
@@ -287,7 +287,7 @@ impl PlaylistPage {
                                     } else {
                                         cosmic::widget::container(
                                             cosmic::widget::icon::from_name(
-                                                "media-optical-symbolic",
+                                                "playlist-symbolic",
                                             )
                                                 .size((model.config.grid_item_size * 32) as u16),
                                         )
@@ -417,7 +417,7 @@ fn tracks_listify(tracks: &Vec<PlaylistTrack>) -> Element<'static, Message> {
                             cosmic::widget::text::heading(format!("{}", track.title,)).into(),
                             cosmic::widget::horizontal_space().into(),
                             cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                "media-playback-start-symbolic",
+                                "playlist-symbolic",
                             ))
                             .on_press(Message::AddTrackToQueue(
                                 track.path.clone(),
