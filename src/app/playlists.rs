@@ -87,7 +87,7 @@ impl PlaylistPage {
                                     cosmic::widget::column::with_children(vec![
                                         if let Some(cover_art) = &playlist.thumbnail {
                                             cosmic::widget::container::Container::new(
-                                                cosmic::widget::image(cover_art),
+                                                cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
                                             )
                                             .height((model.config.grid_item_size * 32) as f32)
                                             .width((model.config.grid_item_size * 32) as f32)
@@ -200,7 +200,7 @@ impl PlaylistPage {
                                         .into()
                                 }
                                 Some(handle) => cosmic::widget::image(handle)
-                                    .content_fit(ContentFit::Contain)
+                                    .content_fit(ContentFit::Fill)
                                     .height(128.0)
                                     .width(128.0)
                                     .into(),

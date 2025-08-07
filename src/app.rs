@@ -1467,66 +1467,40 @@ impl cosmic::Application for AppModel {
 
                                         let mut playlists = vec![];
 
-                                        for file in dir {
-                                            if let Ok(file) = file {
+                                        for file in dir.flatten() {
                                                 let files = io::BufReader::new(
                                                     fs::File::open(file.path()).unwrap(),
                                                 );
                                                 let path = file.path();
                                                 let mut is_m3u = false;
-
                                                 let mut title = String::from("");
+                                                let mut cover_path = None;
+
                                                 for (index, line) in
-                                                    files.lines().filter_map(Result::ok).enumerate()
+                                                    files.lines().map_while(Result::ok).enumerate()
                                                 {
-
-
-                                                    if !is_m3u {
-                                                        if line.contains("#EXTM3U") && index == 0 {
-                                                            is_m3u = true;
-                                                            log::info!("is m3u")
-                                                        } else {
-                                                            continue;
-                                                        }
+                                                    if line.contains("#EXTM3U") {
+                                                       is_m3u = true;
                                                     }
 
-                                                    if is_m3u && line.contains("#PLAYLIST:") {
+                                                    if line.contains("#PLAYLIST:") && is_m3u {
                                                         title = line.replace("#PLAYLIST:", "");
-                                                    } else {
+                                                    } else if title.is_empty() {
                                                         title = path.file_name().unwrap().to_str().unwrap().to_string();
                                                     }
 
-                                                    if is_m3u && line.contains("#EXTALBUMARTURL:") {
-                                                        let cover_path = line.replace("#EXTALBUMARTURL:", "");
-
-
-                                                        let playlist = Playlist {
-                                                            title,
-                                                            path: path
-                                                                .to_str()
-                                                                .unwrap()
-                                                                .to_string(),
-                                                            thumbnail: Some(cosmic::widget::image::Handle::from_path(PathBuf::from(cover_path))),
-                                                        };
-
-                                                        playlists.push(playlist);
-                                                        break;
-                                                    } else {
-                                                        let playlist = Playlist {
-                                                            title,
-                                                            path: path
-                                                                .to_str()
-                                                                .unwrap()
-                                                                .to_string(),
-                                                            thumbnail: None,
-                                                        };
-
-                                                        playlists.push(playlist);
-                                                        break;
+                                                    if line.contains("#EXTALBUMARTURL:") && cover_path.is_none() && is_m3u{
+                                                        cover_path = Some(cosmic::widget::image::Handle::from_path(PathBuf::from(line.replace("#EXTALBUMARTURL:", ""))))
                                                     }
-
                                                 }
-                                            }
+
+                                            playlists.push(
+                                                Playlist {
+                                                    title,
+                                                    path: path.to_string_lossy().to_string(),
+                                                    thumbnail: cover_path,
+                                                }
+                                            )
                                         }
                                         tx.try_send(Message::PlaylistFound(playlists))
                                             .expect("send error");
@@ -1644,11 +1618,9 @@ from track
                             }
                         }
 
-                        if is_m3u && line.contains("#EXTINF:0,") {
-                            let line = line.replace("#EXTINF:0,", "");
+                        if is_m3u && line.contains("#EXTINF:") {
                             let title_divide = line.find(" - ").unwrap();
                             let line = line[title_divide + 2..].to_string();
-
                             track_title = Some(line);
                             continue;
                         } else {
@@ -2221,13 +2193,13 @@ from track
                     fs::File::create(&dir_path.join(format!("{}.m3u", &self.playlist_dialog_text)))
                         .expect("Failed to create Playlist file");
                 new_file
-                    .write(
-                        format!("#EXTM3U \n#PLAYLIST:{}\n#EXTALBUMARTURL:{}", self.playlist_dialog_text, self.playlist_cover.take().unwrap_or("".parse().unwrap()).to_string_lossy().to_string()).as_bytes()
+                    .write_all(
+                        format!("#EXTM3U \n#PLAYLIST:{}\n#EXTALBUMARTURL:{}\n", self.playlist_dialog_text, self.playlist_cover.take().unwrap_or("".parse().unwrap()).to_string_lossy().to_string()).as_bytes()
                     )
                     .expect("Failed to write Playlist file");
                 for track in &self.queue {
                     new_file
-                        .write(
+                        .write_all(
                             format!(
                                 "#EXTINF:0,{} - {}\n{}\n",
                                 track.artist,
