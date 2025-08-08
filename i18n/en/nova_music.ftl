@@ -65,17 +65,23 @@ SearchFilter = Search By
 SearchFilterSpecify = By {$filter}
 
 # Settings Page
+
+#Current Settings
 MusicDirectory = Music Directory
 CurrentScanResults = Current Scan Results
 FilesScanned = Files Scanned
 MusicScanning = Music Scanning
+#Scan Settings
 FullRescan = Full Rescan
 Rescan = Rescan
 ScanProgress = Scan Progress
+#UI Settings
 UserInterface = User Interface
 GridItemSize = Grid Item Size
+#Music Player Settings
 MusicPlayer = Music Player
-AppVolume = App Volume {$volume}
+AppVolume = App Volume: {$volume}
+CrossFade = Crossfade: {$seconds}s
 
 # Error
 SearchFailed = Search failed!

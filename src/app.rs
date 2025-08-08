@@ -258,6 +258,8 @@ pub enum Message {
     PlaylistEdit(String),
     EditPlaylistConfirm,
     EditPlaylistCancel,
+    CrossfadeTimer(u32),
+    CrossfadeToggle(bool),
 }
 
 #[derive(Clone, Debug)]
@@ -822,7 +824,22 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::CrossfadeTimer(new_val) => {
+                if let Some(_) = self.config.crossfade_time {
+                    self.config.set_crossfade_time(&self.config_handler, Some(new_val)).expect("crossfade timer fail");
+                }
+            }
 
+            Message::CrossfadeToggle(val) => {
+                match val {
+                    true => {
+                        self.config.set_crossfade_time(&self.config_handler, Some(1)).expect("crossfade toggle true fail");
+                    }
+                    false => {
+                        self.config.set_crossfade_time(&self.config_handler, None).expect("crossfade toggle false fail");
+                    }
+                };
+            }
 
             Message::ToastError(error) => {
                 return self
@@ -1944,6 +1961,14 @@ from track
                 }
             }
             Message::SinkProgress(number) => {
+                if self.song_duration.is_some() {
+                    if self.song_duration.unwrap() - self.song_progress < 1.0 {
+                        return cosmic::task::future(async move {
+                            Message::SongFinished(QueueUpdateReason::None)
+                        })
+                            .map(cosmic::Action::App);
+                    }
+                }
                 self.song_progress = number;
             }
             Message::SongFinished(val) => {

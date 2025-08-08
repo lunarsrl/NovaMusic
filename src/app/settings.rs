@@ -20,6 +20,19 @@ impl AppModel {
             ..
         } = theme::active().cosmic().spacing;
 
+        let crossfade_toggled: Element<Message> = match self.config.crossfade_time {
+            None => {
+                cosmic::widget::horizontal_space().into()
+            }
+            Some(val) => {
+                widget::settings::item::builder(fl!("CrossFade", seconds = val))
+                .control(
+                    cosmic::widget::slider(1..=12, val, |a| Message::CrossfadeTimer(a))
+
+                ).into()
+            }
+        };
+
         let editable_settings: Section<Message> = cosmic::widget::settings::section();
         let current_settings: Section<Message> = cosmic::widget::settings::section();
         let player_settings: Section<Message> = cosmic::widget::settings::section();
@@ -134,6 +147,26 @@ impl AppModel {
 
                             )
                     )
+                    .add(
+                        widget::settings::item::builder(fl!("CrossFade"))
+                            .control(
+                                match self.config.crossfade_time {
+                                    None => {
+                                        cosmic::widget::toggler(false)
+                                            .on_toggle(|a| Message::CrossfadeToggle(a))
+                                    }
+                                    Some(_) => {
+                                        cosmic::widget::toggler(true)
+                                            .on_toggle(|a| Message::CrossfadeToggle(a))
+                                    }
+                                }
+                            )
+                    )
+                    .add(
+                        crossfade_toggled
+                    )
+
+
                     .into(),
             ])
             .spacing(space_s),

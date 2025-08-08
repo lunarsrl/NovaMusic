@@ -65,17 +65,23 @@ SearchFilter = Busca por
 SearchFilterSpecify = Por {$filter}
 
 # Settings Page
+
+#Current Settings
 MusicDirectory = Directorio de Música
 CurrentScanResults = Resultados del escaneo
 FilesScanned = Archivos Escaneados
+#Scan Settings
 MusicScanning = Música Escaneada
 FullRescan = Volver a escanear
 Rescan = Escanear
 ScanProgress = Scan Progress
+#UI Settings
 UserInterface = Interface de usuario
 GridItemSize = Tamaño de elementos
+#Music PLayer Settings
 MusicPlayer = Reproducidor de Música
 AppVolume = Volumen del applicacion {$volume}
+CrossFade = Crossfade: {$seconds}s
 
 # Error
 SearchFailed = Error con la buscada!

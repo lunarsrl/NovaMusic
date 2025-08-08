@@ -20,7 +20,8 @@
       <change beforePath="$PROJECT_DIR$/i18n/en/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/en/nova_music.ftl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/i18n/es/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/es/nova_music.ftl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/playlists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/playlists.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/settings.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/settings.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/config.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/config.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -364,7 +365,7 @@
       <workItem from="1754529603203" duration="7752000" />
       <workItem from="1754593504626" duration="8303000" />
       <workItem from="1754601895949" duration="7558000" />
-      <workItem from="1754669975647" duration="12353000" />
+      <workItem from="1754669975647" duration="17077000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />
@@ -449,12 +450,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/app.rs</url>
-          <line>1428</line>
+          <line>1445</line>
           <option name="timeStamp" value="3" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/app.rs</url>
-          <line>1510</line>
+          <line>1527</line>
           <option name="timeStamp" value="4" />
         </line-breakpoint>
       </breakpoints>
