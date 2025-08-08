@@ -1,5 +1,5 @@
 name := 'nova-music'
-appid := 'dev.riveroluna.novamusic'
+appid := 'dev.riveroluna.NovaMusic'
 
 rootdir := ''
 prefix := '/usr'

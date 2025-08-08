@@ -5,12 +5,11 @@ use cosmic::cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, Cosmi
 use cosmic::Application;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Default, Clone, CosmicConfigEntry, PartialEq)]
+#[derive(Debug, Clone, CosmicConfigEntry, PartialEq)]
 #[version = 1]
 pub struct Config {
     pub scan_dir: String,
     pub grid_item_size: u32,
-    pub grid_item_spacing: u32,
     pub num_files_found: u32,
     pub files_scanned: u32,
     pub tracks_found: u32,
@@ -32,6 +31,19 @@ impl Config {
                 log::error!("{}", e);
                 (None, Config::default())
             }
+        }
+    }
+}
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            scan_dir: "".to_string(),
+            grid_item_size: 3,
+            num_files_found: 0,
+            files_scanned: 0,
+            tracks_found: 0,
+            albums_found: 0,
+            volume: 100.0,
         }
     }
 }

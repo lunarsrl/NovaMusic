@@ -1,4 +1,4 @@
-use crate::app;
+use crate::{app, fl};
 use crate::app::{AppTrack, Message};
 use cosmic::iced::{Alignment, ContentFit, Element, Length};
 use cosmic::iced_core::image::Handle;
@@ -48,13 +48,13 @@ impl TrackPage {
                 cosmic::widget::row::with_children(vec![
                     // HEADING AREA
                     cosmic::widget::row::with_children(vec![
-                        cosmic::widget::text::title2("All Tracks")
+                        cosmic::widget::text::title2(fl!("TrackLibrary"))
                             .width(Length::FillPortion(2))
                             .into(),
                         cosmic::widget::horizontal_space()
                             .width(Length::Shrink)
                             .into(),
-                        cosmic::widget::search_input("Enter Track Title", &model.search_field)
+                        cosmic::widget::search_input(fl!("TrackInputPlaceholder"), &model.search_field)
                             .on_input(|a| Message::UpdateSearch(a))
                             .width(Length::FillPortion(1))
                             .into(),
@@ -72,7 +72,7 @@ impl TrackPage {
                 cosmic::widget::scrollable::vertical(
                     cosmic::widget::container(
                     match self.track_page_state {
-                    TrackPageState::Loading => cosmic::widget::text::title3("Loading...").into(),
+                    TrackPageState::Loading => cosmic::widget::text::title3(fl!("Loading")).into(),
                     TrackPageState::Loaded => match self.tracks.is_empty() {
                         true => cosmic::widget::container(
                             cosmic::widget::column::with_children(vec![
@@ -92,15 +92,15 @@ impl TrackPage {
                     TrackPageState::Search => cosmic::widget::column::with_children(vec![
                         cosmic::widget::container(
                             cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading("Search By: ").into(),
+                                cosmic::widget::text::heading(fl!("SearchFilter")).into(),
                                 cosmic::widget::horizontal_space().into(),
-                                cosmic::widget::checkbox("Title", self.search_by_title)
+                                cosmic::widget::checkbox(fl!("title"), self.search_by_title)
                                     .on_toggle(|a| Message::ToggleTitle(a))
                                     .into(),
-                                cosmic::widget::checkbox("Album", self.search_by_album)
+                                cosmic::widget::checkbox(fl!("album"), self.search_by_album)
                                     .on_toggle(|a| Message::ToggleAlbum(a))
                                     .into(),
-                                cosmic::widget::checkbox("Artist", self.search_by_artist)
+                                cosmic::widget::checkbox(fl!("artist"), self.search_by_artist)
                                     .on_toggle(|a| Message::ToggleArtist(a))
                                     .into(),
                             ])
@@ -175,15 +175,15 @@ fn search_list_display<'a>(
     let mut elem_vec : Vec<cosmic::Element<Message>> = Vec::with_capacity(3);
 
     if settings.0 {
-        elem_vec.push(search_group_display(&title_vector, "Title"));
+        elem_vec.push(search_group_display(&title_vector, fl!("title").as_str()));
     }
 
     if settings.1 {
-        elem_vec.push(search_group_display(&album_vector, "Album"));
+        elem_vec.push(search_group_display(&album_vector, fl!("album").as_str()));
     }
 
     if settings.2 {
-        elem_vec.push(search_group_display(&artist_vector, "Artist"));
+        elem_vec.push(search_group_display(&artist_vector, fl!("artist").as_str()));
     }
 
 
@@ -199,7 +199,7 @@ fn search_group_display<'a>(tracks: &Vec<AppTrack>, search_title: &str) -> cosmi
     cosmic::widget::column::with_children(vec![
         cosmic::widget::container(
             cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::heading(format!("By {}", search_title)).into(),
+                cosmic::widget::text::heading(fl!("SearchFilterSpecify", filter = search_title)).into(),
             ])
                 .padding(cosmic::theme::spacing().space_xxs)
                 .width(Length::Fill)

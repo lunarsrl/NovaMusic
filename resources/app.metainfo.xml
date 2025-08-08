@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>dev.riveroluna.novamusic</id>
+  <id>dev.riveroluna.NovaMusic</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-2.0-or-later</project_license>
   <name>Nova Music</name>
@@ -9,9 +9,9 @@
     https://github.com/SRiverol/NovaMusic.git/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
   </icon>
   <url type="vcs-browser">https://github.com/SRiverol/CosmicMusic.git</url>
-  <launchable type="desktop-id">dev.riveroluna.novamusic.desktop</launchable>
+  <launchable type="desktop-id">dev.riveroluna.NovaMusic.desktop</launchable>
   <provides>
-    <id>dev.riveroluna.novamusic</id>
+    <id>dev.riveroluna.NovaMusic</id>
     <binaries>
       <binary>nova-music</binary>
     </binaries>

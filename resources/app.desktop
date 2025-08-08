@@ -2,10 +2,10 @@
 Name=Nova Music
 Comment=A music player written in the libcosmic toolkit
 Type=Application
-Icon=dev.riveroluna.novamusic
+Icon=dev.riveroluna.NovaMusic
 Exec=nova-music %F
 Terminal=false
 StartupNotify=true
-Categories=MUSIC
-Keywords=MUSIC
+Categories=Audio;AudioVideo
+Keywords=Music
 MimeType=

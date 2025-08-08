@@ -10,12 +10,16 @@ use cosmic::{iced, widget, Application, Element, Theme};
 use futures_util::{SinkExt, StreamExt};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::sync::Arc;
+use cosmic::iced_widget::scrollable::Viewport;
+use crate::fl;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
     pub albums: Arc<Vec<Album>>,
     pub page_state: AlbumPageState,
     pub has_fully_loaded: bool,
+    pub viewport: Option<Viewport>,
+    pub scrollbar_id: cosmic::iced_core::widget::Id,
 }
 
 #[derive(Clone, Debug)]
@@ -35,16 +39,19 @@ impl AlbumPage {
             albums: Arc::from(album_list),
             page_state: AlbumPageState::Loading,
             has_fully_loaded: false,
+            viewport: None,
+            scrollbar_id: cosmic::iced_core::widget::Id::unique()
         }
     }
 
     pub fn load_page<'a>(&'a self, model: &'a AppModel) -> Element<'a, Message> {
         let page_margin = cosmic::theme::spacing().space_m;
+
         match &self.page_state {
             AlbumPageState::Loading | AlbumPageState::Loaded => {
                 if self.albums.is_empty() {
                     return if let AlbumPageState::Loading = self.page_state {
-                        cosmic::widget::container(cosmic::widget::text::title3("Loading..."))
+                        cosmic::widget::container(cosmic::widget::text::title3(fl!("Loading")))
                             .align_x(Alignment::Center)
                             .align_y(Alignment::Center)
                             .width(Length::Fill)
@@ -57,14 +64,14 @@ impl AlbumPage {
                                 vec![
 
                                     cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::text::title2("Album Library")
+                                        cosmic::widget::text::title2(fl!("AlbumLibrary"))
                                             .width(Length::FillPortion(2))
                                             .into(),
                                         cosmic::widget::horizontal_space()
                                             .width(Length::Shrink)
                                             .into(),
                                         cosmic::widget::search_input(
-                                            "Enter Album Name",
+                                            fl!("AlbumInputPlaceholder"),
                                             model.search_field.as_str(),
                                         )
                                             .on_input(|input| Message::UpdateSearch(input))
@@ -97,14 +104,14 @@ impl AlbumPage {
                 cosmic::widget::container(
                     cosmic::widget::column::with_children(vec![
                         cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text::title2("Album Library")
+                            cosmic::widget::text::title2(fl!("AlbumLibrary"))
                                 .width(Length::FillPortion(2))
                                 .into(),
                             cosmic::widget::horizontal_space()
                                 .width(Length::Shrink)
                                 .into(),
                             cosmic::widget::search_input(
-                                "Enter Album Name",
+                                fl!("AlbumInputPlaceholder"),
                                 model.search_field.as_str(),
                             )
                             .on_input(|input| Message::UpdateSearch(input))
@@ -128,7 +135,7 @@ impl AlbumPage {
                                         cosmic::widget::column::with_children(vec![
                                             if let Some(cover_art) = &album.cover_art {
                                                 cosmic::widget::container::Container::new(
-                                                    cosmic::widget::image(cover_art),
+                                                    cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
                                                 )
                                                 .height((model.config.grid_item_size * 32) as f32)
                                                 .width((model.config.grid_item_size * 32) as f32)
@@ -218,6 +225,8 @@ impl AlbumPage {
                                 )
                                 .align_x(Alignment::Center),
                             )
+                                .id(self.scrollbar_id.clone())
+                                .on_scroll(|view| Message::ScrollView(view))
                             .into()
                         }))
                         .height(Length::Fill)
@@ -237,7 +246,7 @@ impl AlbumPage {
                         cosmic::widget::button::custom(
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::icon::from_name("go-previous-symbolic").into(),
-                                cosmic::widget::text::text("Albums").into(),
+                                cosmic::widget::text::text(fl!("albums")).into(),
                             ])
                             .align_y(Alignment::Center),
                         )
@@ -253,7 +262,7 @@ impl AlbumPage {
                                         .into()
                                 }
                                 Some(handle) => cosmic::widget::image(handle)
-                                    .content_fit(ContentFit::Contain)
+                                    .content_fit(ContentFit::Fill)
                                     .height(128.0)
                                     .width(128.0)
                                     .into(),
@@ -261,12 +270,11 @@ impl AlbumPage {
                             cosmic::widget::Column::with_children([
                                 // Album Title and Author Column
                                 cosmic::widget::text::title2(albumpage.album.name.clone()).into(),
-                                cosmic::widget::text::title4(format!(
-                                    "By {}",
-                                    albumpage.album.artist.as_str()
-                                ))
+                                cosmic::widget::text::title4(
+                                    fl!("AlbumAttribution", artist = albumpage.album.artist.clone())
+                                )
                                 .into(),
-                                cosmic::widget::button::text("Add to queue")
+                                cosmic::widget::button::text(fl!("AddToQueue"))
                                     .leading_icon(cosmic::widget::icon::from_name(
                                         "media-playback-start-symbolic",
                                     ))
@@ -304,14 +312,14 @@ impl AlbumPage {
             AlbumPageState::Search(search_results) => {
                 cosmic::widget::container(cosmic::widget::column::with_children(vec![
                     cosmic::widget::row::with_children(vec![
-                        cosmic::widget::text::title2("Album Library")
+                        cosmic::widget::text::title2(fl!("AlbumLibrary"))
                             .width(Length::FillPortion(2))
                             .into(),
                         cosmic::widget::horizontal_space()
                             .width(Length::Shrink)
                             .into(),
                         cosmic::widget::search_input(
-                            "Enter Album Name",
+                            fl!("AlbumInputPlaceholder"),
                             model.search_field.as_str(),
                         )
                         .on_input(|input| Message::UpdateSearch(input))
@@ -523,7 +531,7 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
         }
         disc_lists.push(
             cosmic::widget::container(cosmic::widget::column::with_children(vec![
-                cosmic::widget::text::heading(format!("Disc {}", disc_num)).into(),
+                cosmic::widget::text::heading(fl!("AlbumDiscNumber", number = disc_num)).into(),
                 list.unwrap().into_element(),
             ]))
             .into(),

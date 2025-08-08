@@ -1,3 +1,4 @@
+use crate::fl;
 use std::borrow::Cow;
 use crate::app;
 use crate::app::albums::Album;
@@ -27,7 +28,7 @@ use humantime::format_duration;
 pub(crate) struct HomePage;
 
 impl HomePage {
-    pub fn load_page(&self, model: &AppModel) -> Element<'static, app::Message> {
+    pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
         // Time ELapsed
         let mut time_elapsed = format_time(model.song_progress);
 
@@ -185,13 +186,13 @@ impl HomePage {
                     cosmic::widget::container(cosmic::widget::column::with_children(vec![
                         cosmic::widget::container(
                             cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading("Queue: ").center().into(),
+                                cosmic::widget::text::heading(fl!("Queue")).center().into(),
                                 cosmic::widget::horizontal_space().into(),
-                                cosmic::widget::button::text("Create Playlist")
+                                cosmic::widget::button::text(fl!("CreatePlaylist"))
                                     .class(cosmic::widget::button::ButtonClass::Standard)
                                     .on_press(Message::AddToPlaylist)
                                     .into(),
-                                cosmic::widget::button::text("Clear All")
+                                cosmic::widget::button::text(fl!("ClearAll"))
                                     .class(cosmic::widget::button::ButtonClass::Destructive)
                                     .on_press(Message::ClearQueue)
                                     .into(),
@@ -244,7 +245,7 @@ pub fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, M
                                 ))
                                     .on_press(Message::RemoveSongInQueue(index))
                                     .into(),
-                                cosmic::widget::text("Now Playing")
+                                cosmic::widget::text(fl!("NowPlaying"))
                                     .class(cosmic::theme::Text::Accent)
                                     .into(),
                             ])
