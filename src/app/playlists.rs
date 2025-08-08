@@ -224,9 +224,19 @@ impl PlaylistPage {
                                         ))
                                         .into(),
 
+                                    cosmic::widget::row::with_children(vec![
+                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
+                                        .on_press(Message::PlaylistEdit(playlist.playlist.path.clone()))
+                                        .class(cosmic::theme::Button::Standard)
+                                        .into(),
+
                                     cosmic::widget::button::icon(cosmic::widget::icon::from_name("user-trash-symbolic"))
                                         .on_press(Message::PlaylistDeleteSafety)
                                         .class(cosmic::theme::Button::Destructive)
+                                        .into(),
+
+                                    ])
+                                        .spacing(cosmic::theme::spacing().space_xxs)
                                         .into(),
 
                                 ])

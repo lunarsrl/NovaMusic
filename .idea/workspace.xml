@@ -17,14 +17,10 @@
     <list default="true" id="152ba708-cd46-4fc3-ab0c-616e9212beb1" name="Changes" comment="Settings menu is mostly done, added progress bar for file scanning (a file is considered scanned only after it is checled for metadata currently which is only done after initially gathering a list of all the files, probably super inefficient and it looks like nothing is progressing to the user until initial scan is done)&#10;&#10;Signed-off-by: Samuel Rivero Luna &lt;riveroluna@protonmail.com&gt;">
       <changelist_data name="Samuel RIvero Luna" email="riveroluna@protonmail.com" automatic="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/i18n/en/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/en/nova_music.ftl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/i18n/es/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/es/nova_music.ftl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/albums.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/albums.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/playlists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/playlists.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/settings.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/settings.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/tracks.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/tracks.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -367,7 +363,8 @@
       <workItem from="1754504806768" duration="8733000" />
       <workItem from="1754529603203" duration="7752000" />
       <workItem from="1754593504626" duration="8303000" />
-      <workItem from="1754601895949" duration="655000" />
+      <workItem from="1754601895949" duration="7558000" />
+      <workItem from="1754669975647" duration="12353000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />
@@ -449,6 +446,16 @@
           <url>file://$PROJECT_DIR$/src/app/home.rs</url>
           <line>225</line>
           <option name="timeStamp" value="2" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/app.rs</url>
+          <line>1428</line>
+          <option name="timeStamp" value="3" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/app.rs</url>
+          <line>1510</line>
+          <option name="timeStamp" value="4" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

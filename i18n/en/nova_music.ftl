@@ -35,6 +35,8 @@ DialogPlaylistPrimary = Create
 DialogPlaylistDelete = Delete playlist?
 DialogPlaylistDeleteClarify = Delete {$path}?
 DialogPlaylistDeleteConfirm = Delete playlist
+# PLaylist Edit Dialog
+DialogPlaylistEdit = Edit playlist
 
 # Inputs (Used Multiple Times)
 PlaylistInputPlaceholder = Enter playlist name

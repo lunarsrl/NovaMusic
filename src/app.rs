@@ -81,10 +81,10 @@ use rodio::source::SeekError;
 use rodio::{OutputStream, Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
-use std::fmt::{format, Debug};
+use std::fmt::{format, Debug, Write};
 use std::fs::{create_dir, File};
 use std::future::Future;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write as OtherWrite};
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -141,9 +141,11 @@ pub struct AppModel {
     // Searches
     pub search_field: String,
     pub playlist_dialog_text: String,
+    playlist_dialog_path: String,
     pub playlist_cover: Option<PathBuf>,
     footer_toggled: bool,
     playlist_delete_dialog: bool,
+    playlist_edit_dialog: bool,
 
     // Error Handling
     toasts: cosmic::widget::toaster::Toasts<Message>,
@@ -253,6 +255,9 @@ pub enum Message {
     CreatePlaylistCancel,
     CreatePlaylistAddThumbnail,
     CreatePlaylistIconChosen(PathBuf),
+    PlaylistEdit(String),
+    EditPlaylistConfirm,
+    EditPlaylistCancel,
 }
 
 #[derive(Clone, Debug)]
@@ -378,9 +383,11 @@ impl cosmic::Application for AppModel {
             // Create Playlist Dialog
             playlist_dialog: false,
             playlist_dialog_text: "".to_string(),
+            playlist_dialog_path: "".to_string(),
             playlist_cover: None,
             footer_toggled: true,
             playlist_delete_dialog: false,
+            playlist_edit_dialog: false,
             toasts: cosmic::widget::toaster::Toasts::new(|a| Message::Toasts(a)),
         };
 
@@ -703,6 +710,44 @@ impl cosmic::Application for AppModel {
             );
         }
 
+        if self.playlist_edit_dialog {
+            return Some(
+                cosmic::widget::dialog::Dialog::new()
+                    .title(fl!("DialogPlaylistEdit"))
+                    .control(
+                        cosmic::widget::container(
+                            cosmic::widget::row::with_children(vec![
+                                icon,
+                                cosmic::widget::text_input(
+                                    fl!("PlaylistInputPlaceholder"),
+                                    self.playlist_dialog_text.as_str(),
+                                )
+                                    .on_input(|input| Message::UpdatePlaylistName(input))
+                                    .into(),
+                            ])
+                                .align_y(Vertical::Bottom)
+                                .spacing(cosmic::theme::spacing().space_m),
+                        )
+                            .align_x(Horizontal::Center)
+                    )
+                    .primary_action(
+                        cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                            "object-select-symbolic",
+                        ))
+                            .class(cosmic::theme::Button::Suggested)
+                            .on_press(Message::EditPlaylistConfirm),
+                    )
+                    .secondary_action(
+                        cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                            "window-close-symbolic",
+                        ))
+                            .class(cosmic::theme::Button::Standard)
+                            .on_press(Message::EditPlaylistCancel),
+                    )
+                    .into(),
+            );
+        }
+
         if self.playlist_delete_dialog {
             if let Page::Playlists(page) = self.nav.active_data().unwrap() {
                 if let PlaylistPageState::PlaylistPage(page) = &page.playlist_page_state {
@@ -810,6 +855,31 @@ impl cosmic::Application for AppModel {
                 self.playlist_delete_dialog = false;
                 return cosmic::Task::future(async move { Message::OnNavEnter })
                     .map(cosmic::Action::App);
+            }
+            Message::PlaylistEdit(path) => {
+                let mut file = std::fs::File::open(&path).unwrap();
+                let mut string = String::from("");
+                let content = file.read_to_string(&mut string).unwrap();
+
+                let mut cover_path: String = String::from("");
+
+                if string.contains("#EXTALBUMARTURL:") {
+                    for each in string.lines() {
+                        if each.contains("#EXTALBUMARTURL:") {
+                            cover_path = each.replace("#EXTALBUMARTURL:", "").to_string();
+                        }
+                    }
+
+                    self.playlist_cover = Some(PathBuf::from(cover_path))
+                } else {
+                    self.playlist_cover = None;
+                }
+
+                self.playlist_dialog_path = path;
+                match self.playlist_edit_dialog {
+                    true => self.playlist_edit_dialog = false,
+                    false => self.playlist_edit_dialog = true
+                }
             }
             Message::PlaylistDeleteSafety => match self.playlist_delete_dialog {
                 true => self.playlist_delete_dialog = false,
@@ -1438,7 +1508,7 @@ impl cosmic::Application for AppModel {
                         ))
                             .map(cosmic::Action::App);
                     }
-                    Page::Playlists(page) => match page.playlist_page_state {
+                    Page::Playlists(page) => match &page.playlist_page_state {
                         PlaylistPageState::Loading => {
                             match dirs::data_local_dir()
                                 .unwrap()
@@ -2109,7 +2179,89 @@ from track
                 }
             },
             Message::AddToPlaylist => self.playlist_dialog = true,
+            Message::EditPlaylistCancel => {
+                self.playlist_edit_dialog = false
+            }
+            Message::EditPlaylistConfirm => {
+                if PathBuf::from(&self.playlist_dialog_path).exists() {
+                    let mut file = File::open(&self.playlist_dialog_path).unwrap();
+                    let mut new_file = String::new();
 
+                    let mut append_cover_path = true;
+                    let mut append_name = true;
+
+                        let mut string: String = String::from("");
+                        file.read_to_string(&mut string).unwrap();
+
+                        for entry in string.lines() {
+                            let mut new_line = entry.to_string();
+                            match entry.find("#PLAYLIST:") {
+                                None => {
+                                    log::info!("no playlist name");
+                                }
+                                Some(val) => {
+                                    append_name = false;
+                                    log::info!("found and adding");
+                                    entry.clear();
+                                    new_line = format!("#PLAYLIST:{}", self.playlist_dialog_text.as_str());
+                                }
+                            }
+
+                            match entry.find("#EXTALBUMARTURL:") {
+                                None => {
+                                    if self.playlist_cover.is_some() {
+                                        append_cover_path = true;
+                                    } else {
+                                        append_cover_path = false;
+                                    }
+                                }
+                                Some(val) => {
+                                    append_cover_path = false;
+                                    log::info!("found and adding");
+                                    entry.clear();
+
+                                    if let Some(path) = self.playlist_cover.take() {
+                                        new_line = String::from(format!("#EXTALBUMARTURL:{}", path.to_str().unwrap()))
+                                    } else {
+                                        new_line = String::from("blank")
+                                    }
+                                }
+                            }
+
+                            if new_line.contains("blank") {
+                                new_line = String::from("")
+                            } else {
+                                new_line = format!("{}\n", new_line);
+                            }
+
+                            new_file.push_str(&new_line);
+                        }
+                    let mut file = File::create(&self.playlist_dialog_path).unwrap();
+                    if append_cover_path {
+                        new_file.push_str(format!("#EXTALBUMARTURL:{}\n", self.playlist_cover.take().unwrap().to_str().unwrap()).as_str())
+                    }
+
+                     if append_name {
+                         new_file.push_str(format!("#PLAYLIST:{}\n", self.playlist_dialog_text).as_str())
+                     }
+                    file.write_all(new_file.as_bytes()).unwrap()
+
+
+                } else {
+                    return self
+                        .toasts
+                        .push(cosmic::widget::toaster::Toast::new("Playlist path no longer exists"))
+                        .map(cosmic::Action::App);
+                }
+                self.playlist_edit_dialog = false;
+
+                if let Page::Playlists(val) = self.access_nav_data(3) {
+                    val.playlist_page_state = PlaylistPageState::Loading
+                }
+                return cosmic::task::future( async move {
+                    Message::OnNavEnter
+                })
+            }
             Message::CreatePlaylistIconChosen(path) => {
                 log::info!("Image: {}", path.to_string_lossy());
                 self.playlist_cover = Some(path)
