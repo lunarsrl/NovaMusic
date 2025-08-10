@@ -6,10 +6,14 @@ TODO
 ~~-[ ! ] Replace current playlist implementation with m3u~~
 ~~- Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
 ~~- Localization update~~
+
 - Artist View
 - Shuffle
+
+- [!!!] Rwrite without rodio sink (Time consuming but necessary for next)
 - Gapless Playback
 - Crossfade support
+
 - Basic Keybinds 
 - Flatpak release!
 
