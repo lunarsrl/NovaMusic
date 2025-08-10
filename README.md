@@ -10,7 +10,7 @@ TODO
 - Artist View
 - Shuffle
 
-- [!!!] Rwrite without rodio sink (Time consuming but necessary for next)
+- [!!!] Rewrite without rodio sink (Time consuming but necessary for next)
 - Gapless Playback
 - Crossfade support
 
