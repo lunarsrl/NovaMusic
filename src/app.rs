@@ -60,7 +60,7 @@ use cosmic::{action, cosmic_theme, iced, iced_futures, theme};
 use futures::channel::mpsc;
 use futures::channel::mpsc::{Receiver, SendError, Sender, TrySendError};
 use futures_util::stream::{Next, SelectNextSome};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{FutureExt, SinkExt, StreamExt};
 use log::info;
 use rodio::source::SeekError::SymphoniaDecoder;
 
@@ -94,6 +94,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
 use cosmic::cosmic_theme::Layer;
+use rodio::mixer::{Mixer, MixerSource};
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, Track};
 use symphonia::core::io::MediaSourceStream;
@@ -101,6 +102,7 @@ use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, T
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
 use symphonia::default::get_probe;
+use crate::app::artists::{ArtistPage, ArtistsPage};
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -126,7 +128,9 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
+
     pub stream: OutputStream,
+
     pub sink: Arc<Sink>,
     pub loop_state: LoopState,
     pub song_progress: f64,
@@ -149,6 +153,7 @@ pub struct AppModel {
 
     // Error Handling
     toasts: cosmic::widget::toaster::Toasts<Message>,
+    pub mixer: Arc<(Mixer, MixerSource)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -344,6 +349,11 @@ impl cosmic::Application for AppModel {
             .data::<Page>(Page::Playlists(PlaylistPage::new()))
             .icon(icon::from_name("playlist-symbolic"));
 
+        nav.insert()
+            .text(fl!("artists"))
+            .data::<Page>(Page::Artists(ArtistsPage::new()))
+            .icon(icon::from_name("applications-audio-symbolic"))
+            .activate();
         // INIT CONFIG
         let config = config::Config::load();
         let config_handler = match config.0 {
@@ -369,6 +379,7 @@ impl cosmic::Application for AppModel {
             change_dir_filed: "".to_string(),
             rescan_available: true,
             // Audio
+            mixer: Arc::new(rodio::mixer::mixer(3, 3)),
             stream,
             sink,
             loop_state: LoopState::NotLooping,
@@ -807,6 +818,7 @@ impl cosmic::Application for AppModel {
             Page::Tracks(track_page) => body = track_page.load_page(self),
             Page::Albums(album_page) => body = album_page.load_page(self),
             Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
+            Page::Artists(artists_page) => body = artists_page.load_page(self),
         }
 
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
@@ -842,6 +854,9 @@ impl cosmic::Application for AppModel {
                     return cosmic::task::none();
                 }
                 Page::Tracks(_) => {
+                    return cosmic::task::none();
+                }
+                Page::Artists(_) => {
                     return cosmic::task::none();
                 }
             },
@@ -1227,6 +1242,7 @@ impl cosmic::Application for AppModel {
                             .map(action::Action::App),
                         );
                     }
+                    Page::Artists(_) => {}
                 }
             }
 
@@ -1426,6 +1442,55 @@ impl cosmic::Application for AppModel {
 
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(HomePage) => {}
+                    Page::Artists(val) => {
+                        return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                            5,
+                            |mut tx| async move {
+                                let conn =
+                                    match rusqlite::Connection::open(
+                                        dirs::data_local_dir().unwrap().join(Self::APP_ID).join("nova_music.db")
+                                    ) {
+                                        Ok(conn) => conn,
+                                        Err(err) => {
+                                            panic!("{}", err)
+                                        }
+                                    };
+
+                                let mut stmt = match conn
+                                    .prepare(
+                                        "
+                                            SELECT a.id, a.name,
+                                            a.disc_number, a.track_number, a.album_cover, art.name as artist_name
+                                            FROM album a
+                                            left JOIN artists art ON a.artist_id = art.id",
+                                    ) {
+                                    Ok(stmt) => stmt,
+                                    Err(err) => {
+                                        panic!("{}", err)
+                                    }
+                                };
+
+                                let album_iter = stmt
+                                    .query_map([], |row| {
+                                        Ok((
+                                            row.get::<_, String>("name").unwrap_or("None".to_string()),
+                                            row.get::<_, String>("artist_name").unwrap_or_default(),
+                                            row.get::<_, u32>("disc_number").unwrap_or(0),
+                                            row.get::<_, u32>("track_number").unwrap_or(0),
+                                            match row.get::<_, Vec<u8>>("album_cover") {
+                                                Ok(val) => Some(val),
+                                                Err(e) => {
+                                                    log::info!("Nothing");
+                                                    None
+                                                }
+                                            },
+                                        ))
+                                    })
+                                    .expect("error executing query");
+
+                            }
+                            ))
+                    }
                     Page::Albums(val) => {
                         match &mut val.page_state {
                             AlbumPageState::Loading => {
@@ -1458,7 +1523,6 @@ impl cosmic::Application for AppModel {
                                                 panic!("{}", err)
                                             }
                                         };
-
 
                                     let mut stmt = match conn
                                         .prepare(
@@ -1555,7 +1619,10 @@ impl cosmic::Application for AppModel {
                                                     if line.contains("#EXTM3U") {
                                                        is_m3u = true;
                                                     }
-
+struct ArtistInfo {
+    name: String,
+    image: String,
+}
                                                     if line.contains("#PLAYLIST:") && is_m3u {
                                                         title = line.replace("#PLAYLIST:", "");
                                                     } else if title.is_empty() {
@@ -1771,7 +1838,7 @@ from track
             Message::AlbumPageStateAlbum(new_page) => {
                 match self.nav.active_data_mut::<Page>().unwrap() {
                     Page::NowPlaying(home_page) => {}
-
+                    Page::Artists(page) => {}
                     Page::Albums(old_page) => {
                         *old_page = new_page;
                     }
@@ -1820,7 +1887,7 @@ from track
                 }
             }
             Message::SeekFinished => self.sink.set_volume(self.config.volume / 100.0),
-            app::Message::AddTrackToQueue(filepath) => {
+            Message::AddTrackToQueue(filepath) => {
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
                 if let Page::NowPlaying(page) = home_page {
@@ -1884,63 +1951,9 @@ from track
                         .expect("Failed to build decoder");
 
                     self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
-                    self.sink.append(decoder);
-                    let sleeping_task_sink = Arc::clone(&self.sink);
-                    let sleeping_thread = cosmic::task::future(async move {
-                        let kill = true;
-                        Message::SongFinished(
-                            tokio::task::spawn_blocking(move || {
-                                if kill {
-                                    sleeping_task_sink.sleep_until_end();
-                                    QueueUpdateReason::None
-                                } else {
-                                    QueueUpdateReason::ThreadKilled
-                                }
-                            })
-                            .await
-                            .expect("nova_music.db"),
-                        )
-                    })
-                    .abortable();
 
-                    match &mut self.task_handle {
-                        None => {
-                            self.task_handle = Some(vec![sleeping_thread.1]);
-                        }
-                        Some(handles) => {
-                            handles.push(sleeping_thread.1);
-                        }
-                    }
 
-                    let reporting_task_sink = Arc::clone(&self.sink);
-                    let progress_thread = cosmic::Task::stream(
-                        cosmic::iced_futures::stream::channel(1, |mut tx| async move {
-                            tokio::task::spawn_blocking(move || loop {
-                                sleep(Duration::from_millis(200));
-                                match tx.try_send(Message::SinkProgress(
-                                    reporting_task_sink.get_pos().as_secs_f64(),
-                                )) {
-                                    Ok(_) => {}
-                                    Err(_) => break,
-                                }
-                            });
-                        }),
-                    )
-                    .abortable();
 
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![progress_thread.1]),
-                        Some(handles) => handles.push(progress_thread.1),
-                    }
-                    let (task, handle) =
-                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0])
-                            .abortable();
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![handle]),
-                        Some(handles) => handles.push(handle),
-                    }
-                    self.sink.play();
-                    return task;
                 }
             }
             Message::SinkProgress(number) => {
@@ -2382,7 +2395,7 @@ from track
                     .expect("Pages should exist always")
                 {
                     Page::NowPlaying(_) => {}
-
+                    Page::Artists(_)=>{}
                     Page::Albums(page) => page.page_state = AlbumPageState::Search(tracks),
                     Page::Playlists(page) => {
                         page.playlist_page_state = PlaylistPageState::Search(tracks)
@@ -2504,7 +2517,7 @@ impl AppModel {
 #[derive(Debug)]
 pub enum Page {
     NowPlaying(HomePage),
-
+    Artists(ArtistsPage),
     Albums(AlbumPage),
     Playlists(PlaylistPage),
     Tracks(TrackPage),

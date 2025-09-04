@@ -1,4 +1,5 @@
 use colored::Colorize;
+use cosmic::Application;
 use futures_util::future::err;
 use rusqlite::types::Type::Null;
 use rusqlite::{Error, OptionalExtension};
@@ -7,7 +8,6 @@ use std::fmt::{format, Debug, Pointer};
 use std::fs;
 use std::panic::panic_any;
 use std::path::PathBuf;
-use cosmic::Application;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
@@ -29,6 +29,7 @@ struct Album {
 struct Track {
     id: u64,
     artist_id: Option<u64>,
+    genres: Option<Vec<String>>,
     name: Option<String>,
     path: PathBuf,
 }
@@ -41,13 +42,14 @@ struct AlbumTracks {
     disc_number: u64,
 }
 
-
-
-
 pub fn create_database() {
     let conn = rusqlite::Connection::open(
-        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
-    ).unwrap();
+        dirs::data_local_dir()
+            .unwrap()
+            .join(crate::app::AppModel::APP_ID)
+            .join("nova_music.db"),
+    )
+    .unwrap();
 
     conn.execute_batch(
         "
@@ -56,6 +58,9 @@ pub fn create_database() {
         DROP TABLE IF EXISTS album_tracks;
         DROP TABLE IF EXISTS artists;
         DROP TABLE IF EXISTS track;
+        DROP TABLE IF EXISTS track_artists;
+        DROP TABLE IF EXISTS genres;
+        DROP TABLE IF EXISTS track_genres;
     ",
     )
     .unwrap();
@@ -69,6 +74,28 @@ pub fn create_database() {
         [],
     )
     .unwrap();
+
+    conn.execute(
+        "
+    CREATE TABLE genres (
+        id INTEGER PRIMARY KEY,
+        name TEXT UNIQUE
+    )",
+        [],
+    )
+        .unwrap();
+
+    conn.execute(
+        "
+    CREATE TABLE track_genres(
+        id INTEGER PRIMARY KEY,
+        track_id INTEGER,
+        genre_id INTEGER,
+        FOREIGN KEY(genre_id) REFERENCES genres(id)
+    )",
+        [],
+    )
+        .unwrap();
 
     conn.execute(
         "
@@ -116,12 +143,17 @@ pub fn create_database() {
 //todo: Theres probably a better way to do this.
 pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     let conn = rusqlite::Connection::open(
-        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
-    ).unwrap();
+        dirs::data_local_dir()
+            .unwrap()
+            .join(crate::app::AppModel::APP_ID)
+            .join("nova_music.db"),
+    )
+    .unwrap();
 
     let mut track = Track {
         id: 0,
         artist_id: None,
+        genres: None,
         name: None,
         path: filepath.clone(),
     };
@@ -183,14 +215,17 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     _ => {}
                 },
                 StandardTagKey::Arranger => {}
-                StandardTagKey::Artist => match tag.value {
-                    Value::String(name) => {
-                        artist.name = Some(name);
+                StandardTagKey::Artist => {
+                    log::info!("{}", tag.value.to_string().on_yellow());
+                    match tag.value {
+                        Value::String(name) => {
+                            artist.name = Some(name);
+                        }
+                        _ => {
+                            // log::error!("Artist name is not a string");
+                        }
                     }
-                    _ => {
-                        // log::error!("Artist name is not a string");
-                    }
-                },
+                }
                 StandardTagKey::Bpm => {}
                 StandardTagKey::Comment => {}
                 StandardTagKey::Compilation => {}
@@ -225,7 +260,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     _ => {
                         // log::error!("DISC NUMBER");
                     }
-
                 },
                 StandardTagKey::DiscSubtitle => {}
                 StandardTagKey::DiscTotal => match tag.value {
@@ -240,7 +274,26 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 StandardTagKey::EncodingDate => {}
                 StandardTagKey::Engineer => {}
                 StandardTagKey::Ensemble => {}
-                StandardTagKey::Genre => {}
+                StandardTagKey::Genre => {
+                    if !tag.value.to_string().is_empty() {
+                        match conn.execute("insert into genres (name) values (?)", [tag.value.to_string()]) {
+                            Ok(_) => {}
+                            Err(err) => {
+                                log::error!("error: {}", err);
+                            }
+                        }
+
+                        if let Some(genres) = &mut track.genres {
+                            genres.push(tag.value.to_string())
+                        } else {
+                            track.genres = Some(vec![tag.value.to_string()]);
+                        }
+
+                    } else {
+
+                    }
+
+                }
                 StandardTagKey::IdentAsin => {}
                 StandardTagKey::IdentBarcode => {}
                 StandardTagKey::IdentCatalogNumber => {}
@@ -308,7 +361,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 StandardTagKey::TaggingDate => {}
                 StandardTagKey::TrackNumber => match tag.value {
                     Value::String(val) => {
-
                         let mut final_val = val;
 
                         if final_val.contains("/") {
@@ -319,15 +371,12 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                                 .parse()
                                 .unwrap();
                         }
-                        log::info!("FINAL VAL: {}", final_val.on_red());
 
                         album_tracks.track_number = final_val
                             .parse::<u64>()
                             .expect(format!("Invalid track number: {}", final_val).as_str());
                     }
-                    Value::UnsignedInt(val) => {
-                        album_tracks.track_number = val
-                    }
+                    Value::UnsignedInt(val) => album_tracks.track_number = val,
 
                     Value::Binary(_) => {
                         // log::info!("{}", "TRACK NUMBER binary".red());
@@ -337,26 +386,26 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     }
                     Value::Flag => {
                         // log::info!("{}", "TRACK NUMBER  flag".red());
-
                     }
                     Value::Float(_) => {
                         // log::info!("{}", "TRACK NUMBER  float".red());
-
                     }
                     Value::SignedInt(_) => {
                         // log::info!("{}", "TRACK NUMBER  signed int".red());
-
                     }
                 },
                 StandardTagKey::TrackSubtitle => {}
-                StandardTagKey::TrackTitle => match tag.value {
-                    Value::String(name) => {
-                        track.name = Some(name);
+                StandardTagKey::TrackTitle => {
+                    log::info!("{}", tag.value.to_string().on_red());
+                    match tag.value {
+                        Value::String(name) => {
+                            track.name = Some(name);
+                        }
+                        _ => {
+                            // log::error!("Track name is not a string");
+                        }
                     }
-                    _ => {
-                        // log::error!("Track name is not a string");
-                    }
-                },
+                }
                 StandardTagKey::TrackTotal => match tag.value {
                     Value::String(val) => {
                         album.num_of_tracks = val.parse::<u64>().unwrap();
@@ -402,10 +451,9 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
             }
         },
         None => {
-            // log::error!("Artist name is None");
+            // log::error!("Artist name is unknown");
         }
     }
-
     conn.execute(
         "INSERT INTO track (name, path, artist_id) VALUES (?, ?, ?)",
         (&track.name, filepath.to_str().unwrap(), artist.id),
@@ -413,6 +461,32 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
     .unwrap();
 
     track.id = conn.last_insert_rowid() as u64;
+
+
+
+
+    if let Some(genres) = track.genres {
+        for genre in genres {
+            log::info!("Genre: {} to be inserted with track id: {}", genre, track.id);
+            match conn.query_row("SELECT id FROM genres WHERE name = ?", &[&genre.trim().to_string()], |row| {
+                let row_id = row.get::<usize, u32>(0).unwrap();
+                match conn.execute("insert into track_genres (track_id, genre_id) values (?, ?)", [track.id, row_id as u64]) {
+                    Ok(v) => {
+                        Ok(v)
+                    }
+                    Err(err) => {
+                        log::error!("error while inserting into genre_tracks: {}", err);
+                        Ok(3)
+                    }
+                }
+            }) {
+                Ok(_) => {}
+                Err(err) => {
+                    log::error!("error while finding id from genre_name{}", err)
+                }
+            }
+        }
+    }
 
     // log::info!("{}", album.name.on_red());
     if album.name.is_empty() {
@@ -526,6 +600,4 @@ fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
             None
         }
     }
-
-
 }
