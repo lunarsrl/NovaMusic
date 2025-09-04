@@ -462,16 +462,15 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
 
     track.id = conn.last_insert_rowid() as u64;
 
-
-
-
     if let Some(genres) = track.genres {
         for genre in genres {
-            log::info!("Genre: {} to be inserted with track id: {}", genre, track.id);
             match conn.query_row("SELECT id FROM genres WHERE name = ?", &[&genre.trim().to_string()], |row| {
                 let row_id = row.get::<usize, u32>(0).unwrap();
+
+                log::info!("Genre: {} to be inserted with track id: {}", genre, track.id);
                 match conn.execute("insert into track_genres (track_id, genre_id) values (?, ?)", [track.id, row_id as u64]) {
                     Ok(v) => {
+                        log::info!("TRACKID: {}", track.id);
                         Ok(v)
                     }
                     Err(err) => {
