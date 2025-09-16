@@ -27,6 +27,7 @@ futures = "0.3.31"
 rayon = "1.10.0"
 dirs = "6.0.0"
 regex = "1.11.1"
+tokio-stream = "0.1.17"
 
 [dependencies.i18n-embed]
 version = "0.15"

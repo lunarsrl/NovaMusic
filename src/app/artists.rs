@@ -7,6 +7,7 @@ use cosmic::iced_renderer::graphics::Viewport;
 use cosmic::iced_runtime::task::widget;
 use cosmic::prelude::CollectionWidget;
 use cosmic::widget::Widget;
+use rodio::Source;
 use symphonia::core::conv::IntoSample;
 use crate::{app, fl};
 use crate::app::{AppModel, AppTrack};

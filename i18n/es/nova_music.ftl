@@ -24,7 +24,7 @@ scandir = Escanear Directorio
 # First Time Setup
 currentdir = Directorio eligido
 firsttimetitle = Bienvenido a Nova Music!
-firsttimebody = Por favor escoge alguna carpeta para escanear y preparar Nova Music
+firsttimebody = Por favor escoge alguna carpeta para escanear y preparar Nova Music. Tambien escoge si quieres que
 firsttimeprimary = Escanea la carpeta y avanza
 
 # Playlist Creation Dialog
@@ -51,6 +51,7 @@ Queue = Fila
 CreatePlaylist = Crear Playlist
 ClearAll = Eliminar Fila
 NowPlaying = Reproduciendo Ahora:
+None = Ninguno
 
 # Album Page
 AlbumLibrary = Biblioteca de Álbumes

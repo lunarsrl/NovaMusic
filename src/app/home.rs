@@ -30,7 +30,7 @@ pub(crate) struct HomePage;
 impl HomePage {
     pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
         // Time ELapsed
-        let mut time_elapsed = format_time(model.song_progress);
+        let mut time_elapsed = format_time(model.song_progress.as_secs_f64());
 
         let mut total_duration = "**:**".to_string();
         match model.song_duration {
@@ -61,35 +61,8 @@ impl HomePage {
             }
         }
 
-        let play_pause_button: cosmic::Element<Message> = match model.queue.is_empty() {
-            true => {
-                model.sink.clear();
-                cosmic::widget::button::icon(
-                    match model.sink.is_paused() {
-                        true => cosmic::widget::icon::from_name(
-                            "media-playback-start-symbolic",
-                        ),
-                        false => cosmic::widget::icon::from_name(
-                            "media-playback-pause-symbolic",
-                        ),
-                    },
-                )
-                    .into()
-            }
-            false => {
-                cosmic::widget::button::icon(
-                    match model.sink.is_paused() {
-                        true => cosmic::widget::icon::from_name(
-                            "media-playback-start-symbolic",
-                        ),
-                        false => cosmic::widget::icon::from_name(
-                            "media-playback-pause-symbolic",
-                        ),
-                    },
-                )
-                    .on_press(Message::PlayPause)
-                    .into()
-            }
+        let play_pause_button: cosmic::Element<Message> = {
+            cosmic::widget::icon::from_name("fjoweijfow").into()
         };
 
 
@@ -111,7 +84,7 @@ impl HomePage {
                                         cosmic::widget::text::heading(time_elapsed).into(),
                                         cosmic::widget::slider(
                                             0.0..=model.song_duration.unwrap_or(1.0),
-                                            model.song_progress,
+                                            model.song_progress.as_secs_f64(),
                                             |a| Message::SeekTrack(a),
                                         )
                                         .on_release(Message::SeekFinished)
