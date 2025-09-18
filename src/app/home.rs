@@ -11,7 +11,7 @@ use cosmic::iced::Alignment::Start;
 use cosmic::iced::{color, Center, ContentFit, Length, Pixels};
 use cosmic::widget::{container, image, list_column, JustifyContent, ListColumn};
 use cosmic::{iced, iced_core, Element};
-use rodio::queue::queue;
+
 use std::fmt::{format, Alignment};
 use std::future::IntoFuture;
 use std::ops::Deref;

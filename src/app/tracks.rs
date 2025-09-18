@@ -41,7 +41,7 @@ impl TrackPage {
         }
     }
 
-    pub fn load_page<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<app::Message> {
+    pub fn load_page<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<'a, app::Message> {
         cosmic::widget::container::Container::new(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::container(

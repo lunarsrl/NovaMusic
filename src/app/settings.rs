@@ -12,7 +12,7 @@ use cosmic::iced::alignment::Horizontal;
 use cosmic::widget::settings::Section;
 
 impl AppModel {
-    pub fn settings(&self) -> Element<app::Message> {
+    pub fn settings(&self) -> Element<'_, app::Message> {
         let cosmic::cosmic_theme::Spacing {
             space_xxs,
             space_s,

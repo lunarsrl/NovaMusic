@@ -62,7 +62,7 @@ use futures::channel::mpsc::{Receiver, SendError, Sender, TrySendError};
 use futures_util::stream::{Next, SelectNextSome};
 use futures_util::{FutureExt, SinkExt, StreamExt, TryFutureExt};
 use log::info;
-use rodio::source::SeekError::SymphoniaDecoder;
+
 
 use crate::app::playlists::{
     FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
@@ -77,8 +77,6 @@ use cosmic::iced_widget::scrollable::Viewport;
 use rayon::iter::{IntoParallelIterator, ParallelBridge};
 use rayon::slice::ParallelSliceMut;
 use regex::Match;
-use rodio::source::SeekError;
-use rodio::{OutputStream, Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
 use std::fmt::{format, Debug, Write};
@@ -96,7 +94,7 @@ use std::{fs, io};
 use std::sync::atomic::{AtomicBool, Ordering};
 use cosmic::cosmic_theme::Layer;
 use futures_util::task::SpawnExt;
-use rodio::mixer::{Mixer, MixerSource};
+
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, Track};
 use symphonia::core::io::{MediaSource, MediaSourceStream};
@@ -132,8 +130,8 @@ pub struct AppModel {
 
     //Audio
 
-    pub stream: Arc<OutputStream>,
-    pub sink: Arc<NovaSink>,
+
+
     pub loop_state: LoopState,
     pub song_progress: Duration,
     pub song_duration: Option<f64>,
@@ -156,7 +154,7 @@ pub struct AppModel {
 
     // Error Handling
     toasts: cosmic::widget::toaster::Toasts<Message>,
-    pub mixer: Arc<(Mixer, MixerSource)>,
+
 }
 
 pub enum QueueState {
@@ -329,7 +327,6 @@ impl cosmic::Application for AppModel {
 
         // Create a nav bar with three page items.
         let mut nav = nav_bar::Model::default();
-        let stream = Arc::from(rodio::OutputStreamBuilder::open_default_stream().unwrap());
 
 
         nav.insert()
@@ -368,6 +365,9 @@ impl cosmic::Application for AppModel {
         };
         let config = config.1;
 
+
+
+
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
@@ -380,9 +380,8 @@ impl cosmic::Application for AppModel {
             change_dir_filed: "".to_string(),
             rescan_available: true,
             // Audio
-            mixer: Arc::new(rodio::mixer::mixer(3, 3)),
-            stream,
-            sink: Arc::from(NovaSink::new()),
+
+
             loop_state: LoopState::NotLooping,
             song_progress: Duration::new(0,0),
             song_duration: None,
@@ -1931,37 +1930,7 @@ from track
 
             }
             Message::AddTrackToSink => {
-                if let Ok(file) = File::open(self.queue.get(self.queue_pos).unwrap().path_buf.as_path()) {
-                    let size = file.byte_len().unwrap();
-                    let source = rodio::decoder::DecoderBuilder::new()
-                        .with_data(file)
-                        .with_byte_len(size)
-                        .with_seekable(true)
-                        .build()
-                        .unwrap();
 
-                    self.song_duration = match source.total_duration() {
-                        None => {
-                            None
-                        }
-                        Some(val) => {
-                            Some(val.as_secs_f64())
-                        }
-                    };
-
-
-                    let cloned_sink = Arc::clone(&self.sink);
-
-                    tokio::task::spawn_blocking(move || {
-                        cloned_sink.append(source);
-                        cloned_sink.pause()
-                    });
-
-                } else {
-                    return cosmic::task::future(async move {
-                        Message::ToastError("Failed to load file".to_string())
-                    });
-                }
 
 
             }

@@ -14,6 +14,7 @@ pub struct Config {
     pub files_scanned: u32,
     pub tracks_found: u32,
     pub albums_found: u32,
+    pub crossfade: u32,
     pub volume: f32,
 }
 
@@ -43,6 +44,7 @@ impl Default for Config {
             files_scanned: 0,
             tracks_found: 0,
             albums_found: 0,
+            crossfade: 3,
             volume: 100.0,
         }
     }
