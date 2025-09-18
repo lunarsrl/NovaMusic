@@ -1,19 +1,21 @@
 # Nova Music
+An album focused music player written in the libcosmic toolkit.
 
-- An album focused music player written in the libcosmic toolkit
+TODO:
+- ~~[ ! ] Replace current playlist implementation with m3u~~
+- ~~Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
+- ~~Localization update~~
 
-TODO
-~~-[ ! ] Replace current playlist implementation with m3u~~
-~~- Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
-~~- Localization update~~
-
-- Artist View
-- Shuffle
-
-- [!!!] Rewrite without rodio sink (Time consuming but necessary for next)
+Priority:
+- Exploring CPAL instead of Rodio
 - Gapless Playback
 - Crossfade support
-
+  
+Other:
+- Artist View
+- Optional network features (ex: Musicbrainz integration for automatic metadata)
+- Genres
+- Shuffle options
 - Basic Keybinds 
 - Flatpak release!
 
