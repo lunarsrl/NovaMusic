@@ -45,9 +45,7 @@ use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
 use cosmic::iced::wgpu::naga::FastHashMap;
 use cosmic::iced::wgpu::Queue;
 use cosmic::iced::window::Id;
-use cosmic::iced::{
-    alignment, event, stream, Alignment, ContentFit, Event, Fill, Length, Pixels, Subscription,
-};
+use cosmic::iced::{alignment, event, stream, time, Alignment, ContentFit, Event, Fill, Length, Pixels, Subscription};
 use cosmic::iced_core::text::Wrapping;
 use cosmic::iced_core::widget::operation::{map, then};
 use cosmic::iced_wgpu::window::compositor::new;
@@ -89,10 +87,12 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::{fs, io};
 use std::sync::atomic::{AtomicBool, Ordering};
 use cosmic::cosmic_theme::Layer;
+use cpal::{Device, OutputCallbackInfo};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use futures_util::task::SpawnExt;
 
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
@@ -129,9 +129,7 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
-
-
-
+    pub stream: Box<dyn cpal::traits::StreamTrait>,
     pub loop_state: LoopState,
     pub song_progress: Duration,
     pub song_duration: Option<f64>,
@@ -310,7 +308,10 @@ impl cosmic::Application for AppModel {
         core: cosmic::Core,
         _flags: Self::Flags,
     ) -> (Self, Task<cosmic::Action<Self::Message>>) {
-        // store data & first time set up
+        let time = time::Instant::now();
+
+
+        // Initialize local data directory
         match dirs::data_local_dir()
             .unwrap()
             .join(crate::app::AppModel::APP_ID)
@@ -323,6 +324,35 @@ impl cosmic::Application for AppModel {
                     .join(crate::app::AppModel::APP_ID),
             )
             .unwrap(),
+        }
+
+        // Initialize audio
+        let host = cpal::default_host();
+
+        // Select default audio device and ask later during first time setup if user wants to select a specific one
+        let device = host.default_input_device();
+
+        // if there is no default device wait for first time setup to tell user and setup the audio then
+
+        let mut stream: Option<Box<dyn cpal::traits::StreamTrait>> = None;
+        match device {
+            None => {}
+            Some(device) => {
+                let mut supported_configs_range = device.supported_output_configs();
+                let audio_config = supported_configs_range.expect("no supported configs").next().unwrap().with_max_sample_rate();
+
+                let config = cpal::StreamConfig::from(audio_config);
+                stream = Some(Box::from(device.build_output_stream(&config,
+                                                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                                                        for sample in data.iter_mut() {
+                                                            *sample = cpal::Sample::to_sample((time.elapsed().as_secs_f32().sin() + 1.0) * 5.0);
+                                                        }
+                                                    },
+                                                    move |error| {
+                                                    },
+                                                    None
+                ).unwrap()));
+            }
         }
 
         // Create a nav bar with three page items.
@@ -380,8 +410,7 @@ impl cosmic::Application for AppModel {
             change_dir_filed: "".to_string(),
             rescan_available: true,
             // Audio
-
-
+            stream: stream.unwrap(),
             loop_state: LoopState::NotLooping,
             song_progress: Duration::new(0,0),
             song_duration: None,
