@@ -829,8 +829,8 @@ impl cosmic::Application for AppModel {
                     .map(cosmic::Action::App);
             }
             Message::PlaylistEdit(path) => {
-                let mut file = std::fs::File::open(&path).unwrap();
-                let mut string = String::from("");
+                let file = std::fs::File::open(&path).unwrap();
+                let string = String::from("");
 
                 let mut cover_path: String = String::from("");
 

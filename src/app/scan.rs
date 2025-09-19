@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::path::PathBuf;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use futures_util::SinkExt;
