@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use cosmic::dialog::file_chooser::{self, Error, FileFilter};
-use cosmic::widget::dropdown::multi::model;
+use cosmic::dialog::file_chooser::Error;
+
 use rayon::iter::IndexedParallelIterator;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -14,93 +14,44 @@ mod search;
 mod settings;
 mod tracks;
 
-use std::any::TypeId;
-use tokio::task::{spawn_blocking, JoinHandle};
-
 use crate::app::albums::{
     get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
 };
 
-use crate::app::home::{listify_queue, HomePage};
-use crate::app::scan::{scan_directory, MediaFileTypes};
+use crate::app::home::HomePage;
+use crate::app::scan::scan_directory;
 use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
-
-use crate::app::Message::{
-    AddTrackToSink, AlbumPageStateAlbum, AlbumProcessed, AlbumRequested, SearchResults,
-    SongFinished, UpdateScanProgress,
-};
 use crate::config::Config;
 use crate::database::{create_database, create_database_entry};
 use crate::{app, config, fl};
 use colored::Colorize;
 use cosmic::app::context_drawer;
-use cosmic::cosmic_config::{self, ConfigSet, CosmicConfigEntry};
-use cosmic::cosmic_theme::palette::cast::IntoComponents;
-use cosmic::cosmic_theme::palette::chromatic_adaptation::AdaptInto;
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::event::Status;
-use cosmic::iced::keyboard::key::Code::Home;
-use cosmic::iced::keyboard::key::Physical::Code;
-use cosmic::iced::wgpu::naga::back::spv::Capability::MeshShadingEXT;
-use cosmic::iced::wgpu::naga::FastHashMap;
-use cosmic::iced::wgpu::Queue;
 use cosmic::iced::window::Id;
-use cosmic::iced::{
-    alignment, event, stream, Alignment, ContentFit, Event, Fill, Length, Pixels, Subscription,
-};
-use cosmic::iced_core::text::Wrapping;
-use cosmic::iced_core::widget::operation::{map, then};
-use cosmic::iced_wgpu::window::compositor::new;
+use cosmic::iced::{Alignment, ContentFit, Length};
 use cosmic::prelude::*;
-use cosmic::widget::segmented_button::Entity;
-use cosmic::widget::{
-    self, container, dialog, icon, menu, nav_bar, progress_bar, toaster, JustifyContent,
-};
-use cosmic::{action, cosmic_theme, iced, iced_futures, theme};
-use futures::channel::mpsc;
-use futures::channel::mpsc::{Receiver, SendError, Sender, TrySendError};
-use futures_util::stream::{Next, SelectNextSome};
+use cosmic::widget::{self, icon, menu, nav_bar};
+use cosmic::{action, cosmic_config, cosmic_theme, theme};
 use futures_util::{SinkExt, StreamExt};
-use log::info;
-use rodio::source::SeekError::SymphoniaDecoder;
-
-use crate::app::playlists::{
-    FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
-};
-use cosmic::cctk::wayland_protocols::ext::session_lock::v1::client::ext_session_lock_manager_v1::ExtSessionLockManagerV1;
-use cosmic::dialog::file_chooser::open::FileResponse;
+use crate::app::playlists::{FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack, };
 use cosmic::iced::task::Handle;
 use cosmic::iced::Alignment::Start;
-
-use crate::app::Page::Playlists;
 use cosmic::iced_widget::scrollable::Viewport;
-use rayon::iter::{IntoParallelIterator, ParallelBridge};
-use rayon::slice::ParallelSliceMut;
-use regex::Match;
-use rodio::source::SeekError;
-use rodio::{OutputStream, Sink, Source};
-use rusqlite::fallible_iterator::FallibleIterator;
+use rodio::{Sink, Source};
 use std::collections::HashMap;
-use std::fmt::{format, Debug, Write};
-use std::fs::{create_dir, File};
-use std::future::Future;
-use std::io::{BufRead, BufReader, Read, Write as OtherWrite};
-use std::ops::DerefMut;
-use std::path::{Path, PathBuf};
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::task::Poll;
+use std::fmt::Debug;
+use std::fs::File;
+use std::io::{BufRead, Read, Write as OtherWrite};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
-use cosmic::cosmic_theme::Layer;
-use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
-use symphonia::core::formats::{FormatOptions, Track};
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, Tag, Value};
-use symphonia::core::probe::Hint;
-use symphonia::core::units::Time;
+use symphonia::core::codecs::{CODEC_TYPE_AAC, CODEC_TYPE_NULL};
+use symphonia::core::formats::{Track};
+use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
+use crate::app::artists::ArtistsPage;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -126,7 +77,6 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
-    pub stream: OutputStream,
     pub sink: Arc<Sink>,
     pub loop_state: LoopState,
     pub song_progress: f64,
@@ -149,6 +99,15 @@ pub struct AppModel {
 
     // Error Handling
     toasts: cosmic::widget::toaster::Toasts<Message>,
+
+    // Navigation
+
+    albumsid: nav_bar::Id,
+    tracksid: nav_bar::Id,
+    artistsid: nav_bar::Id,
+    playlistsid: nav_bar::Id,
+    homeid: nav_bar::Id,
+
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -173,7 +132,7 @@ pub enum LoopState {
 pub enum Message {
     OpenRepositoryUrl,
     ToggleContextPage(ContextPage),
-    UpdateConfig(Config),
+    _UpdateConfig(Config),
     LaunchUrl(String),
     EditInput(String),
 
@@ -323,26 +282,32 @@ impl cosmic::Application for AppModel {
 
         let sink = Arc::new(sink);
 
-        nav.insert()
+        let homeid = nav.insert()
             .text(fl!("home"))
-            .data::<Page>(Page::NowPlaying(HomePage))
+            .data::<Page>(Page::NowPlaying(HomePage {viewport: None}))
             .icon(icon::from_name("applications-audio-symbolic"))
-            .activate();
+            .activate()
+            .id();
 
-        nav.insert()
+        let tracksid = nav.insert()
             .text(fl!("tracks"))
             .data::<Page>(Page::Tracks(TrackPage::new()))
-            .icon(icon::from_name("media-tape-symbolic"));
+            .icon(icon::from_name("media-tape-symbolic")).id();
 
-        nav.insert()
+        let artistsid = nav.insert()
+            .text(fl!("artists"))
+            .data::<Page>(Page::Playlists(PlaylistPage::new()))
+            .icon(icon::from_name("playlist-symbolic")).id();
+
+        let albumsid = nav.insert()
             .text(fl!("albums"))
             .data::<Page>(Page::Albums(AlbumPage::new(vec![])))
-            .icon(icon::from_name("media-optical-symbolic"));
+            .icon(icon::from_name("media-optical-symbolic")).id();
 
-        nav.insert()
+        let playlistsid = nav.insert()
             .text(fl!("playlists"))
             .data::<Page>(Page::Playlists(PlaylistPage::new()))
-            .icon(icon::from_name("playlist-symbolic"));
+            .icon(icon::from_name("playlist-symbolic")).id();
 
         // INIT CONFIG
         let config = config::Config::load();
@@ -369,7 +334,6 @@ impl cosmic::Application for AppModel {
             change_dir_filed: "".to_string(),
             rescan_available: true,
             // Audio
-            stream,
             sink,
             loop_state: LoopState::NotLooping,
             song_progress: 0.0,
@@ -389,6 +353,11 @@ impl cosmic::Application for AppModel {
             playlist_delete_dialog: false,
             playlist_edit_dialog: false,
             toasts: cosmic::widget::toaster::Toasts::new(|a| Message::Toasts(a)),
+            albumsid,
+            tracksid,
+            artistsid,
+            playlistsid,
+            homeid,
         };
 
         // Create a startup command that sets the window title.
@@ -413,7 +382,7 @@ impl cosmic::Application for AppModel {
         vec![menu_bar.into()]
     }
 
-    fn on_close_requested(&self, id: Id) -> Option<Self::Message> {
+    fn on_close_requested(&self, _id: Id) -> Option<Self::Message> {
         self.sink.stop();
         match &self.task_handle {
             None => {}
@@ -805,6 +774,7 @@ impl cosmic::Application for AppModel {
         match self.nav.active_data::<Page>().unwrap() {
             Page::NowPlaying(home_page) => body = home_page.load_page(self),
             Page::Tracks(track_page) => body = track_page.load_page(self),
+            Page::Artist(artists_page) => body = artists_page.load_page(self),
             Page::Albums(album_page) => body = album_page.load_page(self),
             Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
         }
@@ -831,27 +801,32 @@ impl cosmic::Application for AppModel {
                     .map(cosmic::Action::App);
             }
             Message::Toasts(id) => self.toasts.remove(id),
-            Message::ScrollView(view) => match self.nav.active_data_mut::<Page>().unwrap() {
-                Page::NowPlaying(_) => {
-                    return cosmic::task::none();
+            Message::ScrollView(view) => match self.nav.active_data_mut::<Page>().expect("Should always be intialized") {
+                Page::NowPlaying(page) => {
+                    page.viewport = Some(view)
                 }
                 Page::Albums(page) => {
                     page.viewport = Some(view);
                 }
-                Page::Playlists(_) => {
-                    return cosmic::task::none();
+                Page::Playlists(page) => {
+                    page.viewport = Some(view)
                 }
-                Page::Tracks(_) => {
-                    return cosmic::task::none();
+                Page::Tracks(page) => {
+                    page.viewport = Some(view)
+                }
+                Page::Artist(page) => {
+                   page.viewport = Some(view)
                 }
             },
             Message::PlaylistDeleteConfirmed => {
-                if let Page::Playlists(page) = self.access_nav_data(3) {
+                if let Some(page) = self.nav.data_mut::<PlaylistPage>(self.playlistsid) {
                     if let PlaylistPageState::PlaylistPage(page) = &page.playlist_page_state {
                         std::fs::remove_file(&page.playlist.path).unwrap();
                     }
-                    page.playlist_page_state = PlaylistPageState::Loading
                 }
+
+
+
                 self.playlist_delete_dialog = false;
                 return cosmic::Task::future(async move { Message::OnNavEnter })
                     .map(cosmic::Action::App);
@@ -942,7 +917,7 @@ impl cosmic::Application for AppModel {
             }
             Message::FolderPickerFail(error) => {
                 if !(error.contains("Cancelled File Picker: Keeping scan directory the same")) {
-                    self.config
+                    let _ = self.config
                         .set_scan_dir(&self.config_handler, "".to_string());
                 } else {
                 }
@@ -954,7 +929,7 @@ impl cosmic::Application for AppModel {
             }
             Message::FolderChosen(fp) => {
                 self.rescan_available = true;
-                self.config.set_scan_dir(&self.config_handler, fp);
+                let _ = self.config.set_scan_dir(&self.config_handler, fp);
             }
             Message::OpenRepositoryUrl => {
                 _ = open::that_detached(REPOSITORY);
@@ -1003,7 +978,7 @@ impl cosmic::Application for AppModel {
                 Err(error) => {}
             },
 
-            Message::UpdateConfig(config) => {
+            Message::_UpdateConfig(config) => {
                 self.config = config;
             }
             Message::UpdateSearch(search) => {
@@ -1227,6 +1202,7 @@ impl cosmic::Application for AppModel {
                             .map(action::Action::App),
                         );
                     }
+                    Page::Artist(_) => {}
                 }
             }
 
@@ -1270,23 +1246,24 @@ impl cosmic::Application for AppModel {
                     .expect("Failed to change config");
 
                 // Albums: Full reset
-                let album_pos = self.nav.entity_at(2).unwrap();
-                let album_dat = self.nav.data_mut::<Page>(album_pos).unwrap();
+                let album = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized");
 
-                if let Page::Albums(page) = album_dat {
+
+                if let Page::Albums(page) = album {
                     page.albums = Arc::from(vec![]);
                     page.page_state = AlbumPageState::Loading
                 }
 
                 // Tracks: Full reset
-                let track_pos = self.nav.entity_at(1).unwrap();
-                let track_dat = self.nav.data_mut::<Page>(track_pos).unwrap();
-                if let Page::Tracks(page) = track_dat {
+
+                let tracks = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized");
+                if let Page::Tracks(page) = tracks {
                     page.track_page_state = TrackPageState::Loading
                 }
 
                 // Playlists: FUll reset
-                if let Page::Playlists(page) = self.access_nav_data(3) {
+
+                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("Should always be intialized") {
                     page.playlist_page_state = PlaylistPageState::Loading
                 }
 
@@ -1415,9 +1392,7 @@ impl cosmic::Application for AppModel {
 
             // PAGE TASK RESPONSES
             Message::AlbumProcessed(new_album) => {
-                let dat_pos = self.nav.entity_at(2).expect("REASON");
-                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
-                if let Page::Albums(dat) = data {
+                if let Page::Albums (dat) = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized") {
                     dat.albums = Arc::from(new_album)
                 }
             }
@@ -1427,86 +1402,70 @@ impl cosmic::Application for AppModel {
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(HomePage) => {}
                     Page::Albums(val) => {
-                        match &mut val.page_state {
-                            AlbumPageState::Loading => {
-                                log::info!("LOADING");
-                            }
-                            AlbumPageState::Album(page) => {
-                                log::info!("ALBUM PAGE");
-                                return Task::none();
-                            }
-                            AlbumPageState::Loaded => {
-                                log::info!("LOADED");
-                                return Task::none();
-                            }
-                            AlbumPageState::Search(results) => {
-                                log::info!("SEARCHING STATE");
-                                return Task::none();
-                            }
-                        }
+                        if let AlbumPageState::Loading = val.page_state {
+                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                                5,
+                                |mut tx| async move {
+                                    tokio::task::spawn_blocking(move || {
+                                        let conn =
+                                            match rusqlite::Connection::open(
+                                                dirs::data_local_dir().unwrap().join(Self::APP_ID).join("nova_music.db")
+                                            ) {
+                                                Ok(conn) => conn,
+                                                Err(err) => {
+                                                    panic!("{}", err)
+                                                }
+                                            };
 
-                        return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                            5,
-                            |mut tx| async move {
-                                tokio::task::spawn_blocking(move || {
-                                    let conn =
-                                        match rusqlite::Connection::open(
-                                            dirs::data_local_dir().unwrap().join(Self::APP_ID).join("nova_music.db")
-                                        ) {
-                                            Ok(conn) => conn,
+
+                                        let mut stmt = match conn
+                                            .prepare(
+                                                "
+                                            SELECT a.id, a.name,
+                                            a.disc_number, a.track_number, a.album_cover, art.name as artist_name
+                                            FROM album a
+                                            left JOIN artists art ON a.artist_id = art.id",
+                                            ) {
+                                            Ok(stmt) => stmt,
                                             Err(err) => {
                                                 panic!("{}", err)
                                             }
                                         };
 
+                                        let album_iter = stmt
+                                            .query_map([], |row| {
+                                                Ok((
+                                                    row.get::<_, String>("name").unwrap_or("None".to_string()),
+                                                    row.get::<_, String>("artist_name").unwrap_or_default(),
+                                                    row.get::<_, u32>("disc_number").unwrap_or(0),
+                                                    row.get::<_, u32>("track_number").unwrap_or(0),
+                                                    match row.get::<_, Vec<u8>>("album_cover") {
+                                                        Ok(val) => Some(val),
+                                                        Err(e) => {
+                                                            log::info!("Nothing");
+                                                            None
+                                                        }
+                                                    },
+                                                ))
+                                            })
+                                            .expect("error executing query");
 
-                                    let mut stmt = match conn
-                                        .prepare(
-                                            "
-                                            SELECT a.id, a.name,
-                                            a.disc_number, a.track_number, a.album_cover, art.name as artist_name
-                                            FROM album a
-                                            left JOIN artists art ON a.artist_id = art.id",
-                                        ) {
-                                        Ok(stmt) => stmt,
-                                        Err(err) => {
-                                            panic!("{}", err)
+
+                                        let albums: Vec<(String, String, u32, u32, Option<Vec<u8>>)> =
+                                            album_iter.filter_map(|a| {
+                                                a.ok()
+                                            }).collect();
+                                        for each in &albums {
+                                            log::info!("ALBUM: {:?}", each.0);
                                         }
-                                    };
+                                        get_top_album_info(&mut tx, albums);
 
-                                    let album_iter = stmt
-                                        .query_map([], |row| {
-                                            Ok((
-                                                row.get::<_, String>("name").unwrap_or("None".to_string()),
-                                                row.get::<_, String>("artist_name").unwrap_or_default(),
-                                                row.get::<_, u32>("disc_number").unwrap_or(0),
-                                                row.get::<_, u32>("track_number").unwrap_or(0),
-                                                match row.get::<_, Vec<u8>>("album_cover") {
-                                                    Ok(val) => Some(val),
-                                                    Err(e) => {
-                                                        log::info!("Nothing");
-                                                        None
-                                                    }
-                                                },
-                                            ))
-                                        })
-                                        .expect("error executing query");
-
-
-                                    let albums: Vec<(String, String, u32, u32, Option<Vec<u8>>)> =
-                                        album_iter.filter_map(|a| {
-                                            a.ok()
-                                        }).collect();
-                                    for each in &albums {
-                                        log::info!("ALBUM: {:?}", each.0);
-                                    }
-                                    get_top_album_info(&mut tx, albums);
-
-                                    tx.try_send(Message::AlbumsLoaded)
-                                });
-                            },
-                        ))
-                            .map(cosmic::Action::App);
+                                        tx.try_send(Message::AlbumsLoaded)
+                                    });
+                                },
+                            ))
+                                .map(cosmic::Action::App);
+                        }
                     }
                     Page::Playlists(page) => match &page.playlist_page_state {
                         PlaylistPageState::Loading => {
@@ -1655,17 +1614,18 @@ from track
                             page.track_page_state = TrackPageState::Loaded;
                         }
                     },
+                    &mut Page::Artist(_) => todo!(),
                 }
             }
 
             Message::PlaylistFound(playlists) => {
-                if let Page::Playlists(page) = self.access_nav_data(3) {
+                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("Should always be intialized") {
                     page.playlists = Arc::new(playlists);
                     page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
             Message::PlaylistSelected(playlist) => {
-                if let Page::Playlists(page) = self.access_nav_data(3) {
+                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intialized") {
                     let mut tracks = vec![];
 
                     let files = io::BufReader::new(match fs::File::open(&playlist.path) {
@@ -1714,42 +1674,28 @@ from track
                 }
             }
             Message::PlaylistPageReturn => {
-                if let Page::Playlists(page) = self.access_nav_data(3) {
+                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intialized") {
                     page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
             Message::TrackLoaded(mut track) => {
-                let dat_pos = self.nav.entity_at(1).expect("REASON");
-                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
-
-                if let Page::Tracks(dat) = data {
+                if let Page::Tracks (dat) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized") {
                     dat.tracks = Arc::new(track)
                 }
             }
             Message::TracksLoaded => {
-                let dat_pos = self.nav.entity_at(1).expect("REASON");
-                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
-
-                if let Page::Tracks(dat) = data {
+                if let Page::Tracks (dat) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized") {
                     dat.track_page_state = TrackPageState::Loaded;
                 }
             }
             Message::AlbumsLoaded => {
-                let dat_pos = self.nav.entity_at(2).expect("REASON");
-                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
-
-                if let Page::Albums(dat) = data {
+                if let Page::Albums(dat) = self.nav.data_mut::<Page>(self.albumsid).expect("should always be init"){
                     dat.page_state = AlbumPageState::Loaded;
                     dat.has_fully_loaded = true;
-                    log::info!("{:?}", dat.albums);
-                    log::info!("EMPTY ALBUMS");
                 }
             }
             Message::AlbumPageReturn => {
-                let dat_pos = self.nav.entity_at(2).expect("REASON");
-                let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
-
-                if let Page::Albums(dat) = data {
+                if let Page::Albums (dat) = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized") {
                     match dat.has_fully_loaded {
                         true => {
                             dat.page_state = AlbumPageState::Loaded;
@@ -1769,14 +1715,11 @@ from track
                 }
             }
             Message::AlbumPageStateAlbum(new_page) => {
-                match self.nav.active_data_mut::<Page>().unwrap() {
-                    Page::NowPlaying(home_page) => {}
-
+                match self.nav.active_data_mut::<Page>().expect("Should always be intialized") {
                     Page::Albums(old_page) => {
                         *old_page = new_page;
                     }
-                    Page::Playlists(page) => {}
-                    Page::Tracks(page) => {}
+                    _ => {}
                 }
             }
             Message::AlbumInfoRetrieved(albuminfopage) => {
@@ -1788,7 +1731,7 @@ from track
                 }
             }
             Message::AlbumRequested(dat) => {
-                match self.nav.active_data_mut::<Page>().unwrap() {
+                match self.nav.active_data_mut::<Page>().expect("Should always be intialized") {
                     Page::Albums(page_dat) => {
                         return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                             0,
@@ -2255,7 +2198,7 @@ from track
                 }
                 self.playlist_edit_dialog = false;
 
-                if let Page::Playlists(val) = self.access_nav_data(3) {
+                if let Page::Playlists(val) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intitalized") {
                     val.playlist_page_state = PlaylistPageState::Loading
                 }
                 return cosmic::task::future( async move {
@@ -2371,15 +2314,14 @@ from track
                 self.playlist_dialog_text = String::from("");
                 self.playlist_cover = None;
                 self.playlist_dialog = false;
-                if let Page::Playlists(page) = self.access_nav_data(3) {
+                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intialized") {
                     page.playlist_page_state = PlaylistPageState::Loading
                 }
             }
             Message::SearchResults(tracks) => {
                 match self
                     .nav
-                    .active_data_mut::<Page>()
-                    .expect("Pages should exist always")
+                    .active_data_mut::<Page>().expect("Should always be intialized")
                 {
                     Page::NowPlaying(_) => {}
 
@@ -2390,21 +2332,22 @@ from track
                     Page::Tracks(track_list) => {
                         track_list.track_page_state = TrackPageState::Search;
                         track_list.search = tracks;
-                    }
+                    },
+                    &mut Page::Artist(_) => todo!()
                 }
             }
             Message::ToggleTitle(val) => {
-                if let Page::Tracks(page) = self.access_nav_data(1) {
+                if let Page::Tracks(page) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be initialized") {
                     page.search_by_title = val
                 }
             }
             Message::ToggleAlbum(val) => {
-                if let Page::Tracks(page) = self.access_nav_data(1) {
+                if let Page::Tracks(page) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be initialized") {
                     page.search_by_album = val
                 }
             }
             Message::ToggleArtist(val) => {
-                if let Page::Tracks(page) = self.access_nav_data(1) {
+                if let Page::Tracks(page) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized") {
                     page.search_by_artist = val
                 }
             }
@@ -2416,7 +2359,7 @@ from track
                     .expect("Failed to set volume");
             }
             Message::FooterToggle => {
-                if let Page::Albums(page) = self.access_nav_data(2) {
+                if let Page::Albums(page) = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized") {
                     log::info!("page:  {:?}", page.albums)
                 } else {
                     log::info!("When did this happen")
@@ -2490,7 +2433,7 @@ impl AppModel {
 
         fn do_thing() -> Task<cosmic::Action<Message>> {
             return cosmic::task::future(async move { Message::OnNavEnter });
-        };
+        }
 
         if let Some(id) = self.core.main_window_id() {
             return cosmic::Task::batch(vec![self.set_window_title(window_title, id), do_thing()]);
@@ -2504,7 +2447,7 @@ impl AppModel {
 #[derive(Debug)]
 pub enum Page {
     NowPlaying(HomePage),
-
+    Artist(ArtistsPage),
     Albums(AlbumPage),
     Playlists(PlaylistPage),
     Tracks(TrackPage),

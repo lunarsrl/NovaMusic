@@ -6,13 +6,17 @@ use cosmic::widget::{Grid, JustifyContent, Widget};
 use cosmic::{iced, Application, Element, Theme};
 use std::path::PathBuf;
 use std::sync::Arc;
+use cosmic::iced_widget::scrollable::Viewport;
+
 use crate::{app, fl};
 use crate::app::tracks::SearchResult;
 
 #[derive(Debug, Clone)]
 pub struct PlaylistPage {
+    pub viewport: Option<Viewport>,
     pub playlists: Arc<Vec<Playlist>>,
     pub playlist_page_state: PlaylistPageState,
+    pub scrollbar_id: cosmic::iced_core::widget::Id,
 }
 
 #[derive(Clone, Debug)]
@@ -44,6 +48,8 @@ pub enum PlaylistPageState {
 impl PlaylistPage {
     pub fn new() -> Self {
         PlaylistPage {
+            viewport: None,
+            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
             playlists: Arc::new(vec![]),
             playlist_page_state: PlaylistPageState::Loading,
         }

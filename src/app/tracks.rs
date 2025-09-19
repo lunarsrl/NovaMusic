@@ -6,12 +6,15 @@ use cosmic::widget::dropdown::multi::list;
 use std::num::Wrapping;
 use std::sync::{Arc, Mutex};
 use cosmic::iced;
+use cosmic::iced::widget::scrollable::Viewport;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
     pub tracks: Arc<Vec<AppTrack>>,
     pub search: Vec<SearchResult>,
     pub track_page_state: TrackPageState,
+    pub viewport: Option<Viewport>,
+    pub scrollbar_id: cosmic::iced_core::widget::Id,
     pub search_by_artist: bool,
     pub search_by_album: bool,
     pub search_by_title: bool,
@@ -35,13 +38,16 @@ impl TrackPage {
             tracks: Arc::from(Vec::<AppTrack>::new()),
             search: vec![],
             track_page_state: TrackPageState::Loading,
+            viewport: None,
+
+            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
             search_by_artist: true,
             search_by_album: true,
             search_by_title: true,
         }
     }
 
-    pub fn load_page<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<app::Message> {
+    pub fn load_page<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<'a, app::Message> {
         cosmic::widget::container::Container::new(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::container(

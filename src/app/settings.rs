@@ -1,22 +1,15 @@
-use crate::app;
 use crate::fl;
 use crate::app::{AppModel, Message};
-use cosmic::widget::text::heading;
-use cosmic::widget::{container, icon, text, ProgressBar};
 use cosmic::{theme, widget, Element};
-use std::borrow::Cow;
-use std::fmt::format;
-use std::ops::RangeInclusive;
-use cosmic::iced::Alignment;
 use cosmic::iced::alignment::Horizontal;
+use cosmic::widget::text;
 use cosmic::widget::settings::Section;
 
 impl AppModel {
-    pub fn settings(&self) -> Element<app::Message> {
+    pub fn settings<'a>(&'a self) -> Element<'a, Message> {
         let cosmic::cosmic_theme::Spacing {
             space_xxs,
             space_s,
-            space_l,
             ..
         } = theme::active().cosmic().spacing;
 
@@ -29,7 +22,7 @@ impl AppModel {
         let contain = widget::Container::new(
             widget::column::Column::with_children([
 
-                cosmic::widget::toaster(&self.toasts, cosmic::widget::horizontal_space()).into(),
+                cosmic::widget::toaster(&self.toasts, widget::horizontal_space()).into(),
                 current_settings
                     .title(fl!("CurrentScanResults"))
                     .add(widget::Row::with_children([
@@ -42,8 +35,7 @@ impl AppModel {
                         widget::horizontal_space().into(),
                         text::text(format!(
                             "{}/{}",
-                            (self.config.num_files_found
-                                - (self.config.num_files_found - self.config.files_scanned)),
+                            self.config.num_files_found - (self.config.num_files_found - self.config.files_scanned),
                             self.config.num_files_found
                         ))
                         .into(),
@@ -72,10 +64,10 @@ impl AppModel {
                             .control(
                                 match self.rescan_available {
                                     true => {
-                                        cosmic::widget::button::suggested(fl!("folderselect")).on_press(Message::ChooseFolder)
+                                        widget::button::suggested(fl!("folderselect")).on_press(Message::ChooseFolder)
                                     }
                                     false => {
-                                        cosmic::widget::button::suggested(fl!("folderselect"))
+                                        widget::button::suggested(fl!("folderselect"))
                                     }
                                 }
 
@@ -88,7 +80,7 @@ impl AppModel {
 
                                     widget::button::text(fl!("Rescan"))
                                         .class(widget::button::ButtonClass::Destructive)
-                                        .on_press(app::Message::RescanDir)
+                                        .on_press(Message::RescanDir)
                                 }
                                 false => {
                                     widget::button::text(fl!("Rescan"))
@@ -101,9 +93,9 @@ impl AppModel {
                     .add(
                         widget::column::Column::with_children([
                             widget::column::Column::with_children([
-                                widget::text::heading(fl!("ScanProgress")).into(),
+                               text::heading(fl!("ScanProgress")).into(),
 
-                                widget::text::caption(format!("{}%", (self.config.files_scanned as f32 /self.config.num_files_found as f32 * 100.0).round()))
+                               text::caption(format!("{}%", (self.config.files_scanned as f32 /self.config.num_files_found as f32 * 100.0).round()))
                                     .align_x(Horizontal::Right)
                                     .into(),
                             ])

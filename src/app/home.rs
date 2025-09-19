@@ -20,12 +20,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use cosmic::iced_core::text::Wrapping;
+use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::style::Text::Color;
 
 use humantime::format_duration;
 
 #[derive(Debug)]
-pub(crate) struct HomePage;
+pub(crate) struct HomePage {
+    pub viewport: Option<Viewport>
+}
 
 impl HomePage {
     pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
