@@ -1,11 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::fmt::Display;
-use std::fs;
-use ::log::info;
-use strum_macros::EnumString;
-use symphonia::core::meta::StandardTagKey;
-use crate::database::create_database;
 use crate::log::setup_logger;
 
 mod app;

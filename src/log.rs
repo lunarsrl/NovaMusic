@@ -1,4 +1,4 @@
-use log::{debug, error, info, trace, warn, Level};
+use log::Level;
 use std::time::SystemTime;
 use colored::*;
 

@@ -18,11 +18,16 @@
       <changelist_data name="Samuel RIvero Luna" email="riveroluna@protonmail.com" automatic="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/albums.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/albums.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/artists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/artists.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/home.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/home.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/playlists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/playlists.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/settings.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/settings.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/scan.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/scan.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/tracks.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/tracks.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/config.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/config.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/database.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/database.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/log.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/log.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -368,7 +373,7 @@
       <workItem from="1754593504626" duration="8303000" />
       <workItem from="1754601895949" duration="7558000" />
       <workItem from="1754669975647" duration="12353000" />
-      <workItem from="1758304291134" duration="3342000" />
+      <workItem from="1758304291134" duration="3969000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />
@@ -448,17 +453,17 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/app/home.rs</url>
-          <line>228</line>
+          <line>214</line>
           <option name="timeStamp" value="2" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/app.rs</url>
-          <line>1403</line>
+          <line>1405</line>
           <option name="timeStamp" value="3" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/app.rs</url>
-          <line>1469</line>
+          <line>1471</line>
           <option name="timeStamp" value="4" />
         </line-breakpoint>
       </breakpoints>

@@ -1,15 +1,8 @@
 use colored::Colorize;
-use futures_util::future::err;
-use rusqlite::types::Type::Null;
-use rusqlite::{Error, OptionalExtension};
-use std::any::Any;
-use std::fmt::{format, Debug, Pointer};
 use std::fs;
-use std::panic::panic_any;
 use std::path::PathBuf;
 use cosmic::Application;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
-use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
 
 struct Artist {
@@ -433,7 +426,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 // Album already exists
                 album.id = val
             }
-            Err(err) => {
+            Err(_err) => {
                 // log::info!(
                 //     "No album with title, {}, found; Creating a new one \n ------ \n {}",
                 //     album.name.white().on_blue().bold(),
@@ -462,7 +455,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                         Ok(_) => {
                             // log::info!("{}", "Added album without visual!".purple());
                         }
-                        Err(err) => {
+                        Err(_err) => {
                             // log::error!("{} \n {}", "UNABLE TO INSERT ALBUM DATA W/O VISUAL".red(), err.to_string());
 
                         }
@@ -479,7 +472,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
             Ok(_) => {
 
             }
-            Err(err) => {
+            Err(_err) => {
                 // log::error!("album_track insertion went wrong \n ------ \n  {}", err.to_string());
             }
         }

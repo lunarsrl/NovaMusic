@@ -1,10 +1,7 @@
-use crate::app::widget::scrollable::horizontal;
-use crate::app::albums::FullAlbum;
-use crate::app::{AppModel, AppTrack, Message};
-use cosmic::iced::{Alignment, ContentFit, Length, Size};
-use cosmic::widget::{Grid, JustifyContent, Widget};
-use cosmic::{iced, Application, Element, Theme};
-use std::path::PathBuf;
+use crate::app::{AppModel, Message};
+use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::widget::JustifyContent;
+use cosmic::{iced, Application, Element};
 use std::sync::Arc;
 use cosmic::iced_widget::scrollable::Viewport;
 
@@ -134,7 +131,7 @@ impl PlaylistPage {
                         );
 
                         let width = size.width as u32;
-                        let mut spacing: u16 = 0;
+                        let spacing;
                         let mut items_per_row = 0;
                         let mut index = 0;
 
@@ -146,7 +143,7 @@ impl PlaylistPage {
                         let check_spacing: u32 =
                             ((items_per_row + 1) * model.config.grid_item_size * 32)
                                 .saturating_sub(width);
-                        let check_final = (model.config.grid_item_size * 32 - check_spacing);
+                        let check_final = model.config.grid_item_size * 32 - check_spacing;
 
                         if items_per_row < 3 {
                             spacing = check_final as u16
@@ -348,7 +345,7 @@ impl PlaylistPage {
                     let check_spacing: u32 =
                         ((items_per_row + 1) * model.config.grid_item_size * 32)
                             .saturating_sub(width);
-                    let check_final = (model.config.grid_item_size * 32 - check_spacing);
+                    let check_final = model.config.grid_item_size * 32 - check_spacing;
 
                     if items_per_row < 3 {
                         spacing = check_final as u16

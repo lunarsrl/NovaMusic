@@ -1,14 +1,9 @@
 use crate::app::tracks::SearchResult;
 use crate::app::{AppModel, Message};
-use colored::Colorize;
 use cosmic::iced::futures::channel::mpsc::Sender;
-use cosmic::iced::{Alignment, ContentFit, Length, Size};
-use cosmic::iced_widget::Container;
-use cosmic::widget::settings::item;
-use cosmic::widget::{container, JustifyContent};
-use cosmic::{iced, widget, Application, Element, Theme};
-use futures_util::{SinkExt, StreamExt};
-use rusqlite::fallible_iterator::FallibleIterator;
+use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::widget::JustifyContent;
+use cosmic::{iced, Application, Element, Theme};
 use std::sync::Arc;
 use cosmic::iced_widget::scrollable::Viewport;
 use crate::fl;
@@ -182,7 +177,7 @@ impl AlbumPage {
 
                             let width =
                                 size.width as u32 - cosmic::theme::spacing().space_m as u32 * 2;
-                            let mut spacing: u16 = 0;
+                            let spacing;
                             let mut items_per_row = 0;
                             let mut index = 0;
 
@@ -194,7 +189,7 @@ impl AlbumPage {
                             let check_spacing: u32 =
                                 ((items_per_row + 1) * model.config.grid_item_size * 32)
                                     .saturating_sub(width);
-                            let check_final = (model.config.grid_item_size * 32 - check_spacing);
+                            let check_final = model.config.grid_item_size * 32 - check_spacing;
 
                             if items_per_row < 3 {
                                 spacing = check_final as u16
@@ -401,7 +396,7 @@ impl AlbumPage {
                         );
 
                         let width = size.width as u32 - cosmic::theme::spacing().space_m as u32 * 2;
-                        let mut spacing: u16 = 0;
+                        let spacing;
                         let mut items_per_row = 0;
                         let mut index = 0;
 
@@ -413,7 +408,7 @@ impl AlbumPage {
                         let check_spacing: u32 =
                             ((items_per_row + 1) * model.config.grid_item_size * 32)
                                 .saturating_sub(width);
-                        let check_final = (model.config.grid_item_size * 32 - check_spacing);
+                        let check_final = model.config.grid_item_size * 32 - check_spacing;
 
                         if items_per_row < 3 {
                             spacing = check_final as u16
@@ -499,7 +494,7 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
             .align_y(Alignment::Center),
         );
 
-        let mut disc_num = 1;
+        let disc_num;
         if (track.disc_number as i32 - 1) < 0 {
             disc_num = 1;
         } else {

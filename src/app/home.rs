@@ -1,29 +1,15 @@
 use crate::fl;
-use std::borrow::Cow;
 use crate::app;
-use crate::app::albums::Album;
 use crate::app::{AppModel, AppTrack, LoopState, Message};
-use colored::Colorize;
-use cosmic::cosmic_theme::palette::chromatic_adaptation::AdaptInto;
-use cosmic::cosmic_theme::palette::{Alpha, IntoColor, Srgba};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::Alignment::Start;
-use cosmic::iced::{color, Center, ContentFit, Length, Pixels};
-use cosmic::widget::{container, image, list_column, JustifyContent, ListColumn};
-use cosmic::{iced, iced_core, Element};
-use rodio::queue::queue;
-use std::fmt::{format, Alignment};
-use std::future::IntoFuture;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use cosmic::iced::{ContentFit, Length, Pixels};
+use cosmic::widget::{image, list_column};
+use cosmic::{iced, Element};
 
 use cosmic::iced_core::text::Wrapping;
 use cosmic::iced_widget::scrollable::Viewport;
-use cosmic::style::Text::Color;
 
-use humantime::format_duration;
 
 #[derive(Debug)]
 pub(crate) struct HomePage {
@@ -33,7 +19,7 @@ pub(crate) struct HomePage {
 impl HomePage {
     pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
         // Time ELapsed
-        let mut time_elapsed = format_time(model.song_progress);
+        let time_elapsed = format_time(model.song_progress);
 
         let mut total_duration = "**:**".to_string();
         match model.song_duration {
@@ -43,7 +29,7 @@ impl HomePage {
             }
         };
 
-        let mut cover;
+        let cover;
         match model.queue.is_empty() {
             true => {
                 cover = format_cover_page(&"None".to_string(), &"None".to_string(), None, &None);
@@ -300,8 +286,6 @@ pub(crate) fn format_cover_page(
 ) -> Element<'static, Message> {
     const COVER_ART_SIZE: u32 = 192;
 
-    let size = COVER_ART_SIZE + cosmic::theme::spacing().space_l as u32;
-
     cosmic::widget::row::with_children(vec![
         cosmic::widget::container(
             cosmic::widget::Column::with_children(vec![match handle {
@@ -346,14 +330,14 @@ pub fn format_time(mut seconds: f64) -> String {
         minutes += 1;
     }
 
-    let mut seconds_format = "".to_string();
+    let seconds_format ;
     if seconds_final < 10 {
         seconds_format = format!("0{}", seconds_final.to_string())
     } else {
         seconds_format = seconds_final.to_string()
     }
 
-    let mut minute_format = "".to_string();
+    let minute_format ;
     if minutes < 10 {
         minute_format = format!("0{}", minutes.to_string())
     } else {

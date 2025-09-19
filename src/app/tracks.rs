@@ -1,10 +1,7 @@
 use crate::{app, fl};
 use crate::app::{AppTrack, Message};
-use cosmic::iced::{Alignment, ContentFit, Element, Length};
-use cosmic::iced_core::image::Handle;
-use cosmic::widget::dropdown::multi::list;
-use std::num::Wrapping;
-use std::sync::{Arc, Mutex};
+use cosmic::iced::{Alignment, Length};
+use std::sync::Arc;
 use cosmic::iced;
 use cosmic::iced::widget::scrollable::Viewport;
 

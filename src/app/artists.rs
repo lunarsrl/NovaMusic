@@ -1,14 +1,7 @@
 use crate::app::Message;
-use std::future::IntoFuture;
-use std::sync::Arc;
 use cosmic::{iced, iced_core, Element};
 use cosmic::iced::{Alignment, Length};
 use iced::widget::scrollable::Viewport;
-use cosmic::iced_runtime::task::widget;
-use cosmic::prelude::CollectionWidget;
-use cosmic::widget::Widget;
-use rodio::Source;
-use symphonia::core::conv::IntoSample;
 use crate::{app, fl};
 use crate::app::{AppModel, AppTrack};
 use crate::app::albums::Album;

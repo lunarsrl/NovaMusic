@@ -47,9 +47,6 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
-use symphonia::core::codecs::{CODEC_TYPE_AAC, CODEC_TYPE_NULL};
-use symphonia::core::formats::{Track};
-use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
 use crate::app::artists::ArtistsPage;
 
@@ -412,7 +409,7 @@ impl cosmic::Application for AppModel {
             );
         }
 
-        let mut time_elapsed = crate::app::home::format_time(self.song_progress);
+        let time_elapsed = crate::app::home::format_time(self.song_progress);
 
         let mut total_duration = "**:**".to_string();
         match self.song_duration {
@@ -834,7 +831,6 @@ impl cosmic::Application for AppModel {
             Message::PlaylistEdit(path) => {
                 let mut file = std::fs::File::open(&path).unwrap();
                 let mut string = String::from("");
-                let content = file.read_to_string(&mut string).unwrap();
 
                 let mut cover_path: String = String::from("");
 
@@ -972,10 +968,16 @@ impl cosmic::Application for AppModel {
             }
             Message::ChangeScanDir(val) => match fs::read_dir(&val) {
                 Ok(dir) => match self.config.set_scan_dir(&self.config_handler, val) {
-                    Ok(val) => {}
-                    Err(err) => {}
+                    Ok(val) => {
+                        log::info!("Dir changed: {:?}", val);
+                    }
+                    Err(err) => {
+                        log::error!("Error changing scan dir: {:?}", err)
+                    }
                 },
-                Err(error) => {}
+                Err(error) => {
+                    log::error!("Error changing scan dir: {:?}", error)
+                }
             },
 
             Message::_UpdateConfig(config) => {
@@ -1560,7 +1562,7 @@ impl cosmic::Application for AppModel {
                                                 .join("nova_music.db"),
                                         )
                                         .unwrap();
-                                        let mut stmt = conn.prepare(
+                                        let stmt = conn.prepare(
                                             "
 select track.id as id, track.name as title, art.name as artist, track.path, a.name as album_title
 from track
@@ -1639,8 +1641,8 @@ from track
                     let mut track_title = None;
 
                     for (index, line) in files.lines().filter_map(Result::ok).enumerate() {
-                        let mut title = String::from("");
-                        let mut cover = String::from("");
+                        let title = String::from("");
+                        let cover = String::from("");
 
                         if !is_m3u {
                             if line.contains("#EXTM3U") && index == 0 {
@@ -1678,7 +1680,7 @@ from track
                     page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
-            Message::TrackLoaded(mut track) => {
+            Message::TrackLoaded(track) => {
                 if let Page::Tracks (dat) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized") {
                     dat.tracks = Arc::new(track)
                 }
