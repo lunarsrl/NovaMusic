@@ -131,6 +131,7 @@ impl TrackPage {
                         ]))
 
                 )
+                    .id(self.scrollbar_id.clone())
                 .into(),
             ])
             .spacing(cosmic::theme::spacing().space_m),

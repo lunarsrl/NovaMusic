@@ -39,6 +39,7 @@ impl AlbumPage {
         }
     }
 
+    //noinspection ALL
     pub fn load_page<'a>(&'a self, model: &'a AppModel) -> Element<'a, Message> {
         let page_margin = cosmic::theme::spacing().space_m;
 
@@ -448,8 +449,6 @@ impl AlbumPage {
             }
         }
     }
-
-    pub fn modify_page_state(self) {}
 }
 
 #[derive(Debug, Clone)]
@@ -475,6 +474,7 @@ struct Track {
     disc_number: u32,
 }
 
+//noinspection ALL
 fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Message> {
     log::info!("Number of discs: {}", num_of_discs);
     let mut discs: Vec<Vec<cosmic::widget::Container<Message, Theme>>> = vec![vec![]];

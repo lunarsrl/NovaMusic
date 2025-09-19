@@ -3,18 +3,6 @@ use cosmic::iced::futures::channel::mpsc::Sender;
 use futures_util::SinkExt;
 use crate::app::Message;
 
-struct Album {
-    tracks: Vec<PathBuf>,
-}
-
-#[derive(Debug)]
-pub enum MediaFileTypes {
-    MP4(PathBuf),
-    MP3(PathBuf),
-    FLAC(PathBuf),
-}
-
-
 pub async fn scan_directory(path: PathBuf, tx: &mut Sender<Message>) {
     let mut index = 0;
     read_dir(path, tx, &mut index).await
@@ -40,36 +28,3 @@ async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, index: &mut u32){
         todo!("error toast")
     }
 }
-async fn filter_files(path: PathBuf) -> Option<MediaFileTypes> {
-    log::info!("Filtering files: {:?}", path);
-    match path.extension() {
-
-        None => {
-            log::info!("Failed to extract extension");
-            None
-        }
-        Some(extension) => {
-            match extension.to_str().unwrap().to_lowercase().as_str() {
-                "mp4" => {
-                    Some(MediaFileTypes::MP4(path))
-                }
-                "mp3" => {
-                    Some(MediaFileTypes::MP3(path))
-                }
-                "flac" =>{
-                    Some(MediaFileTypes::FLAC(path))
-                }
-                "m4a" => {
-                    Some(MediaFileTypes::MP4(path))
-                }
-                _ => {
-                    None
-                }
-            }
-        }
-
-    }
-}
-
-
-

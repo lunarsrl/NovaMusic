@@ -10,7 +10,6 @@ mod artists;
 pub(crate) mod home;
 mod playlists;
 mod scan;
-mod search;
 mod settings;
 mod tracks;
 
@@ -70,10 +69,10 @@ pub struct AppModel {
     config_handler: cosmic_config::Config,
 
     //Settings Page
-    pub change_dir_filed: String,
     pub rescan_available: bool,
 
     //Audio
+    pub mixer: rodio::stream::OutputStream,
     pub sink: Arc<Sink>,
     pub loop_state: LoopState,
     pub song_progress: f64,
@@ -131,7 +130,6 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     _UpdateConfig(Config),
     LaunchUrl(String),
-    EditInput(String),
 
     // Config change related
     RescanDir,
@@ -140,7 +138,6 @@ pub enum Message {
     ChooseFolder,
     FolderChosen(String),
     FolderPickerFail(String),
-    ChangeScanDir(String),
     UpdateScanProgress,
     UpdateScanDirSize,
     AddToDatabase(PathBuf),
@@ -217,7 +214,7 @@ pub enum Message {
 }
 
 #[derive(Clone, Debug)]
-enum QueueUpdateReason {
+pub enum QueueUpdateReason {
     Skipped,
     Previous,
     Removed(usize),
@@ -273,9 +270,8 @@ impl cosmic::Application for AppModel {
 
         // Create a nav bar with three page items.
         let mut nav = nav_bar::Model::default();
-        let stream =
-            rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
-        let sink = rodio::Sink::connect_new(stream.mixer());
+        let mixer = rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
+        let sink = rodio::Sink::connect_new(mixer.mixer());
 
         let sink = Arc::new(sink);
 
@@ -294,7 +290,7 @@ impl cosmic::Application for AppModel {
         let artistsid = nav.insert()
             .text(fl!("artists"))
             .data::<Page>(Page::Playlists(PlaylistPage::new()))
-            .icon(icon::from_name("playlist-symbolic")).id();
+            .icon(icon::from_name("avatar-default-symbolic")).id();
 
         let albumsid = nav.insert()
             .text(fl!("albums"))
@@ -328,9 +324,9 @@ impl cosmic::Application for AppModel {
             // Optional configuration file for an application.
             config,
             config_handler,
-            change_dir_filed: "".to_string(),
             rescan_available: true,
             // Audio
+            mixer,
             sink,
             loop_state: LoopState::NotLooping,
             song_progress: 0.0,
@@ -365,6 +361,7 @@ impl cosmic::Application for AppModel {
 
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<Self::Message>> {
+
         let menu_bar = menu::bar(vec![menu::Tree::with_children(
             menu::root(fl!("view")).apply(Element::from),
             menu::items(
@@ -829,9 +826,7 @@ impl cosmic::Application for AppModel {
                     .map(cosmic::Action::App);
             }
             Message::PlaylistEdit(path) => {
-                let file = std::fs::File::open(&path).unwrap();
                 let string = String::from("");
-
                 let mut cover_path: String = String::from("");
 
                 if string.contains("#EXTALBUMARTURL:") {
@@ -962,24 +957,6 @@ impl cosmic::Application for AppModel {
                     self.core.window.show_context = true;
                 }
             }
-
-            Message::EditInput(val) => {
-                self.change_dir_filed = val.to_string();
-            }
-            Message::ChangeScanDir(val) => match fs::read_dir(&val) {
-                Ok(dir) => match self.config.set_scan_dir(&self.config_handler, val) {
-                    Ok(val) => {
-                        log::info!("Dir changed: {:?}", val);
-                    }
-                    Err(err) => {
-                        log::error!("Error changing scan dir: {:?}", err)
-                    }
-                },
-                Err(error) => {
-                    log::error!("Error changing scan dir: {:?}", error)
-                }
-            },
-
             Message::_UpdateConfig(config) => {
                 self.config = config;
             }
@@ -992,6 +969,7 @@ impl cosmic::Application for AppModel {
                 {
                     Ok(a) => a,
                     Err(err) => {
+                        log::error!("Update Search Error: {:?}", err);
                         return self
                             .toasts
                             .push(cosmic::widget::toaster::Toast::new(fl!("SearchFailed")))
@@ -1402,7 +1380,7 @@ impl cosmic::Application for AppModel {
                 self.search_field = "".to_string();
 
                 match self.nav.active_data_mut().unwrap() {
-                    Page::NowPlaying(HomePage) => {}
+                    Page::NowPlaying(_) => {}
                     Page::Albums(val) => {
                         if let AlbumPageState::Loading = val.page_state {
                             return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
@@ -1444,7 +1422,7 @@ impl cosmic::Application for AppModel {
                                                     match row.get::<_, Vec<u8>>("album_cover") {
                                                         Ok(val) => Some(val),
                                                         Err(e) => {
-                                                            log::info!("Nothing");
+                                                            log::info!("Album iter error [on nav enter] : {}", e);
                                                             None
                                                         }
                                                     },
@@ -1510,7 +1488,7 @@ impl cosmic::Application for AppModel {
                                                 let mut title = String::from("");
                                                 let mut cover_path = None;
 
-                                                for (index, line) in
+                                                for (_, line) in
                                                     files.lines().map_while(Result::ok).enumerate()
                                                 {
                                                     if line.contains("#EXTM3U") {
@@ -1641,9 +1619,6 @@ from track
                     let mut track_title = None;
 
                     for (index, line) in files.lines().filter_map(Result::ok).enumerate() {
-                        let title = String::from("");
-                        let cover = String::from("");
-
                         if !is_m3u {
                             if line.contains("#EXTM3U") && index == 0 {
                                 is_m3u = true;
@@ -1726,15 +1701,15 @@ from track
             }
             Message::AlbumInfoRetrieved(albuminfopage) => {
                 log::info!("ALBUM INFO RETRIEVED: {:?}", albuminfopage);
-                let pos = self.nav.entity_at(2).expect("REASON");
-                let album_page = self.nav.data_mut::<Page>(pos).unwrap();
+
+                let album_page = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized");
                 if let Page::Albums(page) = album_page {
                     page.page_state = AlbumPageState::Album(albuminfopage);
                 }
             }
             Message::AlbumRequested(dat) => {
                 match self.nav.active_data_mut::<Page>().expect("Should always be intialized") {
-                    Page::Albums(page_dat) => {
+                    Page::Albums(_) => {
                         return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                             0,
                             |mut tx| async move {
@@ -1768,7 +1743,7 @@ from track
             app::Message::AddTrackToQueue(filepath) => {
                 let pos = self.nav.entity_at(0).expect("REASON");
                 let home_page = self.nav.data_mut::<Page>(pos).unwrap();
-                if let Page::NowPlaying(page) = home_page {
+                if let Page::NowPlaying(_) = home_page {
                     let conn = rusqlite::Connection::open(
                         dirs::data_local_dir()
                             .unwrap()
@@ -2055,7 +2030,8 @@ from track
                 self.sink.append(decoder);
 
                 let task_sink = Arc::clone(&self.sink);
-                let (task, handle) = cosmic::task::future(async move {
+
+                return cosmic::task::future(async move {
                     Message::SongFinished(
                         tokio::task::spawn_blocking(move || {
                             task_sink.sleep_until_end();
@@ -2064,17 +2040,9 @@ from track
                         .await
                         .expect("nova_music.db"),
                     )
-                })
-                .abortable();
+                });
 
-                match &mut self.task_handle {
-                    None => self.task_handle = Some(vec![handle]),
-                    Some(handles) => {
-                        handles.push(handle);
-                    }
-                }
 
-                return task;
             }
             Message::SkipTrack => {
                 return cosmic::task::future(async move {
@@ -2144,7 +2112,7 @@ from track
                                 None => {
                                     log::info!("no playlist name");
                                 }
-                                Some(val) => {
+                                Some(_) => {
                                     append_name = false;
                                     log::info!("found and adding");
                                     entry.clear();
@@ -2160,7 +2128,7 @@ from track
                                         append_cover_path = false;
                                     }
                                 }
-                                Some(val) => {
+                                Some(_) => {
                                     append_cover_path = false;
                                     log::info!("found and adding");
                                     entry.clear();
@@ -2385,13 +2353,8 @@ from track
 }
 
 impl AppModel {
-    fn access_nav_data(&mut self, pos: u16) -> &mut Page {
-        let dat_pos = self.nav.entity_at(pos).expect("REASON");
-        let data = self.nav.data_mut::<Page>(dat_pos).unwrap();
-        data
-    }
     /// The about page for this app.
-    pub fn about(&self) -> Element<Message> {
+    pub fn about<'a>(&self) -> Element<'a, Message> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
 
         let icon = widget::svg(widget::svg::Handle::from_memory(APP_ICON));
@@ -2476,9 +2439,6 @@ impl menu::action::MenuAction for Action {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
-            _ => {
-                todo!()
-            }
         }
     }
 }

@@ -333,7 +333,7 @@ impl PlaylistPage {
                     );
 
                     let width = size.width as u32;
-                    let mut spacing: u16 = 0;
+                    let spacing: u16;
                     let mut items_per_row = 0;
                     let mut index = 0;
 

@@ -16,20 +16,14 @@ struct Album {
     artist_id: u64,
     num_of_discs: u64,
     num_of_tracks: u64,
-    album_cover: Option<Vec<u8>>,
 }
 
 struct Track {
     id: u64,
-    artist_id: Option<u64>,
     name: Option<String>,
-    path: PathBuf,
 }
 
 struct AlbumTracks {
-    id: u64,
-    album_id: u32,
-    track_id: u32,
     track_number: u64,
     disc_number: u64,
 }
@@ -114,9 +108,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
 
     let mut track = Track {
         id: 0,
-        artist_id: None,
         name: None,
-        path: filepath.clone(),
     };
 
     let mut album = Album {
@@ -125,13 +117,9 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
         artist_id: 0,
         num_of_discs: 1,
         num_of_tracks: 0,
-        album_cover: None,
     };
 
     let mut album_tracks = AlbumTracks {
-        id: 0,
-        album_id: 0,
-        track_id: 0,
         disc_number: 0,
         track_number: 0,
     };

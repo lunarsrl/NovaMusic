@@ -25,7 +25,7 @@ pub struct ArtistsPage {
 }
 
 #[derive(Debug)]
-enum ArtistPageState {
+pub enum ArtistPageState {
     Loading,
     Loaded,
     ArtistPage(ArtistPage),
