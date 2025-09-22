@@ -9,7 +9,6 @@ use crate::app::tracks::SearchResult;
 
 #[derive(Clone, Debug)]
 struct ArtistInfo {
-    name: String,
     image: String,
 }
 
