@@ -32,7 +32,7 @@ impl HomePage {
         let cover;
         match model.queue.is_empty() {
             true => {
-                cover = format_cover_page(&"None".to_string(), &"None".to_string(), None, &None);
+                cover = format_cover_page(&"".to_string(), &"".to_string(), None, &None);
             }
             false => {
                 cover = format_cover_page(

@@ -2,6 +2,7 @@ use colored::Colorize;
 use std::fs;
 use std::path::PathBuf;
 use cosmic::Application;
+use regex::{Match, Regex};
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
 
@@ -51,7 +52,8 @@ pub fn create_database() {
         "
     CREATE TABLE artists (
         id INTEGER PRIMARY KEY,
-        name TEXT UNIQUE
+        name TEXT UNIQUE,
+        artistpfp BLOB
     )",
         [],
     )
@@ -142,8 +144,20 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     }
                 },
                 StandardTagKey::AlbumArtist => match tag.value {
-                    Value::String(name) => {
-                        match conn.execute("INSERT INTO artists (name) VALUES (?)", [&name]) {
+                    Value::String(mut name) => {
+                        // let regex = Regex::new("/Feat.|ft.|&/i").unwrap();
+                        //
+                        // match regex.find(&name) {
+                        //     None => {}
+                        //     Some(val) => {
+                        //
+                        //         name.truncate(val.start());
+                        //     }
+                        // };
+                        //
+
+
+                        match conn.execute("INSERT INTO artists (name) VALUES (?)", [name.trim()]) {
                             Ok(_) => {
                                 // log::info!("Added artist {} to artists", name);
                                 album.artist_id = conn.last_insert_rowid() as u64;
@@ -164,14 +178,11 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     _ => {}
                 },
                 StandardTagKey::Arranger => {}
-                StandardTagKey::Artist => match tag.value {
-                    Value::String(name) => {
-                        artist.name = Some(name);
+                StandardTagKey::Artist => {
+                    if let Value::String(val) = tag.value {
+                            artist.name = Some(val)
                     }
-                    _ => {
-                        // log::error!("Artist name is not a string");
-                    }
-                },
+                }
                 StandardTagKey::Bpm => {}
                 StandardTagKey::Comment => {}
                 StandardTagKey::Compilation => {}

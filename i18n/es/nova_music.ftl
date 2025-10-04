@@ -58,6 +58,10 @@ AlbumInputPlaceholder = Título de álbum
 AlbumDiscNumber = Disco {$number}
 AlbumAttribution = {$artist}
 
+
+# Artist Page
+ArtistInputPlaceholder = Nombre de algun artista
+
 #Track Page
 TrackLibrary = Biblioteca de Pistas
 TrackInputPlaceholder = Informacíon sobre alguna pista
@@ -79,3 +83,4 @@ AppVolume = Volumen del applicacion {$volume}
 
 # Error
 SearchFailed = Error con la buscada!
+None = ""

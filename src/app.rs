@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::app::artists::ArtistInfo;
 use cosmic::dialog::file_chooser::Error;
 
 use rayon::iter::IndexedParallelIterator;
@@ -17,7 +18,11 @@ use crate::app::albums::{
     get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
 };
 
+use crate::app::artists::{ArtistPageState, ArtistsPage};
 use crate::app::home::HomePage;
+use crate::app::playlists::{
+    FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
+};
 use crate::app::scan::scan_directory;
 use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::config::Config;
@@ -26,16 +31,15 @@ use crate::{app, config, fl};
 use colored::Colorize;
 use cosmic::app::context_drawer;
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::iced::task::Handle;
 use cosmic::iced::window::Id;
+use cosmic::iced::Alignment::Start;
 use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{action, cosmic_config, cosmic_theme, theme};
 use futures_util::{SinkExt, StreamExt};
-use crate::app::playlists::{FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack, };
-use cosmic::iced::task::Handle;
-use cosmic::iced::Alignment::Start;
-use cosmic::iced_widget::scrollable::Viewport;
 use rodio::{Sink, Source};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -46,8 +50,9 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
+use rusqlite::fallible_iterator::FallibleIterator;
 use symphonia::default::get_probe;
-use crate::app::artists::ArtistsPage;
+use crate::app::artists::ArtistPageState::ArtistPage;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -97,13 +102,11 @@ pub struct AppModel {
     toasts: cosmic::widget::toaster::Toasts<Message>,
 
     // Navigation
-
     albumsid: nav_bar::Id,
     tracksid: nav_bar::Id,
     artistsid: nav_bar::Id,
     playlistsid: nav_bar::Id,
     homeid: nav_bar::Id,
-
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -168,6 +171,9 @@ pub enum Message {
     ToggleTitle(bool),
     ToggleAlbum(bool),
     ToggleArtist(bool),
+
+    // Artists Page
+    ArtistsLoaded(Vec<ArtistInfo>),
 
     // Playlist Page
     AddToPlaylist,
@@ -270,37 +276,47 @@ impl cosmic::Application for AppModel {
 
         // Create a nav bar with three page items.
         let mut nav = nav_bar::Model::default();
-        let mixer = rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
+        let mixer =
+            rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
         let sink = rodio::Sink::connect_new(mixer.mixer());
 
         let sink = Arc::new(sink);
 
-        let homeid = nav.insert()
+        let homeid = nav
+            .insert()
             .text(fl!("home"))
-            .data::<Page>(Page::NowPlaying(HomePage {viewport: None}))
+            .data::<Page>(Page::NowPlaying(HomePage { viewport: None }))
             .icon(icon::from_name("applications-audio-symbolic"))
             .activate()
             .id();
 
-        let tracksid = nav.insert()
+        let tracksid = nav
+            .insert()
             .text(fl!("tracks"))
             .data::<Page>(Page::Tracks(TrackPage::new()))
-            .icon(icon::from_name("media-tape-symbolic")).id();
+            .icon(icon::from_name("media-tape-symbolic"))
+            .id();
 
-        let artistsid = nav.insert()
+        let artistsid = nav
+            .insert()
             .text(fl!("artists"))
-            .data::<Page>(Page::Playlists(PlaylistPage::new()))
-            .icon(icon::from_name("avatar-default-symbolic")).id();
+            .data::<Page>(Page::Artist(ArtistsPage::new()))
+            .icon(icon::from_name("avatar-default-symbolic"))
+            .id();
 
-        let albumsid = nav.insert()
+        let albumsid = nav
+            .insert()
             .text(fl!("albums"))
             .data::<Page>(Page::Albums(AlbumPage::new(vec![])))
-            .icon(icon::from_name("media-optical-symbolic")).id();
+            .icon(icon::from_name("media-optical-symbolic"))
+            .id();
 
-        let playlistsid = nav.insert()
+        let playlistsid = nav
+            .insert()
             .text(fl!("playlists"))
             .data::<Page>(Page::Playlists(PlaylistPage::new()))
-            .icon(icon::from_name("playlist-symbolic")).id();
+            .icon(icon::from_name("playlist-symbolic"))
+            .id();
 
         // INIT CONFIG
         let config = config::Config::load();
@@ -361,7 +377,6 @@ impl cosmic::Application for AppModel {
 
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-
         let menu_bar = menu::bar(vec![menu::Tree::with_children(
             menu::root(fl!("view")).apply(Element::from),
             menu::items(
@@ -470,10 +485,14 @@ impl cosmic::Application for AppModel {
                         // Media Progress
                         cosmic::widget::column::with_children(vec![
                             cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading(data.0.unwrap_or("None")).into(),
-                                cosmic::widget::text::heading(data.1.unwrap_or("None")).into(),
+                                cosmic::widget::text::heading(data.0.unwrap_or("")).into(),
+                                cosmic::widget::text::heading(data.1.unwrap_or("")).into(),
                                 cosmic::widget::text::heading(data.2.unwrap_or("")).into(),
                                 cosmic::widget::horizontal_space().into(),
+                                // todo Find a good way of letting users clear the queue from the footer
+                                // cosmic::widget::button::destructive(fl!("ClearAll"))
+                                //     .on_press(Message::ClearQueue)
+                                //     .into(),
                                 cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                     "go-up-symbolic",
                                 ))
@@ -600,39 +619,33 @@ impl cosmic::Application for AppModel {
         }
 
         let icon = match &self.playlist_cover {
-            None => {
-                cosmic::widget::container(
-                    cosmic::widget::button::icon(
-                        cosmic::widget::icon::from_name("view-list-images-symbolic")
-                            .size(6 * 8),
-                    )
-                        .padding(cosmic::theme::spacing().space_s)
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-                        .class(cosmic::theme::Button::Suggested),
+            None => cosmic::widget::container(
+                cosmic::widget::button::icon(
+                    cosmic::widget::icon::from_name("view-list-images-symbolic").size(6 * 8),
                 )
-                    .class(cosmic::theme::Container::Secondary)
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into()
-            }
-            Some(val) => {
-                cosmic::widget::container(
-                    cosmic::widget::button::custom_image_button(
-                        cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
-                            .content_fit(ContentFit::Fill),
-                        None
-                    )
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-
+                .padding(cosmic::theme::spacing().space_s)
+                .on_press(Message::CreatePlaylistAddThumbnail)
+                .class(cosmic::theme::Button::Suggested),
+            )
+            .class(cosmic::theme::Container::Secondary)
+            .width(Length::Fixed(6.0 * 16.0))
+            .height(Length::Fixed(6.0 * 16.0))
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .into(),
+            Some(val) => cosmic::widget::container(
+                cosmic::widget::button::custom_image_button(
+                    cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
+                        .content_fit(ContentFit::Fill),
+                    None,
                 )
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into()
-            }
+                .on_press(Message::CreatePlaylistAddThumbnail),
+            )
+            .width(Length::Fixed(6.0 * 16.0))
+            .height(Length::Fixed(6.0 * 16.0))
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .into(),
         };
 
         if self.playlist_dialog {
@@ -641,19 +654,19 @@ impl cosmic::Application for AppModel {
                     .title(fl!("DialogPlaylistTitle"))
                     .control(
                         cosmic::widget::container(
-                        cosmic::widget::row::with_children(vec![
-                            icon,
-                            cosmic::widget::text_input(
-                                fl!("PlaylistInputPlaceholder"),
-                                self.playlist_dialog_text.as_str(),
-                            )
-                            .on_input(|input| Message::UpdatePlaylistName(input))
-                            .into(),
-                        ])
+                            cosmic::widget::row::with_children(vec![
+                                icon,
+                                cosmic::widget::text_input(
+                                    fl!("PlaylistInputPlaceholder"),
+                                    self.playlist_dialog_text.as_str(),
+                                )
+                                .on_input(|input| Message::UpdatePlaylistName(input))
+                                .into(),
+                            ])
                             .align_y(Vertical::Bottom)
-                        .spacing(cosmic::theme::spacing().space_m),
-                    )
-                        .align_x(Horizontal::Center)
+                            .spacing(cosmic::theme::spacing().space_m),
+                        )
+                        .align_x(Horizontal::Center),
                     )
                     .primary_action(
                         cosmic::widget::button::icon(cosmic::widget::icon::from_name(
@@ -685,27 +698,27 @@ impl cosmic::Application for AppModel {
                                     fl!("PlaylistInputPlaceholder"),
                                     self.playlist_dialog_text.as_str(),
                                 )
-                                    .on_input(|input| Message::UpdatePlaylistName(input))
-                                    .into(),
+                                .on_input(|input| Message::UpdatePlaylistName(input))
+                                .into(),
                             ])
-                                .align_y(Vertical::Bottom)
-                                .spacing(cosmic::theme::spacing().space_m),
+                            .align_y(Vertical::Bottom)
+                            .spacing(cosmic::theme::spacing().space_m),
                         )
-                            .align_x(Horizontal::Center)
+                        .align_x(Horizontal::Center),
                     )
                     .primary_action(
                         cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                             "object-select-symbolic",
                         ))
-                            .class(cosmic::theme::Button::Suggested)
-                            .on_press(Message::EditPlaylistConfirm),
+                        .class(cosmic::theme::Button::Suggested)
+                        .on_press(Message::EditPlaylistConfirm),
                     )
                     .secondary_action(
                         cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                             "window-close-symbolic",
                         ))
-                            .class(cosmic::theme::Button::Standard)
-                            .on_press(Message::EditPlaylistCancel),
+                        .class(cosmic::theme::Button::Standard)
+                        .on_press(Message::EditPlaylistCancel),
                     )
                     .into(),
             );
@@ -786,8 +799,6 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
-
-
             Message::ToastError(error) => {
                 return self
                     .toasts
@@ -795,22 +806,18 @@ impl cosmic::Application for AppModel {
                     .map(cosmic::Action::App);
             }
             Message::Toasts(id) => self.toasts.remove(id),
-            Message::ScrollView(view) => match self.nav.active_data_mut::<Page>().expect("Should always be intialized") {
-                Page::NowPlaying(page) => {
-                    page.viewport = Some(view)
-                }
+            Message::ScrollView(view) => match self
+                .nav
+                .active_data_mut::<Page>()
+                .expect("Should always be intialized")
+            {
+                Page::NowPlaying(page) => page.viewport = Some(view),
                 Page::Albums(page) => {
                     page.viewport = Some(view);
                 }
-                Page::Playlists(page) => {
-                    page.viewport = Some(view)
-                }
-                Page::Tracks(page) => {
-                    page.viewport = Some(view)
-                }
-                Page::Artist(page) => {
-                   page.viewport = Some(view)
-                }
+                Page::Playlists(page) => page.viewport = Some(view),
+                Page::Tracks(page) => page.viewport = Some(view),
+                Page::Artist(page) => page.viewport = Some(view),
             },
             Message::PlaylistDeleteConfirmed => {
                 if let Some(page) = self.nav.data_mut::<PlaylistPage>(self.playlistsid) {
@@ -818,8 +825,6 @@ impl cosmic::Application for AppModel {
                         std::fs::remove_file(&page.playlist.path).unwrap();
                     }
                 }
-
-
 
                 self.playlist_delete_dialog = false;
                 return cosmic::Task::future(async move { Message::OnNavEnter })
@@ -844,7 +849,7 @@ impl cosmic::Application for AppModel {
                 self.playlist_dialog_path = path;
                 match self.playlist_edit_dialog {
                     true => self.playlist_edit_dialog = false,
-                    false => self.playlist_edit_dialog = true
+                    false => self.playlist_edit_dialog = true,
                 }
             }
             Message::PlaylistDeleteSafety => match self.playlist_delete_dialog {
@@ -908,7 +913,8 @@ impl cosmic::Application for AppModel {
             }
             Message::FolderPickerFail(error) => {
                 if !(error.contains("Cancelled File Picker: Keeping scan directory the same")) {
-                    let _ = self.config
+                    let _ = self
+                        .config
                         .set_scan_dir(&self.config_handler, "".to_string());
                 } else {
                 }
@@ -1226,8 +1232,10 @@ impl cosmic::Application for AppModel {
                     .expect("Failed to change config");
 
                 // Albums: Full reset
-                let album = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized");
-
+                let album = self
+                    .nav
+                    .data_mut::<Page>(self.albumsid)
+                    .expect("Should always be intialized");
 
                 if let Page::Albums(page) = album {
                     page.albums = Arc::from(vec![]);
@@ -1236,14 +1244,21 @@ impl cosmic::Application for AppModel {
 
                 // Tracks: Full reset
 
-                let tracks = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized");
+                let tracks = self
+                    .nav
+                    .data_mut::<Page>(self.tracksid)
+                    .expect("Should always be intialized");
                 if let Page::Tracks(page) = tracks {
                     page.track_page_state = TrackPageState::Loading
                 }
 
                 // Playlists: FUll reset
 
-                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("Should always be intialized") {
+                if let Page::Playlists(page) = self
+                    .nav
+                    .data_mut::<Page>(self.playlistsid)
+                    .expect("Should always be intialized")
+                {
                     page.playlist_page_state = PlaylistPageState::Loading
                 }
 
@@ -1372,7 +1387,11 @@ impl cosmic::Application for AppModel {
 
             // PAGE TASK RESPONSES
             Message::AlbumProcessed(new_album) => {
-                if let Page::Albums (dat) = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized") {
+                if let Page::Albums(dat) = self
+                    .nav
+                    .data_mut::<Page>(self.albumsid)
+                    .expect("Should always be intialized")
+                {
                     dat.albums = Arc::from(new_album)
                 }
             }
@@ -1447,25 +1466,26 @@ impl cosmic::Application for AppModel {
                                 .map(cosmic::Action::App);
                         }
                     }
-                    Page::Playlists(page) => match &page.playlist_page_state {
-                        PlaylistPageState::Loading => {
-                            match dirs::data_local_dir()
-                                .unwrap()
-                                .join(crate::app::AppModel::APP_ID)
-                                .join("Playlists")
-                                .is_dir()
-                            {
-                                true => {}
-                                false => fs::create_dir(
-                                    dirs::data_local_dir()
-                                        .unwrap()
-                                        .join(crate::app::AppModel::APP_ID)
-                                        .join("Playlists"),
-                                )
-                                .unwrap(),
-                            }
+                    Page::Playlists(page) => {
+                        match &page.playlist_page_state {
+                            PlaylistPageState::Loading => {
+                                match dirs::data_local_dir()
+                                    .unwrap()
+                                    .join(crate::app::AppModel::APP_ID)
+                                    .join("Playlists")
+                                    .is_dir()
+                                {
+                                    true => {}
+                                    false => fs::create_dir(
+                                        dirs::data_local_dir()
+                                            .unwrap()
+                                            .join(crate::app::AppModel::APP_ID)
+                                            .join("Playlists"),
+                                    )
+                                    .unwrap(),
+                                }
 
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                                 5,
                                 |mut tx| async move {
                                     tokio::task::spawn_blocking(move || {
@@ -1520,13 +1540,14 @@ impl cosmic::Application for AppModel {
                                 },
                             ))
                             .map(cosmic::Action::App);
+                            }
+                            PlaylistPageState::Loaded => {}
+                            PlaylistPageState::PlaylistPage(_) => {}
+                            PlaylistPageState::Search(_) => {
+                                page.playlist_page_state = PlaylistPageState::Loaded
+                            }
                         }
-                        PlaylistPageState::Loaded => {}
-                        PlaylistPageState::PlaylistPage(_) => {}
-                        PlaylistPageState::Search(_) => {
-                            page.playlist_page_state = PlaylistPageState::Loaded
-                        }
-                    },
+                    }
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
                             return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
@@ -1594,18 +1615,82 @@ from track
                             page.track_page_state = TrackPageState::Loaded;
                         }
                     },
-                    &mut Page::Artist(_) => todo!(),
+                    Page::Artist(page) => match page.page_state {
+                        ArtistPageState::Loading => {
+                            return cosmic::Task::stream(
+                                cosmic::iced_futures::stream::channel(100, |mut tx| async move {
+                                    tokio::task::spawn_blocking(move || {
+                                        let mut artists: Vec<ArtistInfo> = vec![];
+                                        let conn = rusqlite::Connection::open(
+                                            dirs::data_local_dir()
+                                                .unwrap()
+                                                .join(Self::APP_ID)
+                                                .join("nova_music.db"),
+                                        ).unwrap();
+
+                                        let mut stmt = conn.prepare("select * from artists").expect("Statement Faulty @ OnNavEnter Artists");
+
+                                        let rows = stmt.query_map([], |row| {
+                                           Ok(
+                                               ArtistInfo {
+                                                   name: row.get("name").unwrap(),
+                                                   image: match row.get::<_, Vec<u8>>("artistpfp") {
+                                                       Ok(val) => {
+                                                           Some(cosmic::widget::image::Handle::from_bytes(val))
+                                                       }
+                                                       Err(e) => {
+                                                           log::warn!("Potential Error @ OnNavEnter Artists: {}", e);
+                                                           None
+                                                       }
+                                                   }
+                                               }
+                                           )
+                                        }).expect("Query map failed");
+
+                                        artists = rows.into_iter().filter_map(|a| a.ok()).collect();
+
+
+                                        tx.try_send(Message::ArtistsLoaded(artists))
+                                    });
+                                })
+                                .map(cosmic::Action::App),
+                            )
+                        }
+                        ArtistPageState::Search(_) => {}
+                        ArtistPageState::Loaded => {}
+                        ArtistPageState::ArtistPage(_) => {}
+                        ArtistPageState::ArtistPageSearch(_) => {}
+                    },
+                }
+            }
+
+            Message::ArtistsLoaded(artists) => {
+                if let Page::Artist(page) = self
+                    .nav
+                    .data_mut::<Page>(self.artistsid)
+                    .expect("Should always be initialized")
+                {
+                    page.artists = artists;
+                    page.page_state = ArtistPageState::Loaded
                 }
             }
 
             Message::PlaylistFound(playlists) => {
-                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("Should always be intialized") {
+                if let Page::Playlists(page) = self
+                    .nav
+                    .data_mut::<Page>(self.playlistsid)
+                    .expect("Should always be intialized")
+                {
                     page.playlists = Arc::new(playlists);
                     page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
             Message::PlaylistSelected(playlist) => {
-                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intialized") {
+                if let Page::Playlists(page) = self
+                    .nav
+                    .data_mut::<Page>(self.playlistsid)
+                    .expect("should always be intialized")
+                {
                     let mut tracks = vec![];
 
                     let files = io::BufReader::new(match fs::File::open(&playlist.path) {
@@ -1651,28 +1736,48 @@ from track
                 }
             }
             Message::PlaylistPageReturn => {
-                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intialized") {
+                if let Page::Playlists(page) = self
+                    .nav
+                    .data_mut::<Page>(self.playlistsid)
+                    .expect("should always be intialized")
+                {
                     page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
             Message::TrackLoaded(track) => {
-                if let Page::Tracks (dat) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized") {
+                if let Page::Tracks(dat) = self
+                    .nav
+                    .data_mut::<Page>(self.tracksid)
+                    .expect("Should always be intialized")
+                {
                     dat.tracks = Arc::new(track)
                 }
             }
             Message::TracksLoaded => {
-                if let Page::Tracks (dat) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized") {
+                if let Page::Tracks(dat) = self
+                    .nav
+                    .data_mut::<Page>(self.tracksid)
+                    .expect("Should always be intialized")
+                {
                     dat.track_page_state = TrackPageState::Loaded;
                 }
             }
             Message::AlbumsLoaded => {
-                if let Page::Albums(dat) = self.nav.data_mut::<Page>(self.albumsid).expect("should always be init"){
+                if let Page::Albums(dat) = self
+                    .nav
+                    .data_mut::<Page>(self.albumsid)
+                    .expect("should always be init")
+                {
                     dat.page_state = AlbumPageState::Loaded;
                     dat.has_fully_loaded = true;
                 }
             }
             Message::AlbumPageReturn => {
-                if let Page::Albums (dat) = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized") {
+                if let Page::Albums(dat) = self
+                    .nav
+                    .data_mut::<Page>(self.albumsid)
+                    .expect("Should always be intialized")
+                {
                     match dat.has_fully_loaded {
                         true => {
                             dat.page_state = AlbumPageState::Loaded;
@@ -1692,7 +1797,11 @@ from track
                 }
             }
             Message::AlbumPageStateAlbum(new_page) => {
-                match self.nav.active_data_mut::<Page>().expect("Should always be intialized") {
+                match self
+                    .nav
+                    .active_data_mut::<Page>()
+                    .expect("Should always be intialized")
+                {
                     Page::Albums(old_page) => {
                         *old_page = new_page;
                     }
@@ -1702,13 +1811,20 @@ from track
             Message::AlbumInfoRetrieved(albuminfopage) => {
                 log::info!("ALBUM INFO RETRIEVED: {:?}", albuminfopage);
 
-                let album_page = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized");
+                let album_page = self
+                    .nav
+                    .data_mut::<Page>(self.albumsid)
+                    .expect("Should always be intialized");
                 if let Page::Albums(page) = album_page {
                     page.page_state = AlbumPageState::Album(albuminfopage);
                 }
             }
             Message::AlbumRequested(dat) => {
-                match self.nav.active_data_mut::<Page>().expect("Should always be intialized") {
+                match self
+                    .nav
+                    .active_data_mut::<Page>()
+                    .expect("Should always be intialized")
+                {
                     Page::Albums(_) => {
                         return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                             0,
@@ -1853,8 +1969,7 @@ from track
                         Some(handles) => handles.push(progress_thread.1),
                     }
                     let (task, handle) =
-                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0])
-                            .abortable();
+                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
                     match &mut self.task_handle {
                         None => self.task_handle = Some(vec![handle]),
                         Some(handles) => handles.push(handle),
@@ -2041,8 +2156,6 @@ from track
                         .expect("nova_music.db"),
                     )
                 });
-
-
             }
             Message::SkipTrack => {
                 return cosmic::task::future(async move {
@@ -2092,9 +2205,7 @@ from track
                 }
             },
             Message::AddToPlaylist => self.playlist_dialog = true,
-            Message::EditPlaylistCancel => {
-                self.playlist_edit_dialog = false
-            }
+            Message::EditPlaylistCancel => self.playlist_edit_dialog = false,
             Message::EditPlaylistConfirm => {
                 if PathBuf::from(&self.playlist_dialog_path).exists() {
                     let mut file = File::open(&self.playlist_dialog_path).unwrap();
@@ -2103,77 +2214,90 @@ from track
                     let mut append_cover_path = true;
                     let mut append_name = true;
 
-                        let mut string: String = String::from("");
-                        file.read_to_string(&mut string).unwrap();
+                    let mut string: String = String::from("");
+                    file.read_to_string(&mut string).unwrap();
 
-                        for entry in string.lines() {
-                            let mut new_line = entry.to_string();
-                            match entry.find("#PLAYLIST:") {
-                                None => {
-                                    log::info!("no playlist name");
-                                }
-                                Some(_) => {
-                                    append_name = false;
-                                    log::info!("found and adding");
-                                    entry.clear();
-                                    new_line = format!("#PLAYLIST:{}", self.playlist_dialog_text.as_str());
-                                }
+                    for entry in string.lines() {
+                        let mut new_line = entry.to_string();
+                        match entry.find("#PLAYLIST:") {
+                            None => {
+                                log::info!("no playlist name");
                             }
-
-                            match entry.find("#EXTALBUMARTURL:") {
-                                None => {
-                                    if self.playlist_cover.is_some() {
-                                        append_cover_path = true;
-                                    } else {
-                                        append_cover_path = false;
-                                    }
-                                }
-                                Some(_) => {
-                                    append_cover_path = false;
-                                    log::info!("found and adding");
-                                    entry.clear();
-
-                                    if let Some(path) = self.playlist_cover.take() {
-                                        new_line = String::from(format!("#EXTALBUMARTURL:{}", path.to_str().unwrap()))
-                                    } else {
-                                        new_line = String::from("blank")
-                                    }
-                                }
+                            Some(_) => {
+                                append_name = false;
+                                log::info!("found and adding");
+                                entry.clear();
+                                new_line =
+                                    format!("#PLAYLIST:{}", self.playlist_dialog_text.as_str());
                             }
-
-                            if new_line.contains("blank") {
-                                new_line = String::from("")
-                            } else {
-                                new_line = format!("{}\n", new_line);
-                            }
-
-                            new_file.push_str(&new_line);
                         }
+
+                        match entry.find("#EXTALBUMARTURL:") {
+                            None => {
+                                if self.playlist_cover.is_some() {
+                                    append_cover_path = true;
+                                } else {
+                                    append_cover_path = false;
+                                }
+                            }
+                            Some(_) => {
+                                append_cover_path = false;
+                                log::info!("found and adding");
+                                entry.clear();
+
+                                if let Some(path) = self.playlist_cover.take() {
+                                    new_line = String::from(format!(
+                                        "#EXTALBUMARTURL:{}",
+                                        path.to_str().unwrap()
+                                    ))
+                                } else {
+                                    new_line = String::from("blank")
+                                }
+                            }
+                        }
+
+                        if new_line.contains("blank") {
+                            new_line = String::from("")
+                        } else {
+                            new_line = format!("{}\n", new_line);
+                        }
+
+                        new_file.push_str(&new_line);
+                    }
                     let mut file = File::create(&self.playlist_dialog_path).unwrap();
                     if append_cover_path {
-                        new_file.push_str(format!("#EXTALBUMARTURL:{}\n", self.playlist_cover.take().unwrap().to_str().unwrap()).as_str())
+                        new_file.push_str(
+                            format!(
+                                "#EXTALBUMARTURL:{}\n",
+                                self.playlist_cover.take().unwrap().to_str().unwrap()
+                            )
+                            .as_str(),
+                        )
                     }
 
-                     if append_name {
-                         new_file.push_str(format!("#PLAYLIST:{}\n", self.playlist_dialog_text).as_str())
-                     }
+                    if append_name {
+                        new_file
+                            .push_str(format!("#PLAYLIST:{}\n", self.playlist_dialog_text).as_str())
+                    }
                     file.write_all(new_file.as_bytes()).unwrap()
-
-
                 } else {
                     return self
                         .toasts
-                        .push(cosmic::widget::toaster::Toast::new("Playlist path no longer exists"))
+                        .push(cosmic::widget::toaster::Toast::new(
+                            "Playlist path no longer exists",
+                        ))
                         .map(cosmic::Action::App);
                 }
                 self.playlist_edit_dialog = false;
 
-                if let Page::Playlists(val) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intitalized") {
+                if let Page::Playlists(val) = self
+                    .nav
+                    .data_mut::<Page>(self.playlistsid)
+                    .expect("should always be intitalized")
+                {
                     val.playlist_page_state = PlaylistPageState::Loading
                 }
-                return cosmic::task::future( async move {
-                    Message::OnNavEnter
-                })
+                return cosmic::task::future(async move { Message::OnNavEnter });
             }
             Message::CreatePlaylistIconChosen(path) => {
                 log::info!("Image: {}", path.to_string_lossy());
@@ -2184,10 +2308,7 @@ from track
                     let dialog = cosmic::dialog::file_chooser::open::Dialog::new();
                     match dialog.open_file().await {
                         Ok(selected) => {
-                            let fp = selected
-                                .url()
-                                .to_owned()
-                                .to_file_path();
+                            let fp = selected.url().to_owned().to_file_path();
 
                             if let Ok(file) = fp {
                                 Message::CreatePlaylistIconChosen(file)
@@ -2232,7 +2353,7 @@ from track
                         }
                     }
                 })
-                    .map(action::Action::App);
+                .map(action::Action::App);
             }
 
             Message::CreatePlaylistCancel => {
@@ -2264,7 +2385,16 @@ from track
                         .expect("Failed to create Playlist file");
                 new_file
                     .write_all(
-                        format!("#EXTM3U \n#PLAYLIST:{}\n#EXTALBUMARTURL:{}\n", self.playlist_dialog_text, self.playlist_cover.take().unwrap_or("".parse().unwrap()).to_string_lossy().to_string()).as_bytes()
+                        format!(
+                            "#EXTM3U \n#PLAYLIST:{}\n#EXTALBUMARTURL:{}\n",
+                            self.playlist_dialog_text,
+                            self.playlist_cover
+                                .take()
+                                .unwrap_or("".parse().unwrap())
+                                .to_string_lossy()
+                                .to_string()
+                        )
+                        .as_bytes(),
                     )
                     .expect("Failed to write Playlist file");
                 for track in &self.queue {
@@ -2284,14 +2414,19 @@ from track
                 self.playlist_dialog_text = String::from("");
                 self.playlist_cover = None;
                 self.playlist_dialog = false;
-                if let Page::Playlists(page) = self.nav.data_mut::<Page>(self.playlistsid).expect("should always be intialized") {
+                if let Page::Playlists(page) = self
+                    .nav
+                    .data_mut::<Page>(self.playlistsid)
+                    .expect("should always be intialized")
+                {
                     page.playlist_page_state = PlaylistPageState::Loading
                 }
             }
             Message::SearchResults(tracks) => {
                 match self
                     .nav
-                    .active_data_mut::<Page>().expect("Should always be intialized")
+                    .active_data_mut::<Page>()
+                    .expect("Should always be intialized")
                 {
                     Page::NowPlaying(_) => {}
 
@@ -2302,22 +2437,34 @@ from track
                     Page::Tracks(track_list) => {
                         track_list.track_page_state = TrackPageState::Search;
                         track_list.search = tracks;
-                    },
-                    &mut Page::Artist(_) => todo!()
+                    }
+                    &mut Page::Artist(_) => todo!(),
                 }
             }
             Message::ToggleTitle(val) => {
-                if let Page::Tracks(page) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be initialized") {
+                if let Page::Tracks(page) = self
+                    .nav
+                    .data_mut::<Page>(self.tracksid)
+                    .expect("Should always be initialized")
+                {
                     page.search_by_title = val
                 }
             }
             Message::ToggleAlbum(val) => {
-                if let Page::Tracks(page) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be initialized") {
+                if let Page::Tracks(page) = self
+                    .nav
+                    .data_mut::<Page>(self.tracksid)
+                    .expect("Should always be initialized")
+                {
                     page.search_by_album = val
                 }
             }
             Message::ToggleArtist(val) => {
-                if let Page::Tracks(page) = self.nav.data_mut::<Page>(self.tracksid).expect("Should always be intialized") {
+                if let Page::Tracks(page) = self
+                    .nav
+                    .data_mut::<Page>(self.tracksid)
+                    .expect("Should always be intialized")
+                {
                     page.search_by_artist = val
                 }
             }
@@ -2329,7 +2476,11 @@ from track
                     .expect("Failed to set volume");
             }
             Message::FooterToggle => {
-                if let Page::Albums(page) = self.nav.data_mut::<Page>(self.albumsid).expect("Should always be intialized") {
+                if let Page::Albums(page) = self
+                    .nav
+                    .data_mut::<Page>(self.albumsid)
+                    .expect("Should always be intialized")
+                {
                     log::info!("page:  {:?}", page.albums)
                 } else {
                     log::info!("When did this happen")

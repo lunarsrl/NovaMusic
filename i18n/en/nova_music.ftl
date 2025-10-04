@@ -49,7 +49,7 @@ folderselect = Select folder
 # Home Page
 Queue = Queue
 CreatePlaylist = Create Playlist
-ClearAll = Clear ALl
+ClearAll = Clear Queue
 NowPlaying = Now Playing
 
 # Album Page
@@ -57,6 +57,9 @@ AlbumLibrary = Album Library
 AlbumInputPlaceholder = Enter album name
 AlbumDiscNumber = Disc {$number}
 AlbumAttribution = {$artist}
+
+# Artist Page
+ArtistInputPlaceholder = Enter an artists name
 
 #Track Page
 TrackLibrary = Track Library
