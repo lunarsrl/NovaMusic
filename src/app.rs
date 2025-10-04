@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use regex::Regex;
 use crate::app::artists::ArtistInfo;
 use cosmic::dialog::file_chooser::Error;
+use regex::Regex;
 
 use rayon::iter::IndexedParallelIterator;
 
@@ -19,6 +19,7 @@ use crate::app::albums::{
     get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
 };
 
+use crate::app::artists::ArtistPageState::ArtistPage;
 use crate::app::artists::{ArtistPageState, ArtistsPage};
 use crate::app::home::HomePage;
 use crate::app::playlists::{
@@ -35,13 +36,14 @@ use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::task::Handle;
 use cosmic::iced::window::Id;
 use cosmic::iced::Alignment::Start;
-use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::iced::{Alignment, Color, ContentFit, Length};
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{action, cosmic_config, cosmic_theme, theme};
 use futures_util::{SinkExt, StreamExt};
 use rodio::{Sink, Source};
+use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
@@ -51,9 +53,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
-use rusqlite::fallible_iterator::FallibleIterator;
 use symphonia::default::get_probe;
-use crate::app::artists::ArtistPageState::ArtistPage;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/icon.svg");
@@ -175,6 +175,8 @@ pub enum Message {
 
     // Artists Page
     ArtistsLoaded(Vec<ArtistInfo>),
+    ArtistRequested(String),
+    ArtistPageReturn,
 
     // Playlist Page
     AddToPlaylist,
@@ -780,11 +782,13 @@ impl cosmic::Application for AppModel {
     fn view(&self) -> Element<Self::Message> {
         let body;
         match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(home_page) => body = home_page.load_page(self),
-            Page::Tracks(track_page) => body = track_page.load_page(self),
+            Page::NowPlaying(home_page) => body = home_page.load_page(self).explain(Color::WHITE),
+            Page::Tracks(track_page) => body = track_page.load_page(self).explain(Color::WHITE),
             Page::Artist(artists_page) => body = artists_page.load_page(self),
-            Page::Albums(album_page) => body = album_page.load_page(self),
-            Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
+            Page::Albums(album_page) => body = album_page.load_page(self).explain(Color::WHITE),
+            Page::Playlists(playlist_page) => {
+                body = playlist_page.load_page(self).explain(Color::WHITE)
+            }
         }
 
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
@@ -1616,7 +1620,7 @@ from track
                             page.track_page_state = TrackPageState::Loaded;
                         }
                     },
-                    Page::Artist(page) => match page.page_state {
+                    Page::Artist(page) => match &page.page_state {
                         ArtistPageState::Loading => {
                             return cosmic::Task::stream(
                                 cosmic::iced_futures::stream::channel(100, |mut tx| async move {
@@ -1675,12 +1679,71 @@ from track
                         }
                         ArtistPageState::Search(_) => {}
                         ArtistPageState::Loaded => {}
-                        ArtistPageState::ArtistPage(_) => {}
+                        ArtistPageState::ArtistPage(page) => {
+
+                        }
                         ArtistPageState::ArtistPageSearch(_) => {}
                     },
                 }
             }
 
+            Message::ArtistRequested(artist) => {
+                let conn = rusqlite::Connection::open(
+                    dirs::data_local_dir()
+                        .unwrap()
+                        .join(Self::APP_ID)
+                        .join("nova_music.db"),
+                )
+                .unwrap();
+
+                let mut stmt = conn.prepare(
+                    "
+                    SELECT a.id, a.name as name, a.album_cover as cover, art.name as artist, a.disc_number as dn, a.track_number as tn
+                    FROM album a
+                             left JOIN artists art ON a.artist_id = art.id
+                    Where art.name = ?"
+                ).expect("SQL is wrong");
+
+                let val = stmt.query_map([&artist], |row| {
+                    Ok(
+                        Album {
+                            name: row.get("name").expect("get name fail"),
+                            artist: row.get("artist").expect("get artist fail"),
+                            cover_art: match row.get::<_, Vec<u8>>("cover") {
+                                Ok(val) => {
+                                    Some(cosmic::widget::image::Handle::from_bytes(val))
+                                }
+                                Err(_) => {
+                                    None
+                                }
+                            },
+                            disc_number: row.get("dn").expect("get disc number fail"),
+                            track_number: row.get("tn").expect("get track number fail")
+                        }
+                    )
+                }).unwrap();
+
+                let albums: Vec<Album> = val.into_iter().filter_map(|a| a.ok()).collect::<Vec<Album>>();
+
+                let new_page = crate::app::artists::ArtistPage {
+                    singles: vec![],
+                    albums
+                };
+
+                if let Page::Artist(page) = self.nav.data_mut::<Page>(self.artistsid).unwrap() {
+                    page.page_state = ArtistPageState::ArtistPage(new_page)
+                }
+            }
+
+            Message::ArtistPageReturn => {
+                if let Page::Artist(artistpage) = self
+                    .nav
+                    .data_mut::<Page>(self.artistsid)
+                    .expect("should always be intialized")
+                {
+                    artistpage.page_state = ArtistPageState::Loaded;
+                }
+            }
             Message::ArtistsLoaded(artists) => {
                 if let Page::Artist(page) = self
                     .nav

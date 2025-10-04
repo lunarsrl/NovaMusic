@@ -1,6 +1,7 @@
 use crate::app::Message;
 use cosmic::{iced, iced_core, Element};
 use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::iced::alignment::Vertical;
 use cosmic::widget::JustifyContent;
 use iced::widget::scrollable::Viewport;
 use crate::{app, fl};
@@ -36,8 +37,8 @@ pub enum ArtistPageState {
 
 #[derive(Debug)]
 pub struct ArtistPage {
-    singles: Vec<AppTrack>,
-    albums: Vec<Album>
+    pub singles: Vec<AppTrack>,
+    pub albums: Vec<Album>
 }
 
 impl ArtistsPage {
@@ -78,7 +79,7 @@ impl ArtistsPage {
                                         } else {
                                             cosmic::widget::container(
                                                 cosmic::widget::icon::from_name(
-                                                    "playlist-symbolic",
+                                                    "avatar-default-symbolic",
                                                 )
                                                     .size((model.config.grid_item_size * 32) as u16),
                                             )
@@ -97,7 +98,7 @@ impl ArtistsPage {
                                     ])
                                         .align_x(Alignment::Center),
                                 )
-
+                                    .on_press(Message::ArtistRequested(artist.name.clone()))
                                     .class(cosmic::widget::button::ButtonClass::Icon)
                                     .width((model.config.grid_item_size * 32) as f32)
                                     .into(),
@@ -152,6 +153,7 @@ impl ArtistsPage {
                                     .justify_content(JustifyContent::Center)
                                     .row_alignment(Alignment::Center),
                             )
+
                                 .align_x(Alignment::Center),
                         )
                             .into()
@@ -162,7 +164,19 @@ impl ArtistsPage {
             }
             ArtistPageState::ArtistPage(artistpage) => {
                 // Unique State
-                return cosmic::widget::container(cosmic::widget::text("Hello!")).into()
+
+                return cosmic::widget::container(
+                    cosmic::widget::column::with_children(vec![
+                        cosmic::widget::row::with_children(vec![
+                            cosmic::widget::button::link("Return")
+                                .on_press(Message::ArtistPageReturn)
+                                .into(),
+                            cosmic::widget::horizontal_space().into(),
+                            cosmic::widget::icon::from_name("avatar-default-symbolic").into()
+                        ]).into(),
+                        cosmic::widget::divider::horizontal::default().into()
+                    ])
+                ).into()
             }
             ArtistPageState::ArtistPageSearch(search) => {
                 // Unique State
@@ -174,35 +188,53 @@ impl ArtistsPage {
         };
 
 
-        cosmic::widget::scrollable::vertical(
-            cosmic::widget::container(
-                cosmic::widget::column::with_children(vec![
-                    // HEADING
-                    cosmic::widget::row::with_children(vec![
-                        cosmic::widget::text::title2(fl!("artists"))
-                            .width(Length::FillPortion(2))
-                            .into(),
-                        cosmic::widget::horizontal_space()
-                            .width(Length::Shrink)
-                            .into(),
-                        cosmic::widget::search_input(
-                            fl!("ArtistInputPlaceholder"),
-                            model.search_field.as_str(),
-                        )
-                            .on_input(|input| Message::UpdateSearch(input))
-                            .width(Length::FillPortion(1))
-                            .into(),
-                    ])
-                        .align_y(Alignment::Center)
-                        .spacing(cosmic::theme::spacing().space_s)
+        cosmic::widget::container(
+            cosmic::widget::column::with_children(vec![
+                cosmic::widget::row::with_children(vec![
+                    cosmic::widget::text::title2(fl!("artists"))
+                        .width(Length::FillPortion(2))
                         .into(),
-                    // BODY
-                    body,
+                    cosmic::widget::horizontal_space()
+                        .width(Length::Shrink)
+                        .into(),
+                    cosmic::widget::search_input(
+                        fl!("ArtistInputPlaceholder"),
+                        model.search_field.as_str(),
+                    )
+                        .on_input(|input| Message::UpdateSearch(input))
+                        .width(Length::FillPortion(1))
+                        .into(),
+                    cosmic::widget::button::icon(cosmic::widget::icon::from_name("application-menu-symbolic"))
+                        .class(cosmic::widget::button::ButtonClass::Standard)
+                        .into(),
                 ])
-            )
-                .padding(iced_core::Padding::from([0, cosmic::theme::spacing().space_m]))
+                    .align_y(Alignment::Center)
+                    .spacing(cosmic::theme::spacing().space_s)
+                    .into(),
 
+                cosmic::widget::divider::horizontal::default().into(),
+                // cosmic::widget::column::with_children(vec![
+                // cosmic::widget::row::with_children(vec![
+                //     cosmic::widget::text::caption("242 Artists Loaded").into(),
+                //     cosmic::widget::horizontal_space().into(),
+                //
+                // ])
+                //     .align_y(Vertical::Bottom)
+                //     .into(),
+
+                // ])
+                //     .spacing(cosmic::theme::spacing().space_xxs)
+                //     .into(),
+            body,
+            ])
+                .spacing(cosmic::theme::spacing().space_xs)
         )
+            .padding(iced::core::padding::Padding::from([
+                0,
+                cosmic::theme::spacing().space_m,
+            ]))
+            .height(Length::Fill)
+            .width(Length::Fill)
             .into()
     }
 }
