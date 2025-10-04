@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use regex::Regex;
 use crate::app::artists::ArtistInfo;
 use cosmic::dialog::file_chooser::Error;
 
@@ -1631,20 +1632,36 @@ from track
                                         let mut stmt = conn.prepare("select * from artists").expect("Statement Faulty @ OnNavEnter Artists");
 
                                         let rows = stmt.query_map([], |row| {
-                                           Ok(
-                                               ArtistInfo {
-                                                   name: row.get("name").unwrap(),
-                                                   image: match row.get::<_, Vec<u8>>("artistpfp") {
-                                                       Ok(val) => {
-                                                           Some(cosmic::widget::image::Handle::from_bytes(val))
-                                                       }
-                                                       Err(e) => {
-                                                           log::warn!("Potential Error @ OnNavEnter Artists: {}", e);
-                                                           None
-                                                       }
-                                                   }
-                                               }
-                                           )
+
+                                            let name  = row.get::<_, String>("name").expect("Should be string");
+                                            let regex = regex::RegexBuilder::new(r"feat\.|with|ft\.|&").case_insensitive(true).build().unwrap();
+
+
+                                            match regex.is_match(&name) {
+                                                false => {
+
+                                                    return Ok(
+                                                        ArtistInfo {
+                                                            name: name,
+                                                            image: match row.get::<_, Vec<u8>>("artistpfp") {
+                                                                Ok(val) => {
+                                                                    Some(cosmic::widget::image::Handle::from_bytes(val))
+                                                                }
+                                                                Err(e) => {
+                                                                    log::warn!("Potential Error @ OnNavEnter Artists: {}", e);
+                                                                    None
+                                                                }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                                true => {
+                                                    return Err(rusqlite::Error::UnwindingPanic)
+                                                }
+                                            };
+
+
+
                                         }).expect("Query map failed");
 
                                         artists = rows.into_iter().filter_map(|a| a.ok()).collect();
