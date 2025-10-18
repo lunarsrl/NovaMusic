@@ -1,4 +1,5 @@
 use colored::Colorize;
+use cosmic::Application;
 use futures_util::future::err;
 use rusqlite::types::Type::Null;
 use rusqlite::{Error, OptionalExtension};
@@ -7,7 +8,6 @@ use std::fmt::{format, Debug, Pointer};
 use std::fs;
 use std::panic::panic_any;
 use std::path::PathBuf;
-use cosmic::Application;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
@@ -41,13 +41,14 @@ struct AlbumTracks {
     disc_number: u64,
 }
 
-
-
-
 pub fn create_database() {
     let conn = rusqlite::Connection::open(
-        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
-    ).unwrap();
+        dirs::data_local_dir()
+            .unwrap()
+            .join(crate::app::AppModel::APP_ID)
+            .join("nova_music.db"),
+    )
+    .unwrap();
 
     conn.execute_batch(
         "
@@ -116,8 +117,12 @@ pub fn create_database() {
 //todo: Theres probably a better way to do this.
 pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     let conn = rusqlite::Connection::open(
-        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
-    ).unwrap();
+        dirs::data_local_dir()
+            .unwrap()
+            .join(crate::app::AppModel::APP_ID)
+            .join("nova_music.db"),
+    )
+    .unwrap();
 
     let mut track = Track {
         id: 0,
@@ -225,7 +230,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     _ => {
                         // log::error!("DISC NUMBER");
                     }
-
                 },
                 StandardTagKey::DiscSubtitle => {}
                 StandardTagKey::DiscTotal => match tag.value {
@@ -308,7 +312,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 StandardTagKey::TaggingDate => {}
                 StandardTagKey::TrackNumber => match tag.value {
                     Value::String(val) => {
-
                         let mut final_val = val;
 
                         if final_val.contains("/") {
@@ -325,9 +328,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                             .parse::<u64>()
                             .expect(format!("Invalid track number: {}", final_val).as_str());
                     }
-                    Value::UnsignedInt(val) => {
-                        album_tracks.track_number = val
-                    }
+                    Value::UnsignedInt(val) => album_tracks.track_number = val,
 
                     Value::Binary(_) => {
                         // log::info!("{}", "TRACK NUMBER binary".red());
@@ -337,15 +338,12 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     }
                     Value::Flag => {
                         // log::info!("{}", "TRACK NUMBER  flag".red());
-
                     }
                     Value::Float(_) => {
                         // log::info!("{}", "TRACK NUMBER  float".red());
-
                     }
                     Value::SignedInt(_) => {
                         // log::info!("{}", "TRACK NUMBER  signed int".red());
-
                     }
                 },
                 StandardTagKey::TrackSubtitle => {}
@@ -526,6 +524,4 @@ fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
             None
         }
     }
-
-
 }

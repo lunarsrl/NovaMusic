@@ -1,3 +1,1 @@
-fn search() {
-    
-}
+fn search() {}

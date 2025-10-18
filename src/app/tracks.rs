@@ -1,11 +1,11 @@
-use crate::{app, fl};
 use crate::app::{AppTrack, Message};
+use crate::{app, fl};
+use cosmic::iced;
 use cosmic::iced::{Alignment, ContentFit, Element, Length};
 use cosmic::iced_core::image::Handle;
 use cosmic::widget::dropdown::multi::list;
 use std::num::Wrapping;
 use std::sync::{Arc, Mutex};
-use cosmic::iced;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
@@ -172,7 +172,7 @@ fn search_list_display<'a>(
         }
     }
 
-    let mut elem_vec : Vec<cosmic::Element<Message>> = Vec::with_capacity(3);
+    let mut elem_vec: Vec<cosmic::Element<Message>> = Vec::with_capacity(3);
 
     if settings.0 {
         elem_vec.push(search_group_display(&title_vector, fl!("title").as_str()));
@@ -186,28 +186,31 @@ fn search_list_display<'a>(
         elem_vec.push(search_group_display(&artist_vector, fl!("artist").as_str()));
     }
 
-
-    cosmic::widget::column::with_children(
-        elem_vec,
-    )
+    cosmic::widget::column::with_children(elem_vec)
         .spacing(cosmic::theme::spacing().space_s)
         .width(Length::Fill)
-    .into()
+        .into()
 }
 
-fn search_group_display<'a>(tracks: &Vec<AppTrack>, search_title: &str) -> cosmic::Element<'a, Message> {
+fn search_group_display<'a>(
+    tracks: &Vec<AppTrack>,
+    search_title: &str,
+) -> cosmic::Element<'a, Message> {
     cosmic::widget::column::with_children(vec![
         cosmic::widget::container(
-            cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::heading(fl!("SearchFilterSpecify", filter = search_title)).into(),
-            ])
-                .padding(cosmic::theme::spacing().space_xxs)
-                .width(Length::Fill)
+            cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(fl!(
+                "SearchFilterSpecify",
+                filter = search_title
+            ))
+            .into()])
+            .padding(cosmic::theme::spacing().space_xxs)
+            .width(Length::Fill),
         )
-            .class(cosmic::theme::Container::Primary).into(),
-        track_list_display(&tracks)
+        .class(cosmic::theme::Container::Primary)
+        .into(),
+        track_list_display(&tracks),
     ])
-        .into()
+    .into()
 }
 
 fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Message> {

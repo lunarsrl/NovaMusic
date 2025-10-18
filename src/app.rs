@@ -73,6 +73,7 @@ use cosmic::iced::task::Handle;
 use cosmic::iced::Alignment::Start;
 
 use crate::app::Page::Playlists;
+use cosmic::cosmic_theme::Layer;
 use cosmic::iced_widget::scrollable::Viewport;
 use rayon::iter::{IntoParallelIterator, ParallelBridge};
 use rayon::slice::ParallelSliceMut;
@@ -93,7 +94,6 @@ use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
-use cosmic::cosmic_theme::Layer;
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, Track};
 use symphonia::core::io::MediaSourceStream;
@@ -637,39 +637,33 @@ impl cosmic::Application for AppModel {
         }
 
         let icon = match &self.playlist_cover {
-            None => {
-                cosmic::widget::container(
-                    cosmic::widget::button::icon(
-                        cosmic::widget::icon::from_name("view-list-images-symbolic")
-                            .size(6 * 8),
-                    )
-                        .padding(cosmic::theme::spacing().space_s)
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-                        .class(cosmic::theme::Button::Suggested),
+            None => cosmic::widget::container(
+                cosmic::widget::button::icon(
+                    cosmic::widget::icon::from_name("view-list-images-symbolic").size(6 * 8),
                 )
-                    .class(cosmic::theme::Container::Secondary)
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into()
-            }
-            Some(val) => {
-                cosmic::widget::container(
-                    cosmic::widget::button::custom_image_button(
-                        cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
-                            .content_fit(ContentFit::Fill),
-                        None
-                    )
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-
+                .padding(cosmic::theme::spacing().space_s)
+                .on_press(Message::CreatePlaylistAddThumbnail)
+                .class(cosmic::theme::Button::Suggested),
+            )
+            .class(cosmic::theme::Container::Secondary)
+            .width(Length::Fixed(6.0 * 16.0))
+            .height(Length::Fixed(6.0 * 16.0))
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .into(),
+            Some(val) => cosmic::widget::container(
+                cosmic::widget::button::custom_image_button(
+                    cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
+                        .content_fit(ContentFit::Fill),
+                    None,
                 )
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into()
-            }
+                .on_press(Message::CreatePlaylistAddThumbnail),
+            )
+            .width(Length::Fixed(6.0 * 16.0))
+            .height(Length::Fixed(6.0 * 16.0))
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
+            .into(),
         };
 
         if self.playlist_dialog {
@@ -678,19 +672,19 @@ impl cosmic::Application for AppModel {
                     .title(fl!("DialogPlaylistTitle"))
                     .control(
                         cosmic::widget::container(
-                        cosmic::widget::row::with_children(vec![
-                            icon,
-                            cosmic::widget::text_input(
-                                fl!("PlaylistInputPlaceholder"),
-                                self.playlist_dialog_text.as_str(),
-                            )
-                            .on_input(|input| Message::UpdatePlaylistName(input))
-                            .into(),
-                        ])
+                            cosmic::widget::row::with_children(vec![
+                                icon,
+                                cosmic::widget::text_input(
+                                    fl!("PlaylistInputPlaceholder"),
+                                    self.playlist_dialog_text.as_str(),
+                                )
+                                .on_input(|input| Message::UpdatePlaylistName(input))
+                                .into(),
+                            ])
                             .align_y(Vertical::Bottom)
-                        .spacing(cosmic::theme::spacing().space_m),
-                    )
-                        .align_x(Horizontal::Center)
+                            .spacing(cosmic::theme::spacing().space_m),
+                        )
+                        .align_x(Horizontal::Center),
                     )
                     .primary_action(
                         cosmic::widget::button::icon(cosmic::widget::icon::from_name(
@@ -722,27 +716,27 @@ impl cosmic::Application for AppModel {
                                     fl!("PlaylistInputPlaceholder"),
                                     self.playlist_dialog_text.as_str(),
                                 )
-                                    .on_input(|input| Message::UpdatePlaylistName(input))
-                                    .into(),
+                                .on_input(|input| Message::UpdatePlaylistName(input))
+                                .into(),
                             ])
-                                .align_y(Vertical::Bottom)
-                                .spacing(cosmic::theme::spacing().space_m),
+                            .align_y(Vertical::Bottom)
+                            .spacing(cosmic::theme::spacing().space_m),
                         )
-                            .align_x(Horizontal::Center)
+                        .align_x(Horizontal::Center),
                     )
                     .primary_action(
                         cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                             "object-select-symbolic",
                         ))
-                            .class(cosmic::theme::Button::Suggested)
-                            .on_press(Message::EditPlaylistConfirm),
+                        .class(cosmic::theme::Button::Suggested)
+                        .on_press(Message::EditPlaylistConfirm),
                     )
                     .secondary_action(
                         cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                             "window-close-symbolic",
                         ))
-                            .class(cosmic::theme::Button::Standard)
-                            .on_press(Message::EditPlaylistCancel),
+                        .class(cosmic::theme::Button::Standard)
+                        .on_press(Message::EditPlaylistCancel),
                     )
                     .into(),
             );
@@ -822,8 +816,6 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
-
-
             Message::ToastError(error) => {
                 return self
                     .toasts
@@ -878,7 +870,7 @@ impl cosmic::Application for AppModel {
                 self.playlist_dialog_path = path;
                 match self.playlist_edit_dialog {
                     true => self.playlist_edit_dialog = false,
-                    false => self.playlist_edit_dialog = true
+                    false => self.playlist_edit_dialog = true,
                 }
             }
             Message::PlaylistDeleteSafety => match self.playlist_delete_dialog {
@@ -1508,25 +1500,26 @@ impl cosmic::Application for AppModel {
                         ))
                             .map(cosmic::Action::App);
                     }
-                    Page::Playlists(page) => match &page.playlist_page_state {
-                        PlaylistPageState::Loading => {
-                            match dirs::data_local_dir()
-                                .unwrap()
-                                .join(crate::app::AppModel::APP_ID)
-                                .join("Playlists")
-                                .is_dir()
-                            {
-                                true => {}
-                                false => fs::create_dir(
-                                    dirs::data_local_dir()
-                                        .unwrap()
-                                        .join(crate::app::AppModel::APP_ID)
-                                        .join("Playlists"),
-                                )
-                                .unwrap(),
-                            }
+                    Page::Playlists(page) => {
+                        match &page.playlist_page_state {
+                            PlaylistPageState::Loading => {
+                                match dirs::data_local_dir()
+                                    .unwrap()
+                                    .join(crate::app::AppModel::APP_ID)
+                                    .join("Playlists")
+                                    .is_dir()
+                                {
+                                    true => {}
+                                    false => fs::create_dir(
+                                        dirs::data_local_dir()
+                                            .unwrap()
+                                            .join(crate::app::AppModel::APP_ID)
+                                            .join("Playlists"),
+                                    )
+                                    .unwrap(),
+                                }
 
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                                 5,
                                 |mut tx| async move {
                                     tokio::task::spawn_blocking(move || {
@@ -1581,13 +1574,14 @@ impl cosmic::Application for AppModel {
                                 },
                             ))
                             .map(cosmic::Action::App);
+                            }
+                            PlaylistPageState::Loaded => {}
+                            PlaylistPageState::PlaylistPage(_) => {}
+                            PlaylistPageState::Search(_) => {
+                                page.playlist_page_state = PlaylistPageState::Loaded
+                            }
                         }
-                        PlaylistPageState::Loaded => {}
-                        PlaylistPageState::PlaylistPage(_) => {}
-                        PlaylistPageState::Search(_) => {
-                            page.playlist_page_state = PlaylistPageState::Loaded
-                        }
-                    },
+                    }
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
                             return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
@@ -1933,8 +1927,7 @@ from track
                         Some(handles) => handles.push(progress_thread.1),
                     }
                     let (task, handle) =
-                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0])
-                            .abortable();
+                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
                     match &mut self.task_handle {
                         None => self.task_handle = Some(vec![handle]),
                         Some(handles) => handles.push(handle),
@@ -2179,9 +2172,7 @@ from track
                 }
             },
             Message::AddToPlaylist => self.playlist_dialog = true,
-            Message::EditPlaylistCancel => {
-                self.playlist_edit_dialog = false
-            }
+            Message::EditPlaylistCancel => self.playlist_edit_dialog = false,
             Message::EditPlaylistConfirm => {
                 if PathBuf::from(&self.playlist_dialog_path).exists() {
                     let mut file = File::open(&self.playlist_dialog_path).unwrap();
@@ -2190,67 +2181,78 @@ from track
                     let mut append_cover_path = true;
                     let mut append_name = true;
 
-                        let mut string: String = String::from("");
-                        file.read_to_string(&mut string).unwrap();
+                    let mut string: String = String::from("");
+                    file.read_to_string(&mut string).unwrap();
 
-                        for entry in string.lines() {
-                            let mut new_line = entry.to_string();
-                            match entry.find("#PLAYLIST:") {
-                                None => {
-                                    log::info!("no playlist name");
-                                }
-                                Some(val) => {
-                                    append_name = false;
-                                    log::info!("found and adding");
-                                    entry.clear();
-                                    new_line = format!("#PLAYLIST:{}", self.playlist_dialog_text.as_str());
-                                }
+                    for entry in string.lines() {
+                        let mut new_line = entry.to_string();
+                        match entry.find("#PLAYLIST:") {
+                            None => {
+                                log::info!("no playlist name");
                             }
-
-                            match entry.find("#EXTALBUMARTURL:") {
-                                None => {
-                                    if self.playlist_cover.is_some() {
-                                        append_cover_path = true;
-                                    } else {
-                                        append_cover_path = false;
-                                    }
-                                }
-                                Some(val) => {
-                                    append_cover_path = false;
-                                    log::info!("found and adding");
-                                    entry.clear();
-
-                                    if let Some(path) = self.playlist_cover.take() {
-                                        new_line = String::from(format!("#EXTALBUMARTURL:{}", path.to_str().unwrap()))
-                                    } else {
-                                        new_line = String::from("blank")
-                                    }
-                                }
+                            Some(val) => {
+                                append_name = false;
+                                log::info!("found and adding");
+                                entry.clear();
+                                new_line =
+                                    format!("#PLAYLIST:{}", self.playlist_dialog_text.as_str());
                             }
-
-                            if new_line.contains("blank") {
-                                new_line = String::from("")
-                            } else {
-                                new_line = format!("{}\n", new_line);
-                            }
-
-                            new_file.push_str(&new_line);
                         }
+
+                        match entry.find("#EXTALBUMARTURL:") {
+                            None => {
+                                if self.playlist_cover.is_some() {
+                                    append_cover_path = true;
+                                } else {
+                                    append_cover_path = false;
+                                }
+                            }
+                            Some(val) => {
+                                append_cover_path = false;
+                                log::info!("found and adding");
+                                entry.clear();
+
+                                if let Some(path) = self.playlist_cover.take() {
+                                    new_line = String::from(format!(
+                                        "#EXTALBUMARTURL:{}",
+                                        path.to_str().unwrap()
+                                    ))
+                                } else {
+                                    new_line = String::from("blank")
+                                }
+                            }
+                        }
+
+                        if new_line.contains("blank") {
+                            new_line = String::from("")
+                        } else {
+                            new_line = format!("{}\n", new_line);
+                        }
+
+                        new_file.push_str(&new_line);
+                    }
                     let mut file = File::create(&self.playlist_dialog_path).unwrap();
                     if append_cover_path {
-                        new_file.push_str(format!("#EXTALBUMARTURL:{}\n", self.playlist_cover.take().unwrap().to_str().unwrap()).as_str())
+                        new_file.push_str(
+                            format!(
+                                "#EXTALBUMARTURL:{}\n",
+                                self.playlist_cover.take().unwrap().to_str().unwrap()
+                            )
+                            .as_str(),
+                        )
                     }
 
-                     if append_name {
-                         new_file.push_str(format!("#PLAYLIST:{}\n", self.playlist_dialog_text).as_str())
-                     }
+                    if append_name {
+                        new_file
+                            .push_str(format!("#PLAYLIST:{}\n", self.playlist_dialog_text).as_str())
+                    }
                     file.write_all(new_file.as_bytes()).unwrap()
-
-
                 } else {
                     return self
                         .toasts
-                        .push(cosmic::widget::toaster::Toast::new("Playlist path no longer exists"))
+                        .push(cosmic::widget::toaster::Toast::new(
+                            "Playlist path no longer exists",
+                        ))
                         .map(cosmic::Action::App);
                 }
                 self.playlist_edit_dialog = false;
@@ -2258,9 +2260,7 @@ from track
                 if let Page::Playlists(val) = self.access_nav_data(3) {
                     val.playlist_page_state = PlaylistPageState::Loading
                 }
-                return cosmic::task::future( async move {
-                    Message::OnNavEnter
-                })
+                return cosmic::task::future(async move { Message::OnNavEnter });
             }
             Message::CreatePlaylistIconChosen(path) => {
                 log::info!("Image: {}", path.to_string_lossy());
@@ -2271,10 +2271,7 @@ from track
                     let dialog = cosmic::dialog::file_chooser::open::Dialog::new();
                     match dialog.open_file().await {
                         Ok(selected) => {
-                            let fp = selected
-                                .url()
-                                .to_owned()
-                                .to_file_path();
+                            let fp = selected.url().to_owned().to_file_path();
 
                             if let Ok(file) = fp {
                                 Message::CreatePlaylistIconChosen(file)
@@ -2319,7 +2316,7 @@ from track
                         }
                     }
                 })
-                    .map(action::Action::App);
+                .map(action::Action::App);
             }
 
             Message::CreatePlaylistCancel => {
@@ -2351,7 +2348,16 @@ from track
                         .expect("Failed to create Playlist file");
                 new_file
                     .write_all(
-                        format!("#EXTM3U \n#PLAYLIST:{}\n#EXTALBUMARTURL:{}\n", self.playlist_dialog_text, self.playlist_cover.take().unwrap_or("".parse().unwrap()).to_string_lossy().to_string()).as_bytes()
+                        format!(
+                            "#EXTM3U \n#PLAYLIST:{}\n#EXTALBUMARTURL:{}\n",
+                            self.playlist_dialog_text,
+                            self.playlist_cover
+                                .take()
+                                .unwrap_or("".parse().unwrap())
+                                .to_string_lossy()
+                                .to_string()
+                        )
+                        .as_bytes(),
                     )
                     .expect("Failed to write Playlist file");
                 for track in &self.queue {

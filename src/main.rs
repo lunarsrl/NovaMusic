@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::fmt::Display;
-use std::fs;
-use ::log::info;
-use strum_macros::EnumString;
-use symphonia::core::meta::StandardTagKey;
 use crate::database::create_database;
 use crate::log::setup_logger;
+use ::log::info;
+use std::fmt::Display;
+use std::fs;
+use strum_macros::EnumString;
+use symphonia::core::meta::StandardTagKey;
 
 mod app;
 mod config;
+mod database;
 mod i18n;
 mod log;
-mod database;
 
 fn main() -> cosmic::iced::Result {
     //start logging
@@ -33,4 +33,3 @@ fn main() -> cosmic::iced::Result {
     // Starts the application's event loop with `()` as the application's flags.
     cosmic::app::run::<app::AppModel>(settings, ())
 }
-
