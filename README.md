@@ -1,36 +1,30 @@
-# Nova Music
-An album focused music player written in the libcosmic toolkit.
 
-TODO:
-- ~~[ ! ] Replace current playlist implementation with m3u~~
-- ~~Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
-- ~~Localization update~~
+<div align="center" >
+  <img width="182" src="resources/icons/hicolor/scalable/apps/icon.svg">
+  <h1>Nova Music</h1>
+  <p>A music player written with the libcosmic toolkit</p>
+</div>
 
-Priority:
-- Exploring CPAL instead of Rodio
-- Gapless Playback
-- Crossfade support
+Contents:
+- Installation
+- Updates
+- Todo
+- Translators
+- Packaging
   
-Other:
-- Artist View
-- Optional network features (ex: Musicbrainz integration for automatic metadata)
-- Genres
-- Shuffle options
-- Basic Keybinds 
-- Flatpak release!
-
-Updates
-- Playlists now stored in local data directory as utf8 m3u files.
-- Creating a playlist allows you to choose and icon to display. (Filepath to icon is saved in the M3U)
-- When scanning the music directory, Nova Music will detect m3u files and make a personal copy in the local data directory.
-- The user is now notified in the case of most errors rather than doing nothing or crashing.
-- All the text in the app is now utilizing localization with i18n so translations are now possible.
-
 ## Installation
-This software is still in development! Major changes may be made in the future and it may still be buggy.
+<div align="center">
+  <h3>
+  This software is still in development!
+  </h3>
+</div>
 
+#### Arch Linux:  
+Thank you to @rwinkhart for publishing the AUR Package!  
+AUR: https://aur.archlinux.org/packages/nova-music-git  
+
+#### Compile it yourself for any platform:
 A [justfile](./justfile) is included by default for the [casey/just][just] command runner.
-
 - `just` builds the application with the default `just build-release` recipe
 - `just run` builds and runs the application
 - `just install` installs the project into the system
@@ -38,6 +32,33 @@ A [justfile](./justfile) is included by default for the [casey/just][just] comma
 - `just build-vendored` compiles with vendored dependencies from that tarball
 - `just check` runs clippy on the project to check for linter warnings
 - `just check-json` can be used by IDEs that support LSP
+
+## Updates
+- Playlists now stored in local data directory as utf8 m3u files.
+- Creating a playlist allows you to choose and icon to display. (Filepath to icon is saved in the M3U)
+- When scanning the music directory, Nova Music will detect m3u files and make a personal copy in the local data directory.
+- The user is now notified in the case of most errors rather than doing nothing or crashing.
+- All the text in the app is now utilizing localization with i18n so translations are now possible.
+
+
+## Todo:
+#### Priority:
+- Exploring CPAL instead of Rodio
+- Gapless Playback
+- Crossfade support
+  
+#### Other:
+- Artist View
+- Optional network features (ex: Musicbrainz integration for automatic metadata)
+- Genres
+- Shuffle options
+- Basic Keybinds 
+- Flatpak release!
+
+#### Completed:
+- ~~[ ! ] Replace current playlist implementation with m3u~~
+- ~~Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
+- ~~Localization update~~
 
 ## Translators
 
