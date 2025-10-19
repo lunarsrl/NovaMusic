@@ -5,12 +5,12 @@
   <p>A music player written with the libcosmic toolkit</p>
 </div>
 
-Contents:
-- Installation
-- Updates
-- Todo
-- Translators
-- Packaging
+## Contents:
+- [Installation](#installation)
+- [Updates](#updates)
+- [Todo](#todo)
+- [Translators](#translators)
+- [Packaging](#packaging)
   
 ## Installation
 <div align="center">
