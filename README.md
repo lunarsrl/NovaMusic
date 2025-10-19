@@ -20,7 +20,7 @@
 </div>
 
 #### Arch Linux:  
-Thank you to @rwinkhart for publishing the AUR Package!  
+Thank you to [@rwinkhart](https://github.com/rwinkhart) for publishing the AUR Package!  
 AUR: https://aur.archlinux.org/packages/nova-music-git  
 
 #### Compile it yourself for any platform:
