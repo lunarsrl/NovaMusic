@@ -18,6 +18,7 @@ Loading = Cargando...
 album = Álbum
 title = Título
 artist = Artista
+pageresults = {$number} Resultados
 
 scandir = Escanear Directorio
 
