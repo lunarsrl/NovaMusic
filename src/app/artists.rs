@@ -182,6 +182,7 @@ impl ArtistsPage {
                                 .class(cosmic::theme::Button::Standard)
                                 .into()
                         ])
+                            .align_y(Vertical::Center)
                         .into(),
                         cosmic::widget::row::with_children(vec![
                             cosmic::widget::icon::from_name("media-optical-symbolic")
@@ -202,6 +203,7 @@ impl ArtistsPage {
                             .spacing(cosmic::theme::spacing().space_s)
                             .into(),
                         ])
+                            .align_y(Vertical::Center)
                         .spacing(cosmic::theme::spacing().space_s)
                         .into(),
                         cosmic::widget::divider::horizontal::default().into(),
@@ -217,9 +219,6 @@ impl ArtistsPage {
                             ]).into(),
 
                         ])
-
-
-                            .height(Length::FillPortion(2))
                             .spacing(cosmic::theme::spacing().space_m)
                             .into(),
 
@@ -228,7 +227,7 @@ impl ArtistsPage {
                         0,
                         cosmic::theme::spacing().space_m,
                     ]))
-                    .spacing(cosmic::theme::spacing().space_xxxs),
+                    .spacing(cosmic::theme::spacing().space_s),
                 )
                 .into();
             }
