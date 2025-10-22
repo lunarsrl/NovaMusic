@@ -19,7 +19,7 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/artists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/artists.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/tracks.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/tracks.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,6 +34,9 @@
         <option value="Rust File" />
       </list>
     </option>
+  </component>
+  <component name="FormatOnSaveOptions">
+    <option name="myRunOnSave" value="true" />
   </component>
   <component name="Git.Settings">
     <option name="PREVIOUS_COMMIT_AUTHORS">
@@ -65,6 +68,9 @@
   <component name="MacroExpansionManager">
     <option name="directoryName" value="uinNu919" />
   </component>
+  <component name="OptimizeOnSaveOptions">
+    <option name="myRunOnSave" value="true" />
+  </component>
   <component name="ProblemsViewState">
     <hideBySeverity>
       <option value="11" />
@@ -91,7 +97,7 @@
     "Cargo.Build `Run`.executor": "Run",
     "Cargo.Just.executor": "Run",
     "Cargo.Run cosmic-music.executor": "Run",
-    "Cargo.Run.executor": "Debug",
+    "Cargo.Run.executor": "Run",
     "Cargo.fetch.executor": "Run",
     "Cargo.generate-lockfile.executor": "Run",
     "Cargo.update.executor": "Run",
@@ -103,6 +109,7 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "code.cleanup.on.save": "true",
     "git-widget-placeholder": "next",
     "junie.onboarding.icon.badge.shown": "true",
     "last_opened_file_path": "/home/srl/.local/share/dev.riveroluna.NovaMusic/nova_music.db",
@@ -114,7 +121,8 @@
     "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
     "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
     "org.rust.first.attach.projects": "true",
-    "settings.editor.selected.configurable": "preferences.lookFeel",
+    "rearrange.code.on.save": "true",
+    "settings.editor.selected.configurable": "actions.on.save",
     "vue.rearranger.settings.migration": "true"
   },
   "keyToStringList": {
@@ -404,7 +412,7 @@
       <workItem from="1759516526859" duration="26796000" />
       <workItem from="1760842909571" duration="1389000" />
       <workItem from="1761070025721" duration="7073000" />
-      <workItem from="1761092883825" duration="6415000" />
+      <workItem from="1761092883825" duration="10807000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />

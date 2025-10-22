@@ -654,8 +654,7 @@ impl cosmic::Application for AppModel {
                 let icon = match &self.playlist_cover {
                     None => cosmic::widget::container(
                         cosmic::widget::button::icon(
-                            cosmic::widget::icon::from_name("view-list-images-symbolic").size(6 * 8),
-                        )
+                            cosmic::widget::icon::from_name("view-list-images-symbolic").size(6 * 8), )
                             .padding(cosmic::theme::spacing().space_s)
                             .on_press(Message::CreatePlaylistAddThumbnail)
                             .class(cosmic::theme::Button::Suggested),
