@@ -19,7 +19,7 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/artists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/artists.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/tracks.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/tracks.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/home.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/home.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -412,7 +412,7 @@
       <workItem from="1759516526859" duration="26796000" />
       <workItem from="1760842909571" duration="1389000" />
       <workItem from="1761070025721" duration="7073000" />
-      <workItem from="1761092883825" duration="10807000" />
+      <workItem from="1761092883825" duration="13670000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />

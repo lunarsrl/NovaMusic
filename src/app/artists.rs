@@ -37,7 +37,7 @@ pub enum ArtistPageState {
 
 #[derive(Debug)]
 pub struct ArtistPage {
-    pub portrait: Option<cosmic::widget::image::Handle>,
+    pub artist: ArtistInfo,
     pub singles: Vec<AppTrack>,
     pub albums: Vec<Album>,
 }
@@ -191,7 +191,8 @@ impl ArtistsPage {
                                 .size(128)
                                 .into(),
                             cosmic::widget::column::with_children(vec![
-                                cosmic::widget::text::title2("ArtistName").into(),
+                                cosmic::widget::text::title3(artistpage.artist.name.as_str())
+                                    .into(),
                                 cosmic::widget::vertical_space().into(),
                                 cosmic::widget::button::text(fl!("AddToQueue"))
                                     .leading_icon(cosmic::widget::icon::from_name(
@@ -211,9 +212,9 @@ impl ArtistsPage {
                         // todo: let user customize whether an artist's singles appear in the grid or in the row.
                         // Maybe this can be done automatically by comparing the number of (tracks - albumtracks) to albumtracks but leave the user option
                         cosmic::widget::column::with_children(vec![
-                            cosmic::widget::text::title2(fl!("albums")).into(),
+                            cosmic::widget::text::title4(fl!("albums")).into(),
                             cosmic::widget::row::with_children(vec![]).into(),
-                            cosmic::widget::text::title2(fl!("tracks")).into(),
+                            cosmic::widget::text::title4(fl!("tracks")).into(),
                             cosmic::widget::row::with_children(vec![]).into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_m)
@@ -237,7 +238,7 @@ impl ArtistsPage {
         cosmic::widget::container(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::row::with_children(vec![
-                    cosmic::widget::text::title2(fl!("artists"))
+                    cosmic::widget::text::title3(fl!("artists"))
                         .width(Length::FillPortion(2))
                         .into(),
                     cosmic::widget::horizontal_space()
@@ -287,7 +288,7 @@ impl ArtistsPage {
 
     pub fn artist_edit_dialog(&self) -> Dialog<app::Message> {
         if let ArtistPageState::ArtistPage(page) = &self.page_state {
-            let icon = match &page.portrait {
+            let icon = match &page.artist.image {
                 Some(handle) => cosmic::widget::container(
                     cosmic::widget::button::custom_image_button(
                         cosmic::widget::image(handle).content_fit(ContentFit::Fill),
@@ -317,7 +318,7 @@ impl ArtistsPage {
             };
 
             cosmic::widget::dialog::Dialog::new()
-                .title("Edit {Artist}'s Page")
+                .title(format!("Edit {}'s Page", page.artist.name))
                 .control(
                     cosmic::widget::container(
                         cosmic::widget::row::with_children(vec![
