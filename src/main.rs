@@ -8,6 +8,7 @@ mod i18n;
 mod log;
 mod database;
 
+
 fn main() -> cosmic::iced::Result {
     //start logging
     setup_logger().expect("Could not setup logger");

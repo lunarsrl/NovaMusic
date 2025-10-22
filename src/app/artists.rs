@@ -3,9 +3,9 @@ use crate::app::tracks::SearchResult;
 use crate::app::Message;
 use crate::app::{AppModel, AppTrack};
 use crate::{app, fl};
-use cosmic::iced::alignment::Vertical;
+use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, ContentFit, Length};
-use cosmic::widget::JustifyContent;
+use cosmic::widget::{Dialog, JustifyContent};
 use cosmic::{iced, Element};
 use iced::widget::scrollable::Viewport;
 
@@ -37,6 +37,7 @@ pub enum ArtistPageState {
 
 #[derive(Debug)]
 pub struct ArtistPage {
+    pub portrait: Option<cosmic::widget::image::Handle>,
     pub singles: Vec<AppTrack>,
     pub albums: Vec<Album>,
 }
@@ -180,6 +181,7 @@ impl ArtistsPage {
                                 cosmic::widget::icon::from_name("application-menu-symbolic")
                             )
                                 .class(cosmic::theme::Button::Standard)
+                                .on_press(Message::ArtistPageEdit)
                                 .into()
                         ])
                             .align_y(Vertical::Center)
@@ -257,6 +259,7 @@ impl ArtistsPage {
                     cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                         "application-menu-symbolic",
                     ))
+                        .on_press(Message::ArtistsPageEdit)
                     .class(cosmic::widget::button::ButtonClass::Standard)
                     .into(),
                 ])
@@ -287,4 +290,57 @@ impl ArtistsPage {
         .width(Length::Fill)
         .into()
     }
+
+    pub fn artist_edit_dialog(&self) -> Dialog<app::Message> {
+        if let ArtistPageState::ArtistPage(page) = &self.page_state {
+            let icon = match &page.portrait {
+                Some(handle) => {
+                    cosmic::widget::image(handle).into()
+                }
+                None => {
+                    cosmic::widget::icon::from_name("avatar-default-symbolic").into()
+                }
+            };
+            
+            cosmic::widget::dialog::Dialog::new()
+                .title(fl!("DialogPlaylistEdit"))
+                .control(
+                    cosmic::widget::container(
+                        cosmic::widget::row::with_children(vec![
+                            icon,
+                            cosmic::widget::text_input(
+                                "hello", "empty"
+                            )
+                                .on_input(|input| Message::UpdatePlaylistName(input))
+                                .into(),
+                        ])
+                            .align_y(Vertical::Bottom)
+                            .spacing(cosmic::theme::spacing().space_m),
+                    )
+                        .align_x(Horizontal::Center),
+                )
+                .primary_action(
+                    cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                        "object-select-symbolic",
+                    ))
+                        .class(cosmic::theme::Button::Suggested)
+                        .on_press(Message::EditPlaylistConfirm),
+                )
+                .secondary_action(
+                    cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                        "window-close-symbolic",
+                    ))
+                        .class(cosmic::theme::Button::Standard)
+                        .on_press(Message::EditPlaylistCancel),
+                )
+                
+        } else {
+            panic!("Should always occur within ArtistPage ArtistPageState")
+        }
+    }
+
+    // pub fn artists_edit_dialog<'a>() -> Dialog<'a, Element<'a, app::Message>>{
+    // 
+    // }
 }
+
