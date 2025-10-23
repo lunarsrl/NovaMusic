@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::albums::Album;
 use crate::app::tracks::SearchResult;
 use crate::app::AppModel;

@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::{AppModel, Message};
 use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::widget::JustifyContent;
 use cosmic::{iced, Application, Element};
 use std::sync::Arc;
-use cosmic::iced_widget::scrollable::Viewport;
 
-use crate::{app, fl};
 use crate::app::tracks::SearchResult;
+use crate::{app, fl};
 
 #[derive(Debug, Clone)]
 pub struct PlaylistPage {
@@ -90,7 +92,8 @@ impl PlaylistPage {
                                     cosmic::widget::column::with_children(vec![
                                         if let Some(cover_art) = &playlist.thumbnail {
                                             cosmic::widget::container::Container::new(
-                                                cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
+                                                cosmic::widget::image(cover_art)
+                                                    .content_fit(ContentFit::Fill),
                                             )
                                             .height((model.config.grid_item_size * 32) as f32)
                                             .width((model.config.grid_item_size * 32) as f32)
@@ -117,7 +120,7 @@ impl PlaylistPage {
                                     ])
                                     .align_x(Alignment::Center),
                                 )
-                                    .on_press(Message::PlaylistSelected(playlist.clone()))
+                                .on_press(Message::PlaylistSelected(playlist.clone()))
                                 .class(cosmic::widget::button::ButtonClass::Icon)
                                 .width((model.config.grid_item_size * 32) as f32)
                                 .into(),
@@ -193,7 +196,7 @@ impl PlaylistPage {
                             .align_y(Alignment::Center),
                         )
                         .class(cosmic::widget::button::ButtonClass::Link)
-                            .on_press(Message::PlaylistPageReturn)
+                        .on_press(Message::PlaylistPageReturn)
                         .into(),
                         cosmic::widget::Row::with_children([
                             match &playlist.playlist.thumbnail {
@@ -214,9 +217,10 @@ impl PlaylistPage {
                                     .into(),
                                 cosmic::widget::divider::horizontal::default().into(),
                                 cosmic::widget::row::with_children(vec![
-
                                     cosmic::widget::button::text(fl!("AddToQueue"))
-                                        .leading_icon(cosmic::widget::icon::from_name("media-playback-start-symbolic"))
+                                        .leading_icon(cosmic::widget::icon::from_name(
+                                            "media-playback-start-symbolic",
+                                        ))
                                         .class(cosmic::theme::Button::Suggested)
                                         .on_press(Message::AddAlbumToQueue(
                                             playlist
@@ -226,27 +230,28 @@ impl PlaylistPage {
                                                 .collect::<Vec<String>>(),
                                         ))
                                         .into(),
-
                                     cosmic::widget::row::with_children(vec![
-                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
-                                        .on_press(Message::PlaylistEdit(playlist.playlist.path.clone()))
+                                        cosmic::widget::button::icon(
+                                            cosmic::widget::icon::from_name("edit-symbolic"),
+                                        )
+                                        .on_press(Message::PlaylistEdit(
+                                            playlist.playlist.path.clone(),
+                                        ))
                                         .class(cosmic::theme::Button::Standard)
                                         .into(),
-
-                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name("user-trash-symbolic"))
+                                        cosmic::widget::button::icon(
+                                            cosmic::widget::icon::from_name("user-trash-symbolic"),
+                                        )
                                         .on_press(Message::PlaylistDeleteSafety)
                                         .class(cosmic::theme::Button::Destructive)
                                         .into(),
-
                                     ])
-                                        .spacing(cosmic::theme::spacing().space_xxs)
-                                        .into(),
-
+                                    .spacing(cosmic::theme::spacing().space_xxs)
+                                    .into(),
                                 ])
-                                    .spacing(cosmic::theme::spacing().space_s)
-                                    .align_y(Alignment::Center)
-                                    .into()
-
+                                .spacing(cosmic::theme::spacing().space_s)
+                                .align_y(Alignment::Center)
+                                .into(),
                             ])
                             .spacing(cosmic::theme::spacing().space_s)
                             .into(),
@@ -261,14 +266,14 @@ impl PlaylistPage {
                     ])
                     .spacing(cosmic::theme::spacing().space_m),
                 )
-                    .width(Length::Fill)
-                    .height(Length::Fill)
+                .width(Length::Fill)
+                .height(Length::Fill)
                 .padding(iced::core::padding::Padding::from([
                     0,
                     cosmic::theme::spacing().space_m,
                 ]))
                 .into();
-            },
+            }
             PlaylistPageState::Search(search_results) => {
                 cosmic::widget::container(cosmic::widget::responsive(move |size| {
                     // Body
@@ -294,35 +299,33 @@ impl PlaylistPage {
                                         cosmic::widget::container::Container::new(
                                             cosmic::widget::image(cover_art),
                                         )
-                                            .height((model.config.grid_item_size * 32) as f32)
-                                            .width((model.config.grid_item_size * 32) as f32)
-                                            .into()
+                                        .height((model.config.grid_item_size * 32) as f32)
+                                        .width((model.config.grid_item_size * 32) as f32)
+                                        .into()
                                     } else {
                                         cosmic::widget::container(
-                                            cosmic::widget::icon::from_name(
-                                                "playlist-symbolic",
-                                            )
+                                            cosmic::widget::icon::from_name("playlist-symbolic")
                                                 .size((model.config.grid_item_size * 32) as u16),
                                         )
-                                            .align_x(Alignment::Center)
-                                            .align_y(Alignment::Center)
-                                            .into()
+                                        .align_x(Alignment::Center)
+                                        .align_y(Alignment::Center)
+                                        .into()
                                     },
                                     cosmic::widget::column::with_children(vec![
                                         cosmic::widget::text::text(playlist.title.to_string())
                                             .center()
                                             .into(),
                                     ])
-                                        .align_x(Alignment::Center)
-                                        .width(cosmic::iced::Length::Fill)
-                                        .into(),
+                                    .align_x(Alignment::Center)
+                                    .width(cosmic::iced::Length::Fill)
+                                    .into(),
                                 ])
-                                    .align_x(Alignment::Center),
+                                .align_x(Alignment::Center),
                             )
-                                .on_press(Message::PlaylistSelected(playlist.clone()))
-                                .class(cosmic::widget::button::ButtonClass::Icon)
-                                .width((model.config.grid_item_size * 32) as f32)
-                                .into(),
+                            .on_press(Message::PlaylistSelected(playlist.clone()))
+                            .class(cosmic::widget::button::ButtonClass::Icon)
+                            .width((model.config.grid_item_size * 32) as f32)
+                            .into(),
                         )
                     }
 
@@ -374,12 +377,12 @@ impl PlaylistPage {
                                 .justify_content(JustifyContent::Center)
                                 .row_alignment(Alignment::Center),
                         )
-                            .align_x(Alignment::Center),
+                        .align_x(Alignment::Center),
                     )
-                        .into()
-                }))
-                    .height(Length::Fill)
                     .into()
+                }))
+                .height(Length::Fill)
+                .into()
             }
         };
 
@@ -387,23 +390,22 @@ impl PlaylistPage {
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::row::with_children(vec![
                     cosmic::widget::text::title2(fl!("playlists"))
-                    .width(Length::FillPortion(2))
-                    .into(),
-                cosmic::widget::horizontal_space()
-                    .width(Length::Shrink)
-                    .into(),
-                cosmic::widget::search_input(
-                    fl!("PlaylistInputPlaceholder"),
-                    model.search_field.as_str(),
-                )
+                        .width(Length::FillPortion(2))
+                        .into(),
+                    cosmic::widget::horizontal_space()
+                        .width(Length::Shrink)
+                        .into(),
+                    cosmic::widget::search_input(
+                        fl!("PlaylistInputPlaceholder"),
+                        model.search_field.as_str(),
+                    )
                     .on_input(|input| Message::UpdateSearch(input))
                     .width(Length::FillPortion(1))
                     .into(),
                 ])
-                    .align_y(Alignment::Center)
-                    .spacing(cosmic::theme::spacing().space_s)
-                    .into(),
-
+                .align_y(Alignment::Center)
+                .spacing(cosmic::theme::spacing().space_s)
+                .into(),
                 body,
             ])
             .spacing(cosmic::theme::spacing().space_s),
@@ -432,9 +434,7 @@ fn tracks_listify(tracks: &Vec<PlaylistTrack>) -> Element<'static, Message> {
                             cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                 "media-playback-start-symbolic",
                             ))
-                            .on_press(Message::AddTrackToQueue(
-                                track.path.clone(),
-                            ))
+                            .on_press(Message::AddTrackToQueue(track.path.clone()))
                             .into(),
                         ])
                         .align_y(Alignment::Center),

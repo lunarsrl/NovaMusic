@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app;
 use crate::app::{AppModel, AppTrack, LoopState, Message};
 use crate::fl;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use colored::Colorize;
 use cosmic::Application;
 use regex::{Match, Regex};

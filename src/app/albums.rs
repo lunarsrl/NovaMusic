@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::tracks::SearchResult;
 use crate::app::{AppModel, Message};
+use crate::fl;
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::{Alignment, ContentFit, Length};
+use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::widget::JustifyContent;
 use cosmic::{iced, Application, Element, Theme};
 use std::sync::Arc;
-use cosmic::iced_widget::scrollable::Viewport;
-use crate::fl;
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
@@ -35,7 +37,7 @@ impl AlbumPage {
             page_state: AlbumPageState::Loading,
             has_fully_loaded: false,
             viewport: None,
-            scrollbar_id: cosmic::iced_core::widget::Id::unique()
+            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
         }
     }
 
@@ -131,7 +133,8 @@ impl AlbumPage {
                                         cosmic::widget::column::with_children(vec![
                                             if let Some(cover_art) = &album.cover_art {
                                                 cosmic::widget::container::Container::new(
-                                                    cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
+                                                    cosmic::widget::image(cover_art)
+                                                        .content_fit(ContentFit::Fill),
                                                 )
                                                 .height((model.config.grid_item_size * 32) as f32)
                                                 .width((model.config.grid_item_size * 32) as f32)
@@ -221,8 +224,8 @@ impl AlbumPage {
                                 )
                                 .align_x(Alignment::Center),
                             )
-                                .id(self.scrollbar_id.clone())
-                                .on_scroll(|view| Message::ScrollView(view))
+                            .id(self.scrollbar_id.clone())
+                            .on_scroll(|view| Message::ScrollView(view))
                             .into()
                         }))
                         .height(Length::Fill)
@@ -266,9 +269,10 @@ impl AlbumPage {
                             cosmic::widget::Column::with_children([
                                 // Album Title and Author Column
                                 cosmic::widget::text::title2(albumpage.album.name.clone()).into(),
-                                cosmic::widget::text::title4(
-                                    fl!("AlbumAttribution", artist = albumpage.album.artist.clone())
-                                )
+                                cosmic::widget::text::title4(fl!(
+                                    "AlbumAttribution",
+                                    artist = albumpage.album.artist.clone()
+                                ))
                                 .into(),
                                 cosmic::widget::button::text(fl!("AddToQueue"))
                                     .leading_icon(cosmic::widget::icon::from_name(
@@ -502,7 +506,6 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
         }
 
         match discs.get_mut((disc_num - 1) as usize) {
-
             None => {
                 discs.push(vec![container]);
             }

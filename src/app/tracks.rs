@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::{AppTrack, Message};
 use crate::{app, fl};
 use cosmic::iced;
@@ -189,28 +191,29 @@ fn search_list_display<'a>(
         elem_vec.push(search_group_display(&artist_vector, fl!("artist").as_str()));
     }
 
-
-    cosmic::widget::column::with_children(
-        elem_vec,
-    )
+    cosmic::widget::column::with_children(elem_vec)
         .spacing(cosmic::theme::spacing().space_s)
         .width(Length::Fill)
         .into()
 }
 
-fn search_group_display<'a>(tracks: &Vec<AppTrack>, search_title: &str) -> cosmic::Element<'a, Message> {
-    cosmic::widget::container(
-        cosmic::widget::column::with_children(vec![
-            cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::heading(fl!("SearchFilterSpecify", filter = search_title)).into(),
-            ])
-                .padding(cosmic::theme::spacing().space_xxs)
-                .width(Length::Fill)
-                .into(),
-            track_list_display(&tracks)
-        ])
-    )
-        .class(cosmic::theme::Container::Secondary).into()
+fn search_group_display<'a>(
+    tracks: &Vec<AppTrack>,
+    search_title: &str,
+) -> cosmic::Element<'a, Message> {
+    cosmic::widget::container(cosmic::widget::column::with_children(vec![
+        cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(fl!(
+            "SearchFilterSpecify",
+            filter = search_title
+        ))
+        .into()])
+        .padding(cosmic::theme::spacing().space_xxs)
+        .width(Length::Fill)
+        .into(),
+        track_list_display(&tracks),
+    ]))
+    .class(cosmic::theme::Container::Secondary)
+    .into()
 }
 
 fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Message> {
@@ -225,25 +228,25 @@ fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Me
                     // ----CONTENT---- //
                     prev_list.add(cosmic::widget::container::Container::new(
                         cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text::heading(format!("{}", track.title, ))
+                            cosmic::widget::text::heading(format!("{}", track.title,))
                                 .width(Length::FillPortion(1))
                                 .into(),
-                            cosmic::widget::text::text(format!("{}", track.artist, ))
+                            cosmic::widget::text::text(format!("{}", track.artist,))
                                 .width(Length::FillPortion(1))
                                 .into(),
-                            cosmic::widget::text::text(format!("{}", track.album_title, ))
+                            cosmic::widget::text::text(format!("{}", track.album_title,))
                                 .width(Length::FillPortion(1))
                                 .into(),
                             cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                 "media-playback-start-symbolic",
                             ))
-                                .on_press(Message::AddTrackToQueue(
-                                    track.path_buf.to_string_lossy().to_string(),
-                                ))
-                                .into(),
+                            .on_press(Message::AddTrackToQueue(
+                                track.path_buf.to_string_lossy().to_string(),
+                            ))
+                            .into(),
                         ])
-                            .spacing(cosmic::theme::spacing().space_xxxs)
-                            .align_y(Alignment::Center),
+                        .spacing(cosmic::theme::spacing().space_xxxs)
+                        .align_y(Alignment::Center),
                     )),
                 )
             }
