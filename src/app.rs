@@ -114,12 +114,29 @@ pub struct AppModel {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+/* todo: This is wasteful with memory at the benefit of less database accesses
+I think that the cost of accessing the database is much less important than the cost
+of having every track in the queue, for example, which is only displayed on one page,
+be in the global state of the application as an AppTrack. Only the first and second tracks up
+next in the queue should be AppTracks. The rest can just be ids that are turned into AppTracks
+as they approach. This should save a lot of memory
+*/
+/// All info associated with a track
 pub struct AppTrack {
     pub id: u32,
     pub title: String,
     pub artist: String,
     pub album_title: String,
     pub path_buf: PathBuf,
+    pub cover_art: Option<cosmic::widget::image::Handle>,
+}
+
+/// Minimum amount of info required to display fully expose a Single track
+#[derive(Debug)]
+pub struct DisplaySingle {
+    pub id: u32,
+    pub title: String,
+    pub artist: String,
     pub cover_art: Option<cosmic::widget::image::Handle>,
 }
 
@@ -1763,17 +1780,47 @@ from track
                     })
                     .unwrap();
 
+                let mut stmt = conn
+                    .prepare(
+                        "
+                        SELECT s.id, s.name as name, s.cover as cover, art.name as artist
+                        FROM single s
+                        left JOIN artists art ON s.artist_id = art.id
+                        Where art.name = ?
+                    ",
+                    )
+                    .expect("SQL is wrong");
+
                 let albums: Vec<Album> = val
                     .into_iter()
                     .filter_map(|a| a.ok())
                     .collect::<Vec<Album>>();
+
+                let val = stmt
+                    .query_map([&artist], |row| {
+                        Ok(DisplaySingle {
+                            id: row.get("id").unwrap_or(0),
+                            title: row.get("name").expect("get name fail"),
+                            artist: row.get("artist").expect("get artist fail"),
+                            cover_art: match row.get::<_, Vec<u8>>("cover") {
+                                Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
+                                Err(_) => None,
+                            },
+                        })
+                    })
+                    .unwrap();
+
+                let singles: Vec<DisplaySingle> = val
+                    .into_iter()
+                    .filter_map(|a| a.ok())
+                    .collect::<Vec<DisplaySingle>>();
 
                 let new_page = crate::app::artists::ArtistPage {
                     artist: ArtistInfo {
                         name: artist,
                         image: None,
                     },
-                    singles: vec![],
+                    singles,
                     albums,
                 };
 

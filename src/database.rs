@@ -1,8 +1,8 @@
 use colored::Colorize;
-use std::fs;
-use std::path::PathBuf;
 use cosmic::Application;
 use regex::{Match, Regex};
+use std::fs;
+use std::path::PathBuf;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
 
@@ -29,13 +29,14 @@ struct AlbumTracks {
     disc_number: u64,
 }
 
-
-
-
 pub fn create_database() {
     let conn = rusqlite::Connection::open(
-        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
-    ).unwrap();
+        dirs::data_local_dir()
+            .unwrap()
+            .join(crate::app::AppModel::APP_ID)
+            .join("nova_music.db"),
+    )
+    .unwrap();
 
     conn.execute_batch(
         "
@@ -44,6 +45,7 @@ pub fn create_database() {
         DROP TABLE IF EXISTS album_tracks;
         DROP TABLE IF EXISTS artists;
         DROP TABLE IF EXISTS track;
+        DROP TABLE IF EXISTS single
     ",
     )
     .unwrap();
@@ -101,17 +103,31 @@ pub fn create_database() {
         [],
     )
     .unwrap();
+
+    conn.execute(
+        "
+        CREATE TABLE single (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE,
+            artist_id INTEGER,
+            cover BLOB,
+            FOREIGN KEY(artist_id) REFERENCES artist(id)
+        )",
+        [],
+    )
+    .unwrap();
 }
 //todo: Theres probably a better way to do this.
 pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
     let conn = rusqlite::Connection::open(
-        dirs::data_local_dir().unwrap().join(crate::app::AppModel::APP_ID).join("nova_music.db")
-    ).unwrap();
+        dirs::data_local_dir()
+            .unwrap()
+            .join(crate::app::AppModel::APP_ID)
+            .join("nova_music.db"),
+    )
+    .unwrap();
 
-    let mut track = Track {
-        id: 0,
-        name: None,
-    };
+    let mut track = Track { id: 0, name: None };
 
     let mut album = Album {
         id: 0,
@@ -156,7 +172,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                         // };
                         //
 
-
                         match conn.execute("INSERT INTO artists (name) VALUES (?)", [name.trim()]) {
                             Ok(_) => {
                                 // log::info!("Added artist {} to artists", name);
@@ -180,7 +195,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 StandardTagKey::Arranger => {}
                 StandardTagKey::Artist => {
                     if let Value::String(val) = tag.value {
-                            artist.name = Some(val)
+                        artist.name = Some(val)
                     }
                 }
                 StandardTagKey::Bpm => {}
@@ -217,7 +232,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     _ => {
                         // log::error!("DISC NUMBER");
                     }
-
                 },
                 StandardTagKey::DiscSubtitle => {}
                 StandardTagKey::DiscTotal => match tag.value {
@@ -300,7 +314,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 StandardTagKey::TaggingDate => {}
                 StandardTagKey::TrackNumber => match tag.value {
                     Value::String(val) => {
-
                         let mut final_val = val;
 
                         if final_val.contains("/") {
@@ -317,9 +330,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                             .parse::<u64>()
                             .expect(format!("Invalid track number: {}", final_val).as_str());
                     }
-                    Value::UnsignedInt(val) => {
-                        album_tracks.track_number = val
-                    }
+                    Value::UnsignedInt(val) => album_tracks.track_number = val,
 
                     Value::Binary(_) => {
                         // log::info!("{}", "TRACK NUMBER binary".red());
@@ -329,15 +340,12 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     }
                     Value::Flag => {
                         // log::info!("{}", "TRACK NUMBER  flag".red());
-
                     }
                     Value::Float(_) => {
                         // log::info!("{}", "TRACK NUMBER  float".red());
-
                     }
                     Value::SignedInt(_) => {
                         // log::info!("{}", "TRACK NUMBER  signed int".red());
-
                     }
                 },
                 StandardTagKey::TrackSubtitle => {}
@@ -432,22 +440,51 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 //     err.to_string()
                 // );
                 // Album does not exist yet
+
                 if let Some(visual) = find_visual(filepath) {
                     //If visual data exists
-                    match conn.execute(
+
+                    if album.num_of_tracks == 1 {
+                        match conn.execute(
+                            "INSERT INTO single (name, artist_id, cover) VALUES (?, ?, ?)",
+                            (&album.name, &album.artist_id, &visual),
+                        ) {
+                            Ok(_) => {
+                                log::info!("{}", "Added SINGLE with some visual!".green());
+                            }
+                            Err(_) => {
+                                log::error!("{}", "UNABLE TO INSERT *SINGLE* DATA W/ VISUAL".red());
+                            }
+                        }
+                    } else {
+                        match conn.execute(
                         "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
                         (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, &visual),
                     ) {
                         Ok(_) => {
-                            // log::info!("{}", "Added album with some visual!".green());
+                            log::info!("{}", "Added ALBUM with some visual!".green());
                         }
                         Err(_) => {
-                            // log::error!("{}", "UNABLE TO INSERT ALBUM DATA W/ VISUAL".red());
+                            log::error!("{}", "UNABLE TO INSERT ALBUM DATA W/ VISUAL".red());
                         }
+                    }
                     }
                 } else {
                     //If visual data does not exist
-                    match conn.execute(
+                    if album.num_of_tracks == 1 {
+                        match conn.execute(
+                            "INSERT INTO single (name, artist_id, cover) VALUES (?, ?, ?)",
+                            (&album.name, &album.artist_id, None::<Box<u8>>),
+                        ) {
+                            Ok(_) => {
+                                log::info!("{}", "Added SINGLE with some visual!".green());
+                            }
+                            Err(_) => {
+                                log::error!("{}", "UNABLE TO INSERT *SINGLE* DATA W/ VISUAL".red());
+                            }
+                        }
+                    } else {
+                        match conn.execute(
                         "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
                         (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, None::<Box<[u8]>>),
                     ) {
@@ -458,6 +495,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                             // log::error!("{} \n {}", "UNABLE TO INSERT ALBUM DATA W/O VISUAL".red(), err.to_string());
 
                         }
+                    }
                     }
                 }
                 album.id = conn.last_insert_rowid() as u32
@@ -518,6 +556,4 @@ fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
             None
         }
     }
-
-
 }

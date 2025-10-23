@@ -1,7 +1,7 @@
 use crate::app::albums::Album;
 use crate::app::tracks::SearchResult;
-use crate::app::Message;
-use crate::app::{AppModel, AppTrack};
+use crate::app::AppModel;
+use crate::app::{DisplaySingle, Message};
 use crate::{app, fl};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, ContentFit, Length};
@@ -38,7 +38,7 @@ pub enum ArtistPageState {
 #[derive(Debug)]
 pub struct ArtistPage {
     pub artist: ArtistInfo,
-    pub singles: Vec<AppTrack>,
+    pub singles: Vec<DisplaySingle>,
     pub albums: Vec<Album>,
 }
 
@@ -163,6 +163,8 @@ impl ArtistsPage {
             }
             ArtistPageState::ArtistPage(artistpage) => {
                 // Unique State
+                let data = artistpage.product_cover_button(model);
+
                 return cosmic::widget::container(
                     cosmic::widget::column::with_children(vec![
                         cosmic::widget::row::with_children(vec![
@@ -213,9 +215,19 @@ impl ArtistsPage {
                         // Maybe this can be done automatically by comparing the number of (tracks - albumtracks) to albumtracks but leave the user option
                         cosmic::widget::column::with_children(vec![
                             cosmic::widget::text::title4(fl!("albums")).into(),
-                            cosmic::widget::row::with_children(vec![]).into(),
+                            cosmic::widget::scrollable::horizontal(
+                                cosmic::widget::row::with_children(data.0).padding(
+                                    cosmic::iced_core::padding::Padding::from([
+                                        0,
+                                        0,
+                                        cosmic::theme::spacing().space_s,
+                                        0,
+                                    ]),
+                                ),
+                            )
+                            .into(),
                             cosmic::widget::text::title4(fl!("tracks")).into(),
-                            cosmic::widget::row::with_children(vec![]).into(),
+                            cosmic::widget::row::with_children(data.1).into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_m)
                         .into(),
@@ -262,10 +274,7 @@ impl ArtistsPage {
                 .spacing(cosmic::theme::spacing().space_s)
                 .into(),
                 cosmic::widget::column::with_children(vec![cosmic::widget::row::with_children(
-                    vec![
-                        cosmic::widget::horizontal_space().into(),
-                        // cosmic::widget::text::caption(fl!("pageresults", number = 32)).into(),
-                    ],
+                    vec![cosmic::widget::horizontal_space().into()],
                 )
                 .spacing(cosmic::theme::spacing().space_xxs)
                 .align_y(Vertical::Bottom)
@@ -392,4 +401,96 @@ impl ArtistsPage {
     // pub fn artists_edit_dialog<'a>() -> Dialog<'a, Element<'a, app::Message>>{
     //
     // }
+}
+
+impl ArtistPage {
+    fn product_cover_button(
+        &self,
+        model: &AppModel,
+    ) -> (Vec<Element<app::Message>>, Vec<Element<app::Message>>) {
+        let mut singles = vec![];
+        let mut albums = vec![];
+
+        for single in self.singles.as_slice() {
+            singles.push(
+                cosmic::widget::button::custom(cosmic::widget::column::with_children(vec![
+                    if let Some(cover_art) = &single.cover_art {
+                        cosmic::widget::container::Container::new(
+                            cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
+                        )
+                        .height((model.config.grid_item_size * 32) as f32)
+                        .width((model.config.grid_item_size * 32) as f32)
+                        .into()
+                    } else {
+                        cosmic::widget::container(
+                            cosmic::widget::icon::from_name("media-optical-symbolic").size(192),
+                        )
+                        .align_x(Alignment::Center)
+                        .align_y(Alignment::Center)
+                        .into()
+                    },
+                    cosmic::widget::column::with_children(vec![
+                        cosmic::widget::text::text(single.title.as_str())
+                            .center()
+                            .into(),
+                        cosmic::widget::text::text(single.artist.as_str())
+                            .center()
+                            .into(),
+                    ])
+                    .align_x(Alignment::Center)
+                    .width(cosmic::iced::Length::Fill)
+                    .into(),
+                ]))
+                .class(cosmic::widget::button::ButtonClass::Icon)
+                .on_press(Message::AlbumRequested((
+                    single.title.clone(),
+                    single.artist.clone(),
+                )))
+                .width((model.config.grid_item_size * 32) as f32)
+                .into(),
+            )
+        }
+
+        for album in self.albums.as_slice() {
+            albums.push(
+                cosmic::widget::button::custom(cosmic::widget::column::with_children(vec![
+                    if let Some(cover_art) = &album.cover_art {
+                        cosmic::widget::container::Container::new(
+                            cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
+                        )
+                        .height((model.config.grid_item_size * 32) as f32)
+                        .width((model.config.grid_item_size * 32) as f32)
+                        .into()
+                    } else {
+                        cosmic::widget::container(
+                            cosmic::widget::icon::from_name("media-optical-symbolic").size(192),
+                        )
+                        .align_x(Alignment::Center)
+                        .align_y(Alignment::Center)
+                        .into()
+                    },
+                    cosmic::widget::column::with_children(vec![
+                        cosmic::widget::text::text(album.name.as_str())
+                            .center()
+                            .into(),
+                        cosmic::widget::text::text(album.artist.as_str())
+                            .center()
+                            .into(),
+                    ])
+                    .align_x(Alignment::Center)
+                    .width(cosmic::iced::Length::Fill)
+                    .into(),
+                ]))
+                .class(cosmic::widget::button::ButtonClass::Icon)
+                .on_press(Message::AlbumRequested((
+                    album.name.clone(),
+                    album.artist.clone(),
+                )))
+                .width((model.config.grid_item_size * 32) as f32)
+                .into(),
+            )
+        }
+
+        (albums, singles)
+    }
 }
