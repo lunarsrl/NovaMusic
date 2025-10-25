@@ -246,7 +246,12 @@ impl ArtistsPage {
             }
             ArtistPageState::Search(search) => cosmic::widget::text("SEARCH").into(),
             ArtistPageState::Album(album) => {
-                return album.full_album_page(model, Message::ArtistPageReturn)
+                let name = &self.artist_page_cache.as_ref().unwrap();
+                return album.full_album_page(
+                    model,
+                    Message::ArtistPageReturn,
+                    name.artist.name.clone(),
+                );
             }
         };
 

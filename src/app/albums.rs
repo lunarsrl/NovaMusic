@@ -239,7 +239,7 @@ impl AlbumPage {
                 .into()
             }
             AlbumPageState::Album(albumpage) => {
-                albumpage.full_album_page(model, Message::AlbumPageReturn)
+                albumpage.full_album_page(model, Message::AlbumPageReturn, fl!("albums"))
             }
             AlbumPageState::Search(search_results) => {
                 cosmic::widget::container(cosmic::widget::column::with_children(vec![
@@ -594,7 +594,12 @@ pub fn get_top_album_info(
 }
 
 impl FullAlbum {
-    pub fn full_album_page(&self, app_model: &AppModel, origin: Message) -> Element<app::Message> {
+    pub fn full_album_page(
+        &self,
+        app_model: &AppModel,
+        origin: Message,
+        named_return: String,
+    ) -> Element<app::Message> {
         let page_margin = cosmic::theme::spacing().space_m;
 
         cosmic::widget::container(
@@ -604,7 +609,7 @@ impl FullAlbum {
                 cosmic::widget::button::custom(
                     cosmic::widget::row::with_children(vec![
                         cosmic::widget::icon::from_name("go-previous-symbolic").into(),
-                        cosmic::widget::text::text(fl!("albums")).into(),
+                        cosmic::widget::text::text(named_return).into(),
                     ])
                     .align_y(Alignment::Center),
                 )

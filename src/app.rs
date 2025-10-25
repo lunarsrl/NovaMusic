@@ -1748,6 +1748,7 @@ from track
                                         artists = rows.into_iter().filter_map(|a| a.ok()).collect();
 
 
+
                                         tx.try_send(Message::ArtistsLoaded(artists))
                                     });
                                 })
