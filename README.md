@@ -13,11 +13,9 @@
 - [Packaging](#packaging)
   
 ## Installation
-<div align="center">
-  <h3>
-  This software is still in development!
-  </h3>
-</div>
+
+> [!NOTE]
+> This project is still a work in progress
 
 #### Arch Linux:  
 Thank you to [@rwinkhart](https://github.com/rwinkhart) for publishing the AUR Package!  
