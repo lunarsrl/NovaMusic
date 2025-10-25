@@ -2,12 +2,13 @@
 
 use crate::app::tracks::SearchResult;
 use crate::app::{AppModel, Message};
-use crate::fl;
+use crate::{app, fl};
 use cosmic::iced::futures::channel::mpsc::Sender;
 use cosmic::iced::{Alignment, ContentFit, Length};
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::widget::JustifyContent;
 use cosmic::{iced, Application, Element, Theme};
+use std::cmp::PartialEq;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -238,76 +239,7 @@ impl AlbumPage {
                 .into()
             }
             AlbumPageState::Album(albumpage) => {
-                cosmic::widget::container(
-                    // ALL
-                    cosmic::widget::Column::with_children([
-                        // HEADING
-                        cosmic::widget::button::custom(
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::icon::from_name("go-previous-symbolic").into(),
-                                cosmic::widget::text::text(fl!("albums")).into(),
-                            ])
-                            .align_y(Alignment::Center),
-                        )
-                        .class(cosmic::widget::button::ButtonClass::Link)
-                        .on_press(Message::AlbumPageReturn)
-                        .into(),
-                        cosmic::widget::Row::with_children([
-                            // Art Area?
-                            match &albumpage.album.cover_art {
-                                None => {
-                                    cosmic::widget::icon::from_name("applications-audio-symbolic")
-                                        .size(128)
-                                        .into()
-                                }
-                                Some(handle) => cosmic::widget::image(handle)
-                                    .content_fit(ContentFit::Fill)
-                                    .height(128.0)
-                                    .width(128.0)
-                                    .into(),
-                            },
-                            cosmic::widget::Column::with_children([
-                                // Album Title and Author Column
-                                cosmic::widget::text::title2(albumpage.album.name.clone()).into(),
-                                cosmic::widget::text::title4(fl!(
-                                    "AlbumAttribution",
-                                    artist = albumpage.album.artist.clone()
-                                ))
-                                .into(),
-                                cosmic::widget::button::text(fl!("AddToQueue"))
-                                    .leading_icon(cosmic::widget::icon::from_name(
-                                        "media-playback-start-symbolic",
-                                    ))
-                                    .class(cosmic::theme::Button::Suggested)
-                                    .on_press(Message::AddAlbumToQueue(
-                                        albumpage
-                                            .tracks
-                                            .iter()
-                                            .map(|a| a.file_path.clone())
-                                            .collect::<Vec<String>>(),
-                                    ))
-                                    .into(),
-                            ])
-                            .spacing(cosmic::theme::spacing().space_xxxs)
-                            .into(),
-                        ])
-                        .spacing(cosmic::theme::spacing().space_s)
-                        .into(),
-                        // BODY
-                        cosmic::widget::scrollable(cosmic::widget::container::Container::new(
-                            tracks_listify(&albumpage.tracks, albumpage.album.disc_number),
-                        ))
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .into(),
-                    ])
-                    .spacing(page_margin),
-                )
-                .padding(iced::core::padding::Padding::from([
-                    0,
-                    cosmic::theme::spacing().space_m,
-                ]))
-                .into()
+                albumpage.full_album_page(model, Message::AlbumPageReturn)
             }
             AlbumPageState::Search(search_results) => {
                 cosmic::widget::container(cosmic::widget::column::with_children(vec![
@@ -659,4 +591,78 @@ pub fn get_top_album_info(
 
     tx.try_send(Message::AlbumProcessed(albums))
         .expect("Failed to send album process");
+}
+
+impl FullAlbum {
+    pub fn full_album_page(&self, app_model: &AppModel, origin: Message) -> Element<app::Message> {
+        let page_margin = cosmic::theme::spacing().space_m;
+
+        cosmic::widget::container(
+            // ALL
+            cosmic::widget::Column::with_children([
+                // HEADING
+                cosmic::widget::button::custom(
+                    cosmic::widget::row::with_children(vec![
+                        cosmic::widget::icon::from_name("go-previous-symbolic").into(),
+                        cosmic::widget::text::text(fl!("albums")).into(),
+                    ])
+                    .align_y(Alignment::Center),
+                )
+                .class(cosmic::widget::button::ButtonClass::Link)
+                .on_press(origin)
+                .into(),
+                cosmic::widget::Row::with_children([
+                    // Art Area?
+                    match &self.album.cover_art {
+                        None => cosmic::widget::icon::from_name("applications-audio-symbolic")
+                            .size(128)
+                            .into(),
+                        Some(handle) => cosmic::widget::image(handle)
+                            .content_fit(ContentFit::Fill)
+                            .height(128.0)
+                            .width(128.0)
+                            .into(),
+                    },
+                    cosmic::widget::Column::with_children([
+                        // Album Title and Author Column
+                        cosmic::widget::text::title2(self.album.name.as_str()).into(),
+                        cosmic::widget::text::title4(fl!(
+                            "AlbumAttribution",
+                            artist = self.album.artist.as_str()
+                        ))
+                        .into(),
+                        cosmic::widget::button::text(fl!("AddToQueue"))
+                            .leading_icon(cosmic::widget::icon::from_name(
+                                "media-playback-start-symbolic",
+                            ))
+                            .class(cosmic::theme::Button::Suggested)
+                            .on_press(Message::AddAlbumToQueue(
+                                self.tracks
+                                    .iter()
+                                    .map(|a| a.file_path.clone())
+                                    .collect::<Vec<String>>(),
+                            ))
+                            .into(),
+                    ])
+                    .spacing(cosmic::theme::spacing().space_xxxs)
+                    .into(),
+                ])
+                .spacing(cosmic::theme::spacing().space_s)
+                .into(),
+                // BODY
+                cosmic::widget::scrollable(cosmic::widget::container::Container::new(
+                    tracks_listify(&self.tracks, self.album.disc_number),
+                ))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into(),
+            ])
+            .spacing(page_margin),
+        )
+        .padding(iced::core::padding::Padding::from([
+            0,
+            cosmic::theme::spacing().space_m,
+        ]))
+        .into()
+    }
 }

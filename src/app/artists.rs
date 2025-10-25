@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::app::albums::Album;
+use crate::app::albums::{Album, FullAlbum};
 use crate::app::tracks::SearchResult;
 use crate::app::AppModel;
 use crate::app::{DisplaySingle, Message};
@@ -22,6 +22,7 @@ pub struct ArtistsPage {
     pub page_state: ArtistPageState,
     pub has_fully_loaded: bool,
     pub artists: Vec<ArtistInfo>,
+    pub artist_page_cache: Option<ArtistPage>,
 
     //Scrollbar
     pub viewport: Option<Viewport>,
@@ -33,11 +34,11 @@ pub enum ArtistPageState {
     Loading,
     Loaded,
     ArtistPage(ArtistPage),
-    ArtistPageSearch(Vec<Vec<SearchResult>>),
+    Album(FullAlbum),
     Search(Vec<SearchResult>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ArtistPage {
     pub artist: ArtistInfo,
     pub singles: Vec<DisplaySingle>,
@@ -50,6 +51,7 @@ impl ArtistsPage {
             page_state: ArtistPageState::Loading,
             has_fully_loaded: false,
             artists: vec![],
+            artist_page_cache: None,
             viewport: None,
             scrollbar_id: cosmic::iced_core::widget::Id::unique(),
         }
@@ -242,11 +244,10 @@ impl ArtistsPage {
                 )
                 .into();
             }
-            ArtistPageState::ArtistPageSearch(search) => {
-                // Unique State
-                return cosmic::widget::container(cosmic::widget::text("Hello!")).into();
-            }
             ArtistPageState::Search(search) => cosmic::widget::text("SEARCH").into(),
+            ArtistPageState::Album(album) => {
+                return album.full_album_page(model, Message::ArtistPageReturn)
+            }
         };
 
         cosmic::widget::container(

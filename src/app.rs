@@ -132,7 +132,7 @@ pub struct AppTrack {
 }
 
 /// Minimum amount of info required to display fully expose a Single track
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DisplaySingle {
     pub id: u32,
     pub title: String,
@@ -172,12 +172,14 @@ pub enum Message {
     ScrollView(Viewport),
 
     // Album Page
-    AlbumRequested((String, String)), // when an album icon is clicked [gets title & artist of album]
-    AlbumInfoRetrieved(FullAlbum), // when task assigned to retrieving requested albums info is completed [gets full track list of album]
     AlbumProcessed(Vec<Album>), // when an album retrieved from db's data is organized and ready [Supplies AlbumPage with the new Album]
     AlbumsLoaded, // when albums table retrieved from db is exhausted after OnNavEnter in Album Page [Sets page state to loaded]
     AlbumPageStateAlbum(AlbumPage), // when album info is retrieved [Replaces AlbumPage with AlbumPage with new info]
     AlbumPageReturn,
+
+    // impl for Artists & Album Page
+    AlbumRequested((String, String)), // when an album icon is clicked [gets title & artist of album]
+    AlbumInfoRetrieved(FullAlbum), // when task assigned to retrieving requested albums info is completed [gets full track list of album]
 
     // Home Page
     //todo move all AddTrackToQueue to AddTrackByID
@@ -1754,8 +1756,8 @@ from track
                         }
                         ArtistPageState::Search(_) => {}
                         ArtistPageState::Loaded => {}
-                        ArtistPageState::ArtistPage(page) => {}
-                        ArtistPageState::ArtistPageSearch(_) => {}
+                        ArtistPageState::ArtistPage(page) => {},
+                        &ArtistPageState::Album(_) => {}
                     },
                 }
             }
@@ -1848,7 +1850,18 @@ from track
                     .data_mut::<Page>(self.artistsid)
                     .expect("should always be intialized")
                 {
-                    artistpage.page_state = ArtistPageState::Loaded;
+                    match artistpage.page_state {
+                        ArtistPageState::Album(_) => {
+                            artistpage.page_state = ArtistPageState::ArtistPage(
+                                artistpage.artist_page_cache.clone().unwrap(),
+                            );
+                        }
+                        _ => {
+                            artistpage.page_state = ArtistPageState::Loaded;
+                        }
+                    }
+
+                    artistpage.artist_page_cache = None;
                 }
             }
             Message::ArtistsLoaded(artists) => {
@@ -1995,15 +2008,15 @@ from track
                     _ => {}
                 }
             }
-            Message::AlbumInfoRetrieved(albuminfopage) => {
-                log::info!("ALBUM INFO RETRIEVED: {:?}", albuminfopage);
+            Message::AlbumInfoRetrieved(fullalbum) => {
+                log::info!("Album info retrieved: {:?}", fullalbum,);
 
-                let album_page = self
-                    .nav
-                    .data_mut::<Page>(self.albumsid)
-                    .expect("Should always be intialized");
-                if let Page::Albums(page) = album_page {
-                    page.page_state = AlbumPageState::Album(albuminfopage);
+                match self.nav.active_data_mut::<Page>().unwrap() {
+                    Page::Artist(page) => page.page_state = ArtistPageState::Album(fullalbum),
+                    Page::Albums(page) => {
+                        page.page_state = AlbumPageState::Album(fullalbum);
+                    }
+                    _ => log::error!("Accessing page from a strange state"),
                 }
             }
             Message::AlbumRequested(dat) => {
@@ -2012,7 +2025,7 @@ from track
                     .active_data_mut::<Page>()
                     .expect("Should always be intialized")
                 {
-                    Page::Albums(_) => {
+                    Page::Albums(page) => {
                         return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                             0,
                             |mut tx| async move {
@@ -2023,6 +2036,21 @@ from track
                             },
                         ))
                         .map(cosmic::Action::App)
+                    }
+                    Page::Artist(toppage) => {
+                        if let ArtistPageState::ArtistPage(page) = &toppage.page_state {
+                            toppage.artist_page_cache = Some(page.clone());
+                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                                0,
+                                |mut tx| async move {
+                                    let album = get_album_info(dat.0, dat.1).await;
+                                    tx.send(Message::AlbumInfoRetrieved(album))
+                                        .await
+                                        .expect("send")
+                                },
+                            ))
+                            .map(cosmic::Action::App);
+                        }
                     }
                     _ => {
                         // should never happen
