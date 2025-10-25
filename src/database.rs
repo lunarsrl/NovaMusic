@@ -111,9 +111,11 @@ pub fn create_database() {
         CREATE TABLE single (
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE,
+            track_id INTEGER,
             artist_id INTEGER,
             cover BLOB,
             FOREIGN KEY(artist_id) REFERENCES artist(id)
+            FOREIGN KEY(track_id) REFERENCES tracks(id)
         )",
         [],
     )
@@ -448,8 +450,8 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
 
                     if album.num_of_tracks == 1 {
                         match conn.execute(
-                            "INSERT INTO single (name, artist_id, cover) VALUES (?, ?, ?)",
-                            (&album.name, &album.artist_id, &visual),
+                            "INSERT INTO single (name, track_id, artist_id, cover) VALUES (?, ?, ?, ?)",
+                            (&album.name, &track.id, &album.artist_id, &visual),
                         ) {
                             Ok(_) => {
                                 log::info!("{}", "Added SINGLE with some visual!".green());
@@ -475,8 +477,9 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     //If visual data does not exist
                     if album.num_of_tracks == 1 {
                         match conn.execute(
-                            "INSERT INTO single (name, artist_id, cover) VALUES (?, ?, ?)",
-                            (&album.name, &album.artist_id, None::<Box<u8>>),
+
+                            "INSERT INTO single (name, track.id, artist_id, cover) VALUES (?, ?, ?, ?)",
+                            (&album.name, &track.id, &album.artist_id, None::<Box<u8>>),
                         ) {
                             Ok(_) => {
                                 log::info!("{}", "Added SINGLE with some visual!".green());

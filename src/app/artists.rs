@@ -444,10 +444,7 @@ impl ArtistPage {
                     .into(),
                 ]))
                 .class(cosmic::widget::button::ButtonClass::Icon)
-                .on_press(Message::AlbumRequested((
-                    single.title.clone(),
-                    single.artist.clone(),
-                )))
+                .on_press(Message::AddTrackById((single.id)))
                 .width((model.config.grid_item_size * 32) as f32)
                 .into(),
             )

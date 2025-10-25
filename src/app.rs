@@ -180,7 +180,11 @@ pub enum Message {
     AlbumPageReturn,
 
     // Home Page
+    //todo move all AddTrackToQueue to AddTrackByID
+    // Advantage: No need to clone strings
+    // Disadvantage: Database access but that happens anyway sometimes
     AddTrackToQueue(String),
+    AddTrackById(u32),
     //todo Make albums in queue fancier kinda like Elisa does it
     AddAlbumToQueue(Vec<String>),
 
@@ -1326,13 +1330,21 @@ impl cosmic::Application for AppModel {
                 }
 
                 // Playlists: FUll reset
-
                 if let Page::Playlists(page) = self
                     .nav
                     .data_mut::<Page>(self.playlistsid)
                     .expect("Should always be intialized")
                 {
                     page.playlist_page_state = PlaylistPageState::Loading
+                }
+
+                // Artists Reset
+                if let Page::Artist(page) = self
+                    .nav
+                    .data_mut::<Page>(self.artistsid)
+                    .expect("Should always be intialized")
+                {
+                    page.page_state = ArtistPageState::Loading
                 }
 
                 create_database();
@@ -1780,10 +1792,11 @@ from track
                     })
                     .unwrap();
 
+                //todo single really only needs a reference to track_id
                 let mut stmt = conn
                     .prepare(
                         "
-                        SELECT s.id, s.name as name, s.cover as cover, art.name as artist
+                        SELECT s.track_id as track_id, s.name as name, s.cover as cover, art.name as artist
                         FROM single s
                         left JOIN artists art ON s.artist_id = art.id
                         Where art.name = ?
@@ -1799,7 +1812,7 @@ from track
                 let val = stmt
                     .query_map([&artist], |row| {
                         Ok(DisplaySingle {
-                            id: row.get("id").unwrap_or(0),
+                            id: row.get("track_id").unwrap_or(0),
                             title: row.get("name").expect("get name fail"),
                             artist: row.get("artist").expect("get artist fail"),
                             cover_art: match row.get::<_, Vec<u8>>("cover") {
@@ -2665,6 +2678,27 @@ from track
                     false => self.footer_toggled = true,
                 }
             }
+            app::Message::AddTrackById(id) => {
+                let conn = connect_to_db();
+
+                match conn.query_row("select path from track where id = ?", [&id], |row| {
+                    row.get::<_, String>("path")
+                }) {
+                    Ok(path) => {
+                        return cosmic::Task::future(async move { Message::AddTrackToQueue(path) })
+                            .map(action::Action::App)
+                    }
+                    Err(val) => {
+                        log::error!("Error: {}", val);
+                        return cosmic::Task::future(async move {
+                            Message::ToastError(
+                                format!("Failed to find path at id({})", id).to_string(),
+                            )
+                        })
+                        .map(action::Action::App);
+                    }
+                }
+            }
         };
         Task::none()
     }
@@ -2766,4 +2800,19 @@ impl menu::action::MenuAction for Action {
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
         }
     }
+}
+
+fn connect_to_db() -> rusqlite::Connection {
+    let conn = match rusqlite::Connection::open(
+        dirs::data_local_dir()
+            .unwrap()
+            .join("dev.riveroluna.NovaMusic")
+            .join("nova_music.db"),
+    ) {
+        Ok(conn) => conn,
+        Err(err) => {
+            panic!("{}", err)
+        }
+    };
+    conn
 }
