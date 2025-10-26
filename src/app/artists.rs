@@ -2,7 +2,7 @@
 
 use crate::app::albums::{Album, FullAlbum};
 use crate::app::tracks::SearchResult;
-use crate::app::AppModel;
+use crate::app::{AppModel, FileChooserEvents, TrackType};
 use crate::app::{DisplaySingle, Message};
 use crate::{app, fl};
 use cosmic::iced::alignment::{Horizontal, Vertical};
@@ -14,6 +14,7 @@ use iced::widget::scrollable::Viewport;
 #[derive(Clone, Debug)]
 pub struct ArtistInfo {
     pub name: String,
+    pub path: String,
     pub image: Option<cosmic::widget::image::Handle>,
 }
 
@@ -169,6 +170,17 @@ impl ArtistsPage {
                 // Unique State
                 let data = artistpage.product_cover_button(model);
 
+                let icon = match &artistpage.artist.image {
+                    None => cosmic::widget::icon::from_name("media-optical-symbolic")
+                        .size(128)
+                        .into(),
+                    Some(handle) => cosmic::widget::image(handle)
+                        .content_fit(ContentFit::Cover)
+                        .width(128)
+                        .height(128)
+                        .into(),
+                };
+
                 return cosmic::widget::container(
                     cosmic::widget::column::with_children(vec![
                         cosmic::widget::row::with_children(vec![
@@ -193,9 +205,7 @@ impl ArtistsPage {
                         .align_y(Vertical::Center)
                         .into(),
                         cosmic::widget::row::with_children(vec![
-                            cosmic::widget::icon::from_name("media-optical-symbolic")
-                                .size(128)
-                                .into(),
+                            icon,
                             cosmic::widget::column::with_children(vec![
                                 cosmic::widget::text::title3(artistpage.artist.name.as_str())
                                     .into(),
@@ -242,6 +252,7 @@ impl ArtistsPage {
                     ]))
                     .spacing(cosmic::theme::spacing().space_s),
                 )
+                .height(Length::Fill)
                 .into();
             }
             ArtistPageState::Search(search) => cosmic::widget::text("SEARCH").into(),
@@ -271,12 +282,15 @@ impl ArtistsPage {
                     .on_input(|input| Message::UpdateSearch(input))
                     .width(Length::FillPortion(1))
                     .into(),
-                    cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                        "application-menu-symbolic",
-                    ))
-                    .on_press(Message::ArtistsPageEdit)
-                    .class(cosmic::widget::button::ButtonClass::Standard)
-                    .into(),
+                    // todo, Allow users to ask application to try and find covers for all their
+                    //  artists for ease of use purposes.
+                    //  This would be part of a larger effort to bring network features so delayed for now
+                    // cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                    //     "application-menu-symbolic",
+                    // ))
+                    // .on_press(Message::ArtistsPageEdit)
+                    // .class(cosmic::widget::button::ButtonClass::Standard)
+                    // .into(),
                 ])
                 .align_y(Alignment::Center)
                 .spacing(cosmic::theme::spacing().space_s)
@@ -311,7 +325,7 @@ impl ArtistsPage {
                         cosmic::widget::image(handle).content_fit(ContentFit::Fill),
                         None,
                     )
-                    .on_press(Message::CreatePlaylistAddThumbnail),
+                    .on_press(Message::ChooseFile(FileChooserEvents::ArtistPagePicture)),
                 )
                 .width(Length::Fixed(6.0 * 16.0))
                 .height(Length::Fixed(6.0 * 16.0))
@@ -323,7 +337,7 @@ impl ArtistsPage {
                         cosmic::widget::icon::from_name("view-list-images-symbolic").size(6 * 8),
                     )
                     .padding(cosmic::theme::spacing().space_s)
-                    .on_press(Message::CreatePlaylistAddThumbnail)
+                    .on_press(Message::ChooseFile(FileChooserEvents::ArtistPagePicture))
                     .class(cosmic::theme::Button::Suggested),
                 )
                 .class(cosmic::theme::Container::Secondary)
@@ -341,45 +355,46 @@ impl ArtistsPage {
                         cosmic::widget::row::with_children(vec![
                             cosmic::widget::horizontal_space().into(),
                             icon,
-                            cosmic::widget::container(
-                                cosmic::widget::column::with_children(vec![
-                                    cosmic::widget::container(cosmic::widget::text(
-                                        "Page Configuration",
-                                    ))
-                                    .padding(cosmic::theme::spacing().space_xxs)
-                                    .into(),
-                                    cosmic::widget::list::column::ListColumn::new()
-                                        .add(
-                                            cosmic::widget::row::with_children(vec![
-                                                cosmic::widget::text::caption("Artist's Singles")
-                                                    .into(),
-                                                cosmic::widget::horizontal_space().into(),
-                                                cosmic::widget::icon::from_name("go-down-symbolic")
-                                                    .into(),
-                                                cosmic::widget::icon::from_name("go-up-symbolic")
-                                                    .into(),
-                                            ])
-                                            .spacing(cosmic::theme::spacing().space_xxs),
-                                        )
-                                        .add(
-                                            cosmic::widget::row::with_children(vec![
-                                                cosmic::widget::text::caption("Artist's Albums")
-                                                    .into(),
-                                                cosmic::widget::horizontal_space().into(),
-                                                cosmic::widget::icon::from_name("go-down-symbolic")
-                                                    .into(),
-                                                cosmic::widget::icon::from_name("go-up-symbolic")
-                                                    .into(),
-                                            ])
-                                            .spacing(cosmic::theme::spacing().space_xxs),
-                                        )
-                                        .into_element(),
-                                ])
-                                .align_x(Horizontal::Center),
-                            )
-                            .width(Length::Fixed(192.0))
-                            .class(cosmic::style::Container::Secondary)
-                            .into(),
+                            // todo Setting for customizing page elements, not sure if its necessary now
+                            // cosmic::widget::container(
+                            //     cosmic::widget::column::with_children(vec![
+                            //         cosmic::widget::container(cosmic::widget::text(
+                            //             "Page Configuration",
+                            //         ))
+                            //         .padding(cosmic::theme::spacing().space_xxs)
+                            //         .into(),
+                            //         cosmic::widget::list::column::ListColumn::new()
+                            //             .add(
+                            //                 cosmic::widget::row::with_children(vec![
+                            //                     cosmic::widget::text::caption("Artist's Singles")
+                            //                         .into(),
+                            //                     cosmic::widget::horizontal_space().into(),
+                            //                     cosmic::widget::icon::from_name("go-down-symbolic")
+                            //                         .into(),
+                            //                     cosmic::widget::icon::from_name("go-up-symbolic")
+                            //                         .into(),
+                            //                 ])
+                            //                 .spacing(cosmic::theme::spacing().space_xxs),
+                            //             )
+                            //             .add(
+                            //                 cosmic::widget::row::with_children(vec![
+                            //                     cosmic::widget::text::caption("Artist's Albums")
+                            //                         .into(),
+                            //                     cosmic::widget::horizontal_space().into(),
+                            //                     cosmic::widget::icon::from_name("go-down-symbolic")
+                            //                         .into(),
+                            //                     cosmic::widget::icon::from_name("go-up-symbolic")
+                            //                         .into(),
+                            //                 ])
+                            //                 .spacing(cosmic::theme::spacing().space_xxs),
+                            //             )
+                            //             .into_element(),
+                            //     ])
+                            //     .align_x(Horizontal::Center),
+                            // )
+                            // .width(Length::Fixed(192.0))
+                            // .class(cosmic::style::Container::Secondary)
+                            // .into(),
                             cosmic::widget::horizontal_space().into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_s)
@@ -391,15 +406,15 @@ impl ArtistsPage {
                     cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                         "object-select-symbolic",
                     ))
-                    .class(cosmic::theme::Button::Suggested)
-                    .on_press(Message::EditPlaylistConfirm),
+                    .on_press(Message::EditArtistConfirm)
+                    .class(cosmic::theme::Button::Suggested),
                 )
                 .secondary_action(
                     cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                         "window-close-symbolic",
                     ))
                     .class(cosmic::theme::Button::Standard)
-                    .on_press(Message::EditPlaylistCancel),
+                    .on_press(Message::ArtistPageEdit),
                 )
         } else {
             panic!("Should always occur within ArtistPage ArtistPageState")
@@ -450,7 +465,7 @@ impl ArtistPage {
                     .into(),
                 ]))
                 .class(cosmic::widget::button::ButtonClass::Icon)
-                .on_press(Message::AddTrackById((single.id)))
+                .on_press(Message::AddTrackById((TrackType::Single, single.id)))
                 .width((model.config.grid_item_size * 32) as f32)
                 .into(),
             )

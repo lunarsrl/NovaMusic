@@ -27,8 +27,9 @@ use crate::app::playlists::{
 };
 use crate::app::scan::scan_directory;
 use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
+use crate::app::Message::ArtistPageEdit;
 use crate::config::Config;
-use crate::database::{create_database, create_database_entry};
+use crate::database::{create_database, create_database_entry, find_visual};
 use crate::{app, config, fl};
 use colored::Colorize;
 use cosmic::app::context_drawer;
@@ -148,6 +149,12 @@ pub enum LoopState {
     LoopingQueue,
     NotLooping,
 }
+
+#[derive(Debug, Clone)]
+pub enum FileChooserEvents {
+    ArtistPagePicture,
+}
+
 #[derive(Debug, Clone)]
 pub enum Message {
     OpenRepositoryUrl,
@@ -158,7 +165,7 @@ pub enum Message {
     // Config change related
     RescanDir,
 
-    // Filesystem scan related
+    // Filesystem related
     ChooseFolder,
     FolderChosen(String),
     FolderPickerFail(String),
@@ -166,6 +173,7 @@ pub enum Message {
     UpdateScanDirSize,
     AddToDatabase(PathBuf),
     ProbeFail,
+    ChooseFile(FileChooserEvents),
 
     // Page Rendering
     OnNavEnter,
@@ -186,7 +194,7 @@ pub enum Message {
     // Advantage: No need to clone strings
     // Disadvantage: Database access but that happens anyway sometimes
     AddTrackToQueue(String),
-    AddTrackById(u32),
+    AddTrackById((TrackType, u32)),
     //todo Make albums in queue fancier kinda like Elisa does it
     AddAlbumToQueue(Vec<String>),
 
@@ -250,6 +258,8 @@ pub enum Message {
     PlaylistEdit(String),
     EditPlaylistConfirm,
     EditPlaylistCancel,
+    EditArtistConfirm,
+    ArtistAddPicture(String),
 }
 
 #[derive(Clone, Debug)]
@@ -259,6 +269,12 @@ pub enum QueueUpdateReason {
     Removed(usize),
     None,
     ThreadKilled,
+}
+
+#[derive(Debug, Clone)]
+pub enum TrackType {
+    AlbumTrack,
+    Single,
 }
 
 /// Create a COSMIC application from the app model
@@ -282,10 +298,6 @@ impl cosmic::Application for AppModel {
     fn core_mut(&mut self) -> &mut cosmic::Core {
         &mut self.core
     }
-
-    // fn on_close_requested(&self, id: Id) -> Option<Self::Message> {
-    //
-    // }
 
     /// Initializes the application with any given flags and startup commands.
     fn init(
@@ -860,6 +872,41 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::EditArtistConfirm => {
+                if let Page::Artist(artist) = self.nav.active_data_mut::<Page>().unwrap() {
+                    if let ArtistPageState::ArtistPage(ref page) = artist.page_state {
+                        let conn = connect_to_db();
+
+                        if let Ok(result) = conn.query_row(
+                            "select id from artists where name = ?",
+                            [&page.artist.name],
+                            |row| row.get::<_, u32>("id"),
+                        ) {
+                            let file =
+                                fs::File::open(PathBuf::from(page.artist.path.clone())).unwrap();
+                            if let Ok(result) = conn.execute(
+                                "update artists set artistpfp = ? where id = ?",
+                                (
+                                    &Box::new(
+                                        file.bytes().filter_map(|a| a.ok()).collect::<Vec<u8>>(),
+                                    ),
+                                    &result,
+                                ),
+                            ) {
+                                log::info!("{} entries changed in artists table!", result);
+                                return cosmic::Task::future(
+                                    async move { Message::ArtistPageEdit },
+                                )
+                                .map(cosmic::action::Action::App);
+                            } else {
+                                log::warn!("artists table could not be updated")
+                            }
+                        } else {
+                            log::warn!("Artist: {} not found", page.artist.name)
+                        }
+                    }
+                }
+            }
             Message::ToastError(error) => {
                 return self
                     .toasts
@@ -922,10 +969,15 @@ impl cosmic::Application for AppModel {
                     false => self.playlist_edit_dialog = true,
                 }
             }
-            Message::ArtistPageEdit => match self.artistpage_edit_dialog {
-                true => self.artistpage_edit_dialog = false,
-                false => self.artistpage_edit_dialog = true,
-            },
+
+            Message::ArtistPageEdit => {
+                match self.artistpage_edit_dialog {
+                    true => self.artistpage_edit_dialog = false,
+                    false => self.artistpage_edit_dialog = true,
+                }
+
+                return cosmic::task::future(async move { Message::ArtistPageReturn });
+            }
 
             Message::ArtistsPageEdit => match self.artistspage_edit_dialog {
                 true => self.artistspage_edit_dialog = false,
@@ -936,6 +988,50 @@ impl cosmic::Application for AppModel {
                 false => self.playlist_delete_dialog = true,
             },
             Message::UpdatePlaylistName(val) => self.playlist_dialog_text = val,
+            Message::ChooseFile(message) => {
+                return cosmic::Task::future(async move {
+                    let dialog = cosmic::dialog::file_chooser::open::Dialog::new();
+                    let file = dialog.open_file().await;
+
+                    match file {
+                        Ok(fr) => {
+                            let path = fr.0.uris().get(0).unwrap().path().to_string();
+                            match message {
+                                FileChooserEvents::ArtistPagePicture => {
+                                    Message::ArtistAddPicture(path)
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("{}", err);
+                            Message::ToastError(String::from("Something went wrong..."))
+                        }
+                    }
+                })
+                .map(action::Action::App)
+            }
+            Message::ArtistAddPicture(path) => {
+                if let Page::Artist(toppage) = self.nav.active_data_mut::<Page>().unwrap() {
+                    if let ArtistPageState::ArtistPage(ref mut page) = toppage.page_state {
+                        if let Ok(file) = fs::File::open(PathBuf::from(path.clone())) {
+                            let handle = cosmic::widget::image::Handle::from_bytes(
+                                file.bytes().filter_map(|a| a.ok()).collect::<Vec<u8>>(),
+                            );
+                            page.artist.image = Some(handle);
+                            page.artist.path = path;
+                        } else {
+                            return cosmic::Task::future(async move {
+                                Message::ToastError(String::from("Could not load image!"))
+                            })
+                            .map(cosmic::action::Action::App);
+                        }
+                    } else {
+                        panic!("This event is being used in thr wrong state!")
+                    }
+                } else {
+                    panic!("This event is being used in thr wrong state!")
+                }
+            }
             Message::ChooseFolder => {
                 return cosmic::task::future(async move {
                     let dialog = cosmic::dialog::file_chooser::open::Dialog::new();
@@ -1727,6 +1823,7 @@ from track
                                                     return Ok(
                                                         ArtistInfo {
                                                             name: name,
+                                                            path: String::from(""),
                                                             image: match row.get::<_, Vec<u8>>("artistpfp") {
                                                                 Ok(val) => {
                                                                     Some(cosmic::widget::image::Handle::from_bytes(val))
@@ -1799,11 +1896,11 @@ from track
                 let mut stmt = conn
                     .prepare(
                         "
-                        SELECT s.track_id as track_id, s.name as name, s.cover as cover, art.name as artist
-                        FROM single s
-                        left JOIN artists art ON s.artist_id = art.id
-                        Where art.name = ?
-                    ",
+SELECT t.id as track_id, t.name as name, a.name as artist, s.cover as cover
+FROM single s
+    left join track t on s.track_id = t.id
+    left join artists a on t.artist_id = a.id
+where a.name = ?    ",
                     )
                     .expect("SQL is wrong");
 
@@ -1831,10 +1928,23 @@ from track
                     .filter_map(|a| a.ok())
                     .collect::<Vec<DisplaySingle>>();
 
+                let image = conn.query_row(
+                    "select artistpfp from artists where name = ?",
+                    [&artist],
+                    |row| row.get::<_, Vec<u8>>("artistpfp"),
+                );
+
                 let new_page = crate::app::artists::ArtistPage {
                     artist: ArtistInfo {
                         name: artist,
-                        image: None,
+                        path: String::from(""),
+                        image: match image {
+                            Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
+                            Err(err) => {
+                                log::warn!("Possible error: {}", err);
+                                None
+                            }
+                        },
                     },
                     singles,
                     albums,
@@ -2707,27 +2817,116 @@ from track
                     false => self.footer_toggled = true,
                 }
             }
-            app::Message::AddTrackById(id) => {
+            app::Message::AddTrackById((t_type, id)) => {
                 let conn = connect_to_db();
 
-                match conn.query_row("select path from track where id = ?", [&id], |row| {
-                    row.get::<_, String>("path")
+                let mut stmt =
+                        "
+                                select track.id as id, track.name as title, art.name as artist, track.path as path, a.album_cover, a.name as album_title
+                                from track
+                                left join main.album_tracks at on track.id = at.track_id
+                                left join main.artists art on track.artist_id = art.id
+                                left join main.album a on at.album_id = a.id
+                                where track.id = ?
+                            ";
+
+                if let Ok(result) = conn.query_row(stmt, [&id], |row| {
+                    let filepath = PathBuf::from(row.get::<_, String>("path").unwrap());
+                    let visual = find_visual(&filepath);
+
+                    Ok(AppTrack {
+                        id: row.get("id").unwrap(),
+                        artist: row.get("artist").unwrap(),
+                        path_buf: filepath,
+                        title: row.get("title").unwrap(),
+                        album_title: match t_type {
+                            TrackType::AlbumTrack => {
+                                row.get("album_title").unwrap_or(String::from(""))
+                            }
+                            TrackType::Single => String::from(""),
+                        },
+                        cover_art: match visual {
+                            Some(cover) => Some(cosmic::widget::image::Handle::from_bytes(cover)),
+                            None => None,
+                        },
+                    })
                 }) {
-                    Ok(path) => {
-                        return cosmic::Task::future(async move { Message::AddTrackToQueue(path) })
-                            .map(action::Action::App)
+                    self.queue.push(result)
+                }
+
+                if self.sink.empty() {
+                    let file = std::fs::File::open(self.queue.get(0).unwrap().path_buf.clone())
+                        .expect("Failed to open file");
+
+                    let decoder = rodio::Decoder::builder()
+                        .with_byte_len(file.metadata().unwrap().len())
+                        .with_data(file)
+                        .with_gapless(true)
+                        .with_seekable(true)
+                        .build()
+                        .expect("Failed to build decoder");
+
+                    self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
+                    self.sink.append(decoder);
+                    let sleeping_task_sink = Arc::clone(&self.sink);
+                    let sleeping_thread = cosmic::task::future(async move {
+                        let kill = true;
+                        Message::SongFinished(
+                            tokio::task::spawn_blocking(move || {
+                                if kill {
+                                    sleeping_task_sink.sleep_until_end();
+                                    QueueUpdateReason::None
+                                } else {
+                                    QueueUpdateReason::ThreadKilled
+                                }
+                            })
+                            .await
+                            .expect("nova_music.db"),
+                        )
+                    })
+                    .abortable();
+
+                    match &mut self.task_handle {
+                        None => {
+                            self.task_handle = Some(vec![sleeping_thread.1]);
+                        }
+                        Some(handles) => {
+                            handles.push(sleeping_thread.1);
+                        }
                     }
-                    Err(val) => {
-                        log::error!("Error: {}", val);
-                        return cosmic::Task::future(async move {
-                            Message::ToastError(
-                                format!("Failed to find path at id({})", id).to_string(),
-                            )
-                        })
-                        .map(action::Action::App);
+
+                    let reporting_task_sink = Arc::clone(&self.sink);
+                    let progress_thread = cosmic::Task::stream(
+                        cosmic::iced_futures::stream::channel(1, |mut tx| async move {
+                            tokio::task::spawn_blocking(move || loop {
+                                sleep(Duration::from_millis(200));
+                                match tx.try_send(Message::SinkProgress(
+                                    reporting_task_sink.get_pos().as_secs_f64(),
+                                )) {
+                                    Ok(_) => {}
+                                    Err(_) => break,
+                                }
+                            });
+                        }),
+                    )
+                    .abortable();
+
+                    match &mut self.task_handle {
+                        None => self.task_handle = Some(vec![progress_thread.1]),
+                        Some(handles) => handles.push(progress_thread.1),
                     }
+                    let (task, handle) =
+                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
+                    match &mut self.task_handle {
+                        None => self.task_handle = Some(vec![handle]),
+                        Some(handles) => handles.push(handle),
+                    }
+                    self.sink.play();
+                    return task;
                 }
             }
+
+            _ => {}
         };
         Task::none()
     }

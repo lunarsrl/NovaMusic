@@ -45,7 +45,6 @@ pub fn create_database() {
         DROP TABLE IF EXISTS temp_album;
         DROP TABLE IF EXISTS album;
         DROP TABLE IF EXISTS album_tracks;
-        DROP TABLE IF EXISTS artists;
         DROP TABLE IF EXISTS track;
         DROP TABLE IF EXISTS single
     ",
@@ -54,11 +53,12 @@ pub fn create_database() {
 
     conn.execute(
         "
-    CREATE TABLE artists (
+    CREATE TABLE if not exists artists (
         id INTEGER PRIMARY KEY,
         name TEXT UNIQUE,
         artistpfp BLOB
-    )",
+    )
+    ",
         [],
     )
     .unwrap();
@@ -110,11 +110,8 @@ pub fn create_database() {
         "
         CREATE TABLE single (
             id INTEGER PRIMARY KEY,
-            name TEXT UNIQUE,
             track_id INTEGER,
-            artist_id INTEGER,
             cover BLOB,
-            FOREIGN KEY(artist_id) REFERENCES artist(id)
             FOREIGN KEY(track_id) REFERENCES tracks(id)
         )",
         [],
@@ -450,14 +447,15 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
 
                     if album.num_of_tracks == 1 {
                         match conn.execute(
-                            "INSERT INTO single (name, track_id, artist_id, cover) VALUES (?, ?, ?, ?)",
-                            (&album.name, &track.id, &album.artist_id, &visual),
+                            "INSERT INTO single (track_id, cover) VALUES (?, ?)",
+                            (&track.id, &visual),
                         ) {
                             Ok(_) => {
                                 log::info!("{}", "Added SINGLE with some visual!".green());
                             }
-                            Err(_) => {
+                            Err(err) => {
                                 log::error!("{}", "UNABLE TO INSERT *SINGLE* DATA W/ VISUAL".red());
+                                panic!("{}", err)
                             }
                         }
                     } else {
@@ -477,9 +475,8 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     //If visual data does not exist
                     if album.num_of_tracks == 1 {
                         match conn.execute(
-
-                            "INSERT INTO single (name, track.id, artist_id, cover) VALUES (?, ?, ?, ?)",
-                            (&album.name, &track.id, &album.artist_id, None::<Box<u8>>),
+                            "INSERT INTO single (track.id, cover) VALUES (?, ?)",
+                            (&track.id, None::<Box<[u8]>>),
                         ) {
                             Ok(_) => {
                                 log::info!("{}", "Added SINGLE with some visual!".green());
@@ -521,7 +518,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
     }
 }
 
-fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
+pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
     let file = fs::File::open(filepath).unwrap();
 
     let probe = get_probe();
