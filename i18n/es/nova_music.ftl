@@ -18,8 +18,10 @@ Loading = Cargando...
 album = Álbum
 title = Título
 artist = Artista
-
+pageresults = {$number} Resultados
+singles = Sencillos
 scandir = Escanear Directorio
+pathtofolder = "Ruta a un directorio"
 
 # First Time Setup
 currentdir = Directorio eligido
@@ -28,7 +30,7 @@ firsttimebody = Por favor escoge alguna carpeta para escanear y preparar Nova Mu
 firsttimeprimary = Escanea la carpeta y avanza
 
 # Playlist Creation Dialog
-DialogPlaylistTitle =  Nueva Playlist
+DialogPlaylistTitle = Nueva Playlist
 DialogPlaylistChosenName = Titulo de playlist:
 DialogPlaylistPrimary = Crear
 # Playlist Deletion Dialog
@@ -42,7 +44,7 @@ DialogPlaylistEdit = Editar playlist
 PlaylistInputPlaceholder = Título del Playlist
 
 # Common Buttons
-Cancel= Cancelar
+Cancel = Cancelar
 AddToQueue = Agrega al fila
 folderselect = Elige una carpeta
 
@@ -50,13 +52,18 @@ folderselect = Elige una carpeta
 Queue = Fila
 CreatePlaylist = Crear Playlist
 ClearAll = Eliminar Fila
-NowPlaying = Reproduciendo Ahora:
+NowPlaying = Reproduciendo Ahora
 
 # Album Page
 AlbumLibrary = Biblioteca de Álbumes
 AlbumInputPlaceholder = Título de álbum
 AlbumDiscNumber = Disco {$number}
 AlbumAttribution = {$artist}
+
+
+# Artist Page
+ArtistInputPlaceholder = Nombre de algun artista
+ArtistsPageEmpty = Sin artistas
 
 #Track Page
 TrackLibrary = Biblioteca de Pistas
@@ -79,3 +86,4 @@ AppVolume = Volumen del applicacion {$volume}
 
 # Error
 SearchFailed = Error con la buscada!
+None = ""

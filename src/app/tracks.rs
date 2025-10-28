@@ -1,17 +1,19 @@
-use crate::{app, fl};
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::{AppTrack, Message};
-use cosmic::iced::{Alignment, ContentFit, Element, Length};
-use cosmic::iced_core::image::Handle;
-use cosmic::widget::dropdown::multi::list;
-use std::num::Wrapping;
-use std::sync::{Arc, Mutex};
+use crate::{app, fl};
 use cosmic::iced;
+use cosmic::iced::widget::scrollable::Viewport;
+use cosmic::iced::{Alignment, Length};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
     pub tracks: Arc<Vec<AppTrack>>,
     pub search: Vec<SearchResult>,
     pub track_page_state: TrackPageState,
+    pub viewport: Option<Viewport>,
+    pub scrollbar_id: cosmic::iced_core::widget::Id,
     pub search_by_artist: bool,
     pub search_by_album: bool,
     pub search_by_title: bool,
@@ -29,112 +31,116 @@ pub struct SearchResult {
     pub tracks_index: usize,
     pub score: u32,
 }
+
 impl TrackPage {
     pub fn new() -> Self {
         TrackPage {
             tracks: Arc::from(Vec::<AppTrack>::new()),
             search: vec![],
             track_page_state: TrackPageState::Loading,
+            viewport: None,
+
+            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
             search_by_artist: true,
             search_by_album: true,
             search_by_title: true,
         }
     }
 
-    pub fn load_page<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<app::Message> {
+    pub fn load_page<'a>(&'a self, model: &'a app::AppModel) -> cosmic::Element<'a, app::Message> {
         cosmic::widget::container::Container::new(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::container(
-                cosmic::widget::row::with_children(vec![
-                    // HEADING AREA
                     cosmic::widget::row::with_children(vec![
-                        cosmic::widget::text::title2(fl!("TrackLibrary"))
-                            .width(Length::FillPortion(2))
-                            .into(),
-                        cosmic::widget::horizontal_space()
-                            .width(Length::Shrink)
-                            .into(),
-                        cosmic::widget::search_input(fl!("TrackInputPlaceholder"), &model.search_field)
-                            .on_input(|a| Message::UpdateSearch(a))
-                            .width(Length::FillPortion(1))
+                        // HEADING AREA
+                        cosmic::widget::row::with_children(vec![
+                            cosmic::widget::text::title2(fl!("TrackLibrary"))
+                                .width(Length::FillPortion(2))
+                                .into(),
+                            cosmic::widget::horizontal_space()
+                                .width(Length::Shrink)
+                                .into(),
+                            cosmic::widget::search_input(fl!("TrackInputPlaceholder"), &model.search_field)
+                                .on_input(|a| Message::UpdateSearch(a))
+                                .width(Length::FillPortion(1))
+                                .into(),
+                        ])
+                            .align_y(Alignment::Center)
+                            .spacing(cosmic::theme::spacing().space_s)
                             .into(),
                     ])
-                    .align_y(Alignment::Center)
-                    .spacing(cosmic::theme::spacing().space_s)
-                    .into(),
-                ])
-                    .padding(cosmic::iced_core::Padding::from([
-                        0,
-                        cosmic::theme::spacing().space_m,
-                    ]))
+                        .padding(cosmic::iced_core::Padding::from([
+                            0,
+                            cosmic::theme::spacing().space_m,
+                        ]))
                 )
-                .into(),
+                    .into(),
                 cosmic::widget::scrollable::vertical(
                     cosmic::widget::container(
-                    match self.track_page_state {
-                    TrackPageState::Loading => cosmic::widget::text::title3(fl!("Loading")).into(),
-                    TrackPageState::Loaded => match self.tracks.is_empty() {
-                        true => cosmic::widget::container(
-                            cosmic::widget::column::with_children(vec![
-                                cosmic::widget::text::title3("No Tracks Found In Database").into(),
-                                cosmic::widget::text::text("1. Go to View -> Settings \n 2. Choose the directory where your music is located \n 3. Click on the red \"Rescan\" button to create your music database.").into(),
-                                cosmic::widget::text::caption_heading("Cosmic Music currently support FLAC & MP3 files").into(),
-                            ])
-                                .spacing(cosmic::theme::spacing().space_s)
-                        )
-                            .align_x(Alignment::Center)
+                        match self.track_page_state {
+                            TrackPageState::Loading => cosmic::widget::text::title3(fl!("Loading")).into(),
+                            TrackPageState::Loaded => match self.tracks.is_empty() {
+                                true => cosmic::widget::container(
+                                    cosmic::widget::column::with_children(vec![
+                                        cosmic::widget::text::title3("No Tracks Found In Database").into(),
+                                        cosmic::widget::text::text("1. Go to View -> Settings \n 2. Choose the directory where your music is located \n 3. Click on the red \"Rescan\" button to create your music database.").into(),
+                                        cosmic::widget::text::caption_heading("Cosmic Music currently support FLAC & MP3 files").into(),
+                                    ])
+                                        .spacing(cosmic::theme::spacing().space_s)
+                                )
+                                    .align_x(Alignment::Center)
 
-                            .width(Length::Fill)
-                            .into(),
+                                    .width(Length::Fill)
+                                    .into(),
 
-                        false => track_list_display(&self.tracks),
-                    },
-                    TrackPageState::Search => cosmic::widget::column::with_children(vec![
-                        cosmic::widget::container(
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading(fl!("SearchFilter")).into(),
-                                cosmic::widget::horizontal_space().into(),
-                                cosmic::widget::checkbox(fl!("title"), self.search_by_title)
-                                    .on_toggle(|a| Message::ToggleTitle(a))
+                                false => track_list_display(&self.tracks),
+                            },
+                            TrackPageState::Search => cosmic::widget::column::with_children(vec![
+                                cosmic::widget::container(
+                                    cosmic::widget::row::with_children(vec![
+                                        cosmic::widget::text::heading(fl!("SearchFilter")).into(),
+                                        cosmic::widget::horizontal_space().into(),
+                                        cosmic::widget::checkbox(fl!("title"), self.search_by_title)
+                                            .on_toggle(|a| Message::ToggleTitle(a))
+                                            .into(),
+                                        cosmic::widget::checkbox(fl!("album"), self.search_by_album)
+                                            .on_toggle(|a| Message::ToggleAlbum(a))
+                                            .into(),
+                                        cosmic::widget::checkbox(fl!("artist"), self.search_by_artist)
+                                            .on_toggle(|a| Message::ToggleArtist(a))
+                                            .into(),
+                                    ])
+                                        .spacing(cosmic::theme::spacing().space_s),
+                                )
+                                    .padding(cosmic::theme::spacing().space_xxs)
+                                    .class(cosmic::style::Container::Primary)
                                     .into(),
-                                cosmic::widget::checkbox(fl!("album"), self.search_by_album)
-                                    .on_toggle(|a| Message::ToggleAlbum(a))
-                                    .into(),
-                                cosmic::widget::checkbox(fl!("artist"), self.search_by_artist)
-                                    .on_toggle(|a| Message::ToggleArtist(a))
-                                    .into(),
+                                search_list_display(
+                                    &self.search,
+                                    &self.tracks,
+                                    (
+                                        self.search_by_title,
+                                        self.search_by_album,
+                                        self.search_by_artist,
+                                    ),
+                                ),
                             ])
-                            .spacing(cosmic::theme::spacing().space_s),
-                        )
-                        .padding(cosmic::theme::spacing().space_xxs)
-                        .class(cosmic::style::Container::Primary)
-                        .into(),
-                        search_list_display(
-                            &self.search,
-                            &self.tracks,
-                            (
-                                self.search_by_title,
-                                self.search_by_album,
-                                self.search_by_artist,
-                            ),
-                        ),
-                    ])
-                    .spacing(cosmic::theme::spacing().space_m)
-                    .into(),
-                })
+                                .spacing(cosmic::theme::spacing().space_m)
+                                .into(),
+                        })
                         .padding(iced::core::padding::Padding::from([
                             0,
                             cosmic::theme::spacing().space_m,
                         ]))
-
                 )
-                .into(),
+                    .id(self.scrollbar_id.clone())
+                    .into(),
             ])
-            .spacing(cosmic::theme::spacing().space_m),
+                .spacing(cosmic::theme::spacing().space_m),
         )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 }
 
@@ -172,7 +178,7 @@ fn search_list_display<'a>(
         }
     }
 
-    let mut elem_vec : Vec<cosmic::Element<Message>> = Vec::with_capacity(3);
+    let mut elem_vec: Vec<cosmic::Element<Message>> = Vec::with_capacity(3);
 
     if settings.0 {
         elem_vec.push(search_group_display(&title_vector, fl!("title").as_str()));
@@ -186,28 +192,29 @@ fn search_list_display<'a>(
         elem_vec.push(search_group_display(&artist_vector, fl!("artist").as_str()));
     }
 
-
-    cosmic::widget::column::with_children(
-        elem_vec,
-    )
+    cosmic::widget::column::with_children(elem_vec)
         .spacing(cosmic::theme::spacing().space_s)
         .width(Length::Fill)
-    .into()
+        .into()
 }
 
-fn search_group_display<'a>(tracks: &Vec<AppTrack>, search_title: &str) -> cosmic::Element<'a, Message> {
-    cosmic::widget::column::with_children(vec![
-        cosmic::widget::container(
-            cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::heading(fl!("SearchFilterSpecify", filter = search_title)).into(),
-            ])
-                .padding(cosmic::theme::spacing().space_xxs)
-                .width(Length::Fill)
-        )
-            .class(cosmic::theme::Container::Primary).into(),
-        track_list_display(&tracks)
-    ])
-        .into()
+fn search_group_display<'a>(
+    tracks: &Vec<AppTrack>,
+    search_title: &str,
+) -> cosmic::Element<'a, Message> {
+    cosmic::widget::container(cosmic::widget::column::with_children(vec![
+        cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(fl!(
+            "SearchFilterSpecify",
+            filter = search_title
+        ))
+        .into()])
+        .padding(cosmic::theme::spacing().space_xxs)
+        .width(Length::Fill)
+        .into(),
+        track_list_display(&tracks),
+    ]))
+    .class(cosmic::theme::Container::Secondary)
+    .into()
 }
 
 fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Message> {

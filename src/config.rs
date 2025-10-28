@@ -3,7 +3,6 @@
 use crate::app;
 use cosmic::cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry};
 use cosmic::Application;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, CosmicConfigEntry, PartialEq)]
 #[version = 1]

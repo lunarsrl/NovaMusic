@@ -1,11 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::fmt::Display;
-use std::fs;
-use ::log::info;
-use strum_macros::EnumString;
-use symphonia::core::meta::StandardTagKey;
-use crate::database::create_database;
 use crate::log::setup_logger;
 
 mod app;
@@ -14,9 +8,10 @@ mod i18n;
 mod log;
 mod database;
 
+
 fn main() -> cosmic::iced::Result {
     //start logging
-    let logger = setup_logger();
+    setup_logger().expect("Could not setup logger");
     // Get the system's preferred languages.
     let requested_languages = i18n_embed::DesktopLanguageRequester::requested_languages();
 

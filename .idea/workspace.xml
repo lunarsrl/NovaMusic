@@ -9,7 +9,7 @@
   <component name="CargoProjects">
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml">
       <package file="$PROJECT_DIR$">
-        <enabledFeature name="default" />
+        <feature name="default" enabled="true" />
       </package>
     </cargoProject>
   </component>
@@ -20,7 +20,8 @@
       <change beforePath="$PROJECT_DIR$/i18n/en/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/en/nova_music.ftl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/i18n/es/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/es/nova_music.ftl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/playlists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/playlists.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/artists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/artists.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/app/tracks.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/tracks.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,6 +37,9 @@
       </list>
     </option>
   </component>
+  <component name="FormatOnSaveOptions">
+    <option name="myRunOnSave" value="true" />
+  </component>
   <component name="Git.Settings">
     <option name="PREVIOUS_COMMIT_AUTHORS">
       <list>
@@ -46,17 +50,43 @@
     <option name="SIGN_OFF_COMMIT" value="true" />
     <option name="SWAP_SIDES_IN_COMPARE_BRANCHES" value="true" />
   </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;lunarsrl&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;git@github.com:lunarsrl/NovaMusic.git&quot;,
+    &quot;accountId&quot;: &quot;d20e4824-6639-4655-a041-e13800273fad&quot;
+  }
+}</component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$USER_HOME$/.cargo/git/checkouts/libcosmic-41009aea1d72760b/1486569/src/widget/text_input/input.rs" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/../.cargo/git/checkouts/libcosmic-41009aea1d72760b/b58d864/iced/widget/src/column.rs" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/../.cargo/git/checkouts/libcosmic-41009aea1d72760b/b58d864/iced/widget/src/row.rs" root0="SKIP_INSPECTION" />
+    <setting file="file://$PROJECT_DIR$/src/app.rs" root0="SKIP_INSPECTION" />
   </component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="uinNu919" />
   </component>
+  <component name="OptimizeOnSaveOptions">
+    <option name="myRunOnSave" value="true" />
+  </component>
   <component name="ProblemsViewState">
+    <hideBySeverity>
+      <option value="11" />
+      <option value="12" />
+      <option value="13" />
+      <option value="14" />
+      <option value="15" />
+      <option value="16" />
+      <option value="200" />
+    </hideBySeverity>
     <option name="selectedTabId" value="CurrentFile" />
   </component>
   <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 1
+  &quot;associatedIndex&quot;: 7
 }</component>
   <component name="ProjectId" id="2vE6rCJuJuLRRmaqw62BIry5pCF" />
   <component name="ProjectViewState">
@@ -78,11 +108,13 @@
     &quot;Just.build-release.executor&quot;: &quot;Run&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;testing&quot;,
+    &quot;code.cleanup.on.save&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;next&quot;,
     &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/srl/Programming/nova-music&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/srl/.local/share/dev.riveroluna.NovaMusic/nova_music.db&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
@@ -91,8 +123,14 @@
     &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
     &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
     &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;language.rust.cargo.check&quot;,
+    &quot;rearrange.code.on.save&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;actions.on.save&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  },
+  &quot;keyToStringList&quot;: {
+    &quot;DatabaseDriversLRU&quot;: [
+      &quot;sqlite&quot;
+    ]
   }
 }</component>
   <component name="RecentsManager">
@@ -365,6 +403,23 @@
       <workItem from="1754593504626" duration="8303000" />
       <workItem from="1754601895949" duration="7558000" />
       <workItem from="1754669975647" duration="12353000" />
+      <workItem from="1758304291134" duration="11957000" />
+      <workItem from="1758565003579" duration="1236000" />
+      <workItem from="1758566597167" duration="164000" />
+      <workItem from="1758578560404" duration="6122000" />
+      <workItem from="1758645908672" duration="1947000" />
+      <workItem from="1759363318600" duration="2349000" />
+      <workItem from="1759427310801" duration="563000" />
+      <workItem from="1759427878983" duration="3180000" />
+      <workItem from="1759516526859" duration="26796000" />
+      <workItem from="1760842909571" duration="1389000" />
+      <workItem from="1761070025721" duration="7073000" />
+      <workItem from="1761092883825" duration="17948000" />
+      <workItem from="1761244312085" duration="2997000" />
+      <workItem from="1761255657979" duration="16932000" />
+      <workItem from="1761414760506" duration="20855000" />
+      <workItem from="1761438280859" duration="1813000" />
+      <workItem from="1761671734638" duration="7244000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />
@@ -440,25 +495,6 @@
     <option name="REFORMAT_BEFORE_PROJECT_COMMIT" value="true" />
   </component>
   <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
-          <url>file://$PROJECT_DIR$/src/app/home.rs</url>
-          <line>225</line>
-          <option name="timeStamp" value="2" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
-          <url>file://$PROJECT_DIR$/src/app.rs</url>
-          <line>1428</line>
-          <option name="timeStamp" value="3" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
-          <url>file://$PROJECT_DIR$/src/app.rs</url>
-          <line>1510</line>
-          <option name="timeStamp" value="4" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
     <watches-manager>
       <configuration name="CargoCommandRunConfiguration">
         <watch expression="found_path" language="Rust" />

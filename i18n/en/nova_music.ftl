@@ -18,8 +18,10 @@ Loading = Loading...
 album = Album
 title = Title
 artist = Artist
-
+pageresults = Results {$number}
+singles = Singles
 scandir = Scan directory
+pathtofolder = "Path to folder"
 
 # First Time Setup
 currentdir = Current directory
@@ -42,14 +44,14 @@ DialogPlaylistEdit = Edit playlist
 PlaylistInputPlaceholder = Enter playlist name
 
 # Common Buttons
-Cancel= Cancel
+Cancel = Cancel
 AddToQueue = Add To Queue
 folderselect = Select folder
 
 # Home Page
 Queue = Queue
 CreatePlaylist = Create Playlist
-ClearAll = Clear ALl
+ClearAll = Clear Queue
 NowPlaying = Now Playing
 
 # Album Page
@@ -57,6 +59,10 @@ AlbumLibrary = Album Library
 AlbumInputPlaceholder = Enter album name
 AlbumDiscNumber = Disc {$number}
 AlbumAttribution = {$artist}
+
+# Artist Page
+ArtistInputPlaceholder = Enter an artists name
+ArtistsPageEmpty = No Artists
 
 #Track Page
 TrackLibrary = Track Library
