@@ -31,6 +31,7 @@ pub struct SearchResult {
     pub tracks_index: usize,
     pub score: u32,
 }
+
 impl TrackPage {
     pub fn new() -> Self {
         TrackPage {

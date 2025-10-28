@@ -255,7 +255,125 @@ impl ArtistsPage {
                 .height(Length::Fill)
                 .into();
             }
-            ArtistPageState::Search(search) => cosmic::widget::text("SEARCH").into(),
+            ArtistPageState::Search(search) => {
+                if self.artists.is_empty() {
+                    // todo Warning
+                    cosmic::widget::text::text(fl!("ArtistsPageEmpty")).into()
+                } else {
+                    cosmic::widget::container(cosmic::widget::responsive(move |size| {
+                        // Body
+                        let mut elements: Vec<Element<Message>> = vec![];
+
+                        let mut artists: Vec<ArtistInfo> = vec![];
+
+                        for each in search {
+                            if (0..=2).contains(&each.score) {
+                                match self.artists.get(each.tracks_index) {
+                                    None => {}
+                                    Some(val) => {
+                                        artists.push(val.clone());
+                                    }
+                                }
+                            }
+                        }
+
+                        for artist in artists {
+                            elements.push(
+                                cosmic::widget::button::custom(
+                                    cosmic::widget::column::with_children(vec![
+                                        if let Some(cover_art) = &artist.image {
+                                            cosmic::widget::container::Container::new(
+                                                cosmic::widget::image(cover_art)
+                                                    .content_fit(ContentFit::Fill),
+                                            )
+                                            .height((model.config.grid_item_size * 32) as f32)
+                                            .width((model.config.grid_item_size * 32) as f32)
+                                            .into()
+                                        } else {
+                                            cosmic::widget::container(
+                                                cosmic::widget::icon::from_name(
+                                                    "avatar-default-symbolic",
+                                                )
+                                                .size((model.config.grid_item_size * 32) as u16),
+                                            )
+                                            .align_x(Alignment::Center)
+                                            .align_y(Alignment::Center)
+                                            .into()
+                                        },
+                                        cosmic::widget::column::with_children(vec![
+                                            cosmic::widget::text::text(artist.name.clone())
+                                                .center()
+                                                .into(),
+                                        ])
+                                        .align_x(Alignment::Center)
+                                        .width(cosmic::iced::Length::Fill)
+                                        .into(),
+                                    ])
+                                    .align_x(Alignment::Center),
+                                )
+                                .on_press(Message::ArtistRequested(artist.name.clone()))
+                                .class(cosmic::widget::button::ButtonClass::Icon)
+                                .width((model.config.grid_item_size * 32) as f32)
+                                .into(),
+                            )
+                        }
+
+                        let mut old_grid = Some(
+                            cosmic::widget::Grid::new()
+                                .width(Length::Fill)
+                                .height(Length::Shrink),
+                        );
+
+                        let width = size.width as u32;
+                        let spacing;
+                        let mut items_per_row = 0;
+                        let mut index = 0;
+
+                        while width > (items_per_row * model.config.grid_item_size * 32) {
+                            items_per_row += 1;
+                        }
+                        items_per_row -= 1;
+
+                        let check_spacing: u32 =
+                            ((items_per_row + 1) * model.config.grid_item_size * 32)
+                                .saturating_sub(width);
+                        let check_final = model.config.grid_item_size * 32 - check_spacing;
+
+                        if items_per_row < 3 {
+                            spacing = check_final as u16
+                        } else {
+                            spacing = (check_final / (items_per_row - 1)) as u16;
+                        }
+
+                        for element in elements {
+                            index += 1;
+                            if let Some(grid) = old_grid.take() {
+                                if (index % items_per_row) == 0 {
+                                    old_grid = Some(grid.push(element).insert_row());
+                                } else {
+                                    old_grid = Some(grid.push(element));
+                                }
+                            }
+                        }
+
+                        cosmic::widget::scrollable::vertical(
+                            cosmic::widget::container(
+                                old_grid
+                                    .take()
+                                    .unwrap()
+                                    .column_spacing(spacing)
+                                    .column_alignment(Alignment::Center)
+                                    .justify_content(JustifyContent::Center)
+                                    .row_alignment(Alignment::Center),
+                            )
+                            .align_x(Alignment::Center),
+                        )
+                        .into()
+                    }))
+                    .height(Length::Fill)
+                    .into()
+                }
+            }
             ArtistPageState::Album(album) => {
                 let name = &self.artist_page_cache.as_ref().unwrap();
                 return album.full_album_page(

@@ -21,6 +21,7 @@ artist = Artist
 pageresults = Results {$number}
 singles = Singles
 scandir = Scan directory
+pathtofolder = "Path to folder"
 
 # First Time Setup
 currentdir = Current directory

@@ -165,6 +165,8 @@ pub enum Message {
 
     // Config change related
     RescanDir,
+    // For people who dont have an xdg file chooser :)
+    ManualScanDirEdit(String),
 
     // Filesystem related
     ChooseFolder,
@@ -654,15 +656,17 @@ impl cosmic::Application for AppModel {
                     .body(fl!("firsttimebody"))
                     .control(cosmic::widget::container(
                         cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text::heading(format!(
-                                "{}: {}",
-                                fl!("currentdir"),
-                                self.config.scan_dir.as_str()
-                            ))
+                            cosmic::widget::text_input(
+                                fl!("pathtofolder"),
+                                self.config.scan_dir.as_str(),
+                            )
+                            .on_input(|val| Message::ManualScanDirEdit(val))
+                            .width(Length::FillPortion(1))
                             .into(),
                             cosmic::widget::horizontal_space().into(),
                             cosmic::widget::button::text(fl!("folderselect"))
                                 .on_press(Message::ChooseFolder)
+                                .width(Length::FillPortion(1))
                                 .into(),
                         ]),
                     ))
@@ -906,6 +910,7 @@ impl cosmic::Application for AppModel {
                     }
                 }
             }
+            Message::ManualScanDirEdit(val) => {}
             Message::ToastError(error) => {
                 return self
                     .toasts
@@ -1157,7 +1162,6 @@ impl cosmic::Application for AppModel {
                     Page::NowPlaying(_) => {}
                     Page::Albums(page) => {
                         let cloned_albums = page.albums.clone();
-
                         return cosmic::Task::stream(
                             cosmic::iced_futures::stream::channel(0, |mut tx| async move {
                                 tokio::task::spawn_blocking(move || {
@@ -1358,7 +1362,54 @@ impl cosmic::Application for AppModel {
                             .map(action::Action::App),
                         );
                     }
-                    Page::Artist(_) => {}
+                    Page::Artist(page) => {
+                        let cloned_artists = page.artists.clone();
+                        return cosmic::Task::stream(
+                            cosmic::iced_futures::stream::channel(0, |mut tx| async move {
+                                tokio::task::spawn_blocking(move || {
+                                    let mut albums = cloned_artists
+                                        .par_iter()
+                                        .enumerate()
+                                        .map(|(index, album)| {
+                                            return match regex.find(&album.name) {
+                                                None => SearchResult {
+                                                    tracks_index: index,
+                                                    score: 999,
+                                                },
+                                                Some(val) => {
+                                                    if val.range().start == 0 {
+                                                        if val.range().end == album.name.len() {
+                                                            // Exact Match
+                                                            return SearchResult {
+                                                                tracks_index: index,
+                                                                score: 0,
+                                                            };
+                                                        }
+                                                        // Matches at the beginning
+
+                                                        return SearchResult {
+                                                            tracks_index: index,
+                                                            score: 1,
+                                                        };
+                                                    }
+                                                    // Matches somewhere else
+                                                    SearchResult {
+                                                        tracks_index: index,
+                                                        score: 2,
+                                                    }
+                                                }
+                                            };
+                                        })
+                                        .collect::<Vec<SearchResult>>();
+
+                                    albums.sort_by(|a, b| a.score.cmp(&b.score));
+                                    tx.try_send(Message::SearchResults(albums))
+                                });
+                                ()
+                            })
+                            .map(action::Action::App),
+                        );
+                    }
                 }
             }
 
@@ -2770,7 +2821,9 @@ where a.name = ?    ",
                         track_list.track_page_state = TrackPageState::Search;
                         track_list.search = tracks;
                     }
-                    &mut Page::Artist(_) => todo!(),
+                    Page::Artist(page) => {
+                        page.page_state = ArtistPageState::Search(tracks);
+                    }
                 }
             }
             Message::ToggleTitle(val) => {

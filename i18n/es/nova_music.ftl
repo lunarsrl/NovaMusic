@@ -21,6 +21,7 @@ artist = Artista
 pageresults = {$number} Resultados
 singles = Sencillos
 scandir = Escanear Directorio
+pathtofolder = "Ruta a un directorio"
 
 # First Time Setup
 currentdir = Directorio eligido
@@ -51,7 +52,7 @@ folderselect = Elige una carpeta
 Queue = Fila
 CreatePlaylist = Crear Playlist
 ClearAll = Eliminar Fila
-NowPlaying = Reproduciendo Ahora:
+NowPlaying = Reproduciendo Ahora
 
 # Album Page
 AlbumLibrary = Biblioteca de Álbumes
