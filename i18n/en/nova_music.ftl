@@ -19,7 +19,7 @@ album = Album
 title = Title
 artist = Artist
 pageresults = Results {$number}
-
+singles = Singles
 scandir = Scan directory
 
 # First Time Setup
@@ -43,7 +43,7 @@ DialogPlaylistEdit = Edit playlist
 PlaylistInputPlaceholder = Enter playlist name
 
 # Common Buttons
-Cancel= Cancel
+Cancel = Cancel
 AddToQueue = Add To Queue
 folderselect = Select folder
 
@@ -61,6 +61,7 @@ AlbumAttribution = {$artist}
 
 # Artist Page
 ArtistInputPlaceholder = Enter an artists name
+ArtistsPageEmpty = No Artists
 
 #Track Page
 TrackLibrary = Track Library

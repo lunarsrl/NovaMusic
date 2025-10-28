@@ -59,11 +59,11 @@ impl ArtistsPage {
     }
     pub fn load_page<'a>(&'a self, model: &'a AppModel) -> Element<'a, app::Message> {
         let body: Element<Message> = match &self.page_state {
-            ArtistPageState::Loading => cosmic::widget::text("LOADING").into(),
+            ArtistPageState::Loading => cosmic::widget::text(fl!("Loading")).into(),
             ArtistPageState::Loaded => {
                 if self.artists.is_empty() {
                     // todo Warning
-                    cosmic::widget::text::text("no artists :(").into()
+                    cosmic::widget::text::text(fl!("ArtistsPageEmpty")).into()
                 } else {
                     cosmic::widget::container(cosmic::widget::responsive(move |size| {
                         // Body

@@ -34,10 +34,11 @@ use crate::{app, config, fl};
 use colored::Colorize;
 use cosmic::app::context_drawer;
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::iced::keyboard::key;
 use cosmic::iced::task::Handle;
 use cosmic::iced::window::Id;
 use cosmic::iced::Alignment::Start;
-use cosmic::iced::{Alignment, Color, ContentFit, Length};
+use cosmic::iced::{keyboard, Alignment, Color, ContentFit, Event, Length};
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
@@ -851,12 +852,10 @@ impl cosmic::Application for AppModel {
         let body;
         match self.nav.active_data::<Page>().unwrap() {
             Page::NowPlaying(home_page) => body = home_page.load_page(self),
-            Page::Tracks(track_page) => body = track_page.load_page(self).explain(Color::WHITE),
+            Page::Tracks(track_page) => body = track_page.load_page(self),
             Page::Artist(artists_page) => body = artists_page.load_page(self),
-            Page::Albums(album_page) => body = album_page.load_page(self).explain(Color::WHITE),
-            Page::Playlists(playlist_page) => {
-                body = playlist_page.load_page(self).explain(Color::WHITE)
-            }
+            Page::Albums(album_page) => body = album_page.load_page(self),
+            Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
         }
 
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
@@ -970,14 +969,10 @@ impl cosmic::Application for AppModel {
                 }
             }
 
-            Message::ArtistPageEdit => {
-                match self.artistpage_edit_dialog {
-                    true => self.artistpage_edit_dialog = false,
-                    false => self.artistpage_edit_dialog = true,
-                }
-
-                return cosmic::task::future(async move { Message::ArtistPageReturn });
-            }
+            Message::ArtistPageEdit => match self.artistpage_edit_dialog {
+                true => self.artistpage_edit_dialog = false,
+                false => self.artistpage_edit_dialog = true,
+            },
 
             Message::ArtistsPageEdit => match self.artistspage_edit_dialog {
                 true => self.artistspage_edit_dialog = false,
@@ -1845,7 +1840,6 @@ from track
                                         artists = rows.into_iter().filter_map(|a| a.ok()).collect();
 
 
-
                                         tx.try_send(Message::ArtistsLoaded(artists))
                                     });
                                 })
@@ -1854,7 +1848,7 @@ from track
                         }
                         ArtistPageState::Search(_) => {}
                         ArtistPageState::Loaded => {}
-                        ArtistPageState::ArtistPage(page) => {},
+                        ArtistPageState::ArtistPage(page) => {}
                         &ArtistPageState::Album(_) => {}
                     },
                 }
@@ -2821,7 +2815,7 @@ where a.name = ?    ",
                 let conn = connect_to_db();
 
                 let mut stmt =
-                        "
+                    "
                                 select track.id as id, track.name as title, art.name as artist, track.path as path, a.album_cover, a.name as album_title
                                 from track
                                 left join main.album_tracks at on track.id = at.track_id
@@ -2936,6 +2930,52 @@ where a.name = ?    ",
         // Activate the page in the model.
         self.nav.activate(id);
         self.update_title()
+    }
+
+    fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
+        struct KeybindSubscription;
+
+        cosmic::iced::Subscription::batch(vec![cosmic::iced::event::listen_with(handle_keybinds)])
+    }
+}
+
+fn handle_keybinds(
+    event: cosmic::iced::event::Event,
+    a: cosmic::iced::event::Status,
+    _: cosmic::iced::window::Id,
+) -> Option<Message> {
+    if let cosmic::iced::event::Status::Captured = a {
+        return None;
+    }
+
+    match event {
+        Event::Keyboard(key) => {
+            if let keyboard::Event::KeyPressed { key, .. } = key {
+                log::info!("{:?}", key);
+                match key {
+                    cosmic::iced::keyboard::Key::Named(
+                        cosmic::iced::keyboard::key::Named::Space,
+                    ) => return Some(Message::PlayPause),
+
+                    cosmic::iced::keyboard::Key::Named(
+                        cosmic::iced::keyboard::key::Named::MediaSkipBackward,
+                    ) => return Some(Message::PreviousTrack),
+
+                    cosmic::iced::keyboard::Key::Named(
+                        cosmic::iced::keyboard::key::Named::MediaSkipForward,
+                    ) => return Some(Message::SkipTrack),
+
+                    cosmic::iced::keyboard::Key::Named(
+                        cosmic::iced::keyboard::key::Named::MediaPlayPause,
+                    ) => return Some(Message::PlayPause),
+
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
 
