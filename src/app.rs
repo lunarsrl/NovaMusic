@@ -1806,7 +1806,19 @@ from track
                                                 .join("nova_music.db"),
                                         ).unwrap();
 
-                                        let mut stmt = conn.prepare("select * from artists").expect("Statement Faulty @ OnNavEnter Artists");
+                                        let mut stmt = conn.prepare("
+select artists.name
+from artists
+where exists(select *
+             from album
+             where album.artist_id = artists.id)
+   or exists(select *
+             from single
+             where exists(select *
+                          from track
+                          where single.track_id = track.id
+                            and track.artist_id = artists.id))
+                                        ").expect("Statement Faulty @ OnNavEnter Artists");
 
                                         let rows = stmt.query_map([], |row| {
                                             let name = row.get::<_, String>("name").expect("Should be string");
