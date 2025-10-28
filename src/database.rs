@@ -504,15 +504,17 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
             }
         }
 
-        match conn.execute(
-            "INSERT INTO album_tracks (album_id, track_id, track_number, disc_number) VALUES (?, ?, ?, ?)",
-            (&album.id, &track.id, &album_tracks.track_number, &album_tracks.disc_number),
-        ) {
-            Ok(_) => {
+        if album.num_of_tracks != 1 {
+            match conn.execute(
+                "INSERT INTO album_tracks (album_id, track_id, track_number, disc_number) VALUES (?, ?, ?, ?)",
+                (&album.id, &track.id, &album_tracks.track_number, &album_tracks.disc_number),
+            ) {
+                Ok(_) => {
 
-            }
-            Err(_err) => {
-                // log::error!("album_track insertion went wrong \n ------ \n  {}", err.to_string());
+                }
+                Err(_err) => {
+                    // log::error!("album_track insertion went wrong \n ------ \n  {}", err.to_string());
+                }
             }
         }
     }

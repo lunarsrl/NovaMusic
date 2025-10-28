@@ -240,7 +240,7 @@ impl ArtistsPage {
                                 ),
                             )
                             .into(),
-                            cosmic::widget::text::title4(fl!("tracks")).into(),
+                            cosmic::widget::text::title4(fl!("singles")).into(),
                             cosmic::widget::row::with_children(data.1).into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_m)
