@@ -17,11 +17,9 @@
     <list default="true" id="152ba708-cd46-4fc3-ab0c-616e9212beb1" name="Changes" comment="Settings menu is mostly done, added progress bar for file scanning (a file is considered scanned only after it is checled for metadata currently which is only done after initially gathering a list of all the files, probably super inefficient and it looks like nothing is progressing to the user until initial scan is done)&#10;&#10;Signed-off-by: Samuel Rivero Luna &lt;riveroluna@protonmail.com&gt;">
       <changelist_data name="Samuel RIvero Luna" email="riveroluna@protonmail.com" automatic="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/i18n/en/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/en/nova_music.ftl" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/i18n/es/nova_music.ftl" beforeDir="false" afterPath="$PROJECT_DIR$/i18n/es/nova_music.ftl" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/artists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/artists.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/app/tracks.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/tracks.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -46,6 +44,11 @@
         <option value="Samuel RIvero Luna &lt;riveroluna@protonmail.com&gt;" />
       </list>
     </option>
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="next" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
     <option name="SIGN_OFF_COMMIT" value="true" />
     <option name="SWAP_SIDES_IN_COMPARE_BRANCHES" value="true" />
@@ -55,6 +58,17 @@
     &quot;state&quot;: &quot;OPEN&quot;,
     &quot;assignee&quot;: &quot;lunarsrl&quot;
   }
+}</component>
+  <component name="GitHubPullRequestState">{
+  &quot;prStates&quot;: [
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOOTfsSs6wQCXt&quot;,
+        &quot;number&quot;: 18
+      },
+      &quot;lastSeen&quot;: 1761690863119
+    }
+  ]
 }</component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
@@ -112,7 +126,7 @@
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
     &quot;code.cleanup.on.save&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;next&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;/home/srl/.local/share/dev.riveroluna.NovaMusic/nova_music.db&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
@@ -420,6 +434,7 @@
       <workItem from="1761414760506" duration="20855000" />
       <workItem from="1761438280859" duration="1813000" />
       <workItem from="1761671734638" duration="7244000" />
+      <workItem from="1761762051987" duration="4852000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />
