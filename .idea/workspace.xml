@@ -17,7 +17,6 @@
     <list default="true" id="152ba708-cd46-4fc3-ab0c-616e9212beb1" name="Changes" comment="Settings menu is mostly done, added progress bar for file scanning (a file is considered scanned only after it is checled for metadata currently which is only done after initially gathering a list of all the files, probably super inefficient and it looks like nothing is progressing to the user until initial scan is done)&#10;&#10;Signed-off-by: Samuel Rivero Luna &lt;riveroluna@protonmail.com&gt;">
       <changelist_data name="Samuel RIvero Luna" email="riveroluna@protonmail.com" automatic="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/app/artists.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/app/artists.rs" afterDir="false" />
     </list>
@@ -434,7 +433,8 @@
       <workItem from="1761414760506" duration="20855000" />
       <workItem from="1761438280859" duration="1813000" />
       <workItem from="1761671734638" duration="7244000" />
-      <workItem from="1761762051987" duration="4852000" />
+      <workItem from="1761762051987" duration="5563000" />
+      <workItem from="1761780658766" duration="5587000" />
     </task>
     <task id="LOCAL-00001" summary="Initial">
       <option name="closed" value="true" />

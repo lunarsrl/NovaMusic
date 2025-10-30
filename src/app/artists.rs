@@ -74,6 +74,7 @@ impl ArtistsPage {
                                 cosmic::widget::button::custom(
                                     cosmic::widget::column::with_children(vec![
                                         if let Some(cover_art) = &artist.image {
+                                            log::info!("Artist with art");
                                             cosmic::widget::container::Container::new(
                                                 cosmic::widget::image(cover_art)
                                                     .content_fit(ContentFit::Fill),
@@ -175,7 +176,7 @@ impl ArtistsPage {
                         .size(128)
                         .into(),
                     Some(handle) => cosmic::widget::image(handle)
-                        .content_fit(ContentFit::Cover)
+                        .content_fit(ContentFit::Fill)
                         .width(128)
                         .height(128)
                         .into(),
@@ -284,7 +285,7 @@ impl ArtistsPage {
                                         if let Some(cover_art) = &artist.image {
                                             cosmic::widget::container::Container::new(
                                                 cosmic::widget::image(cover_art)
-                                                    .content_fit(ContentFit::Fill),
+                                                    .content_fit(ContentFit::Cover),
                                             )
                                             .height((model.config.grid_item_size * 32) as f32)
                                             .width((model.config.grid_item_size * 32) as f32)

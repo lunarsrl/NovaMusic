@@ -1893,7 +1893,7 @@ from track
                                         ).unwrap();
 
                                         let mut stmt = conn.prepare("
-select artists.name
+select artists.name, artists.artistpfp
 from artists
 where exists(select *
              from album
