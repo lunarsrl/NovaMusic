@@ -681,14 +681,7 @@ impl cosmic::Application for AppModel {
 
         // Dialogs from page user interactions
         match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(_) => {}
-            Page::Artist(page) => {
-                if self.artistpage_edit_dialog {
-                    return Some(page.artist_edit_dialog().into());
-                }
-            }
-            Page::Albums(_) => {}
-            Page::Playlists(val) => {
+            Page::NowPlaying(page) => {
                 let icon = match &self.playlist_cover {
                     None => cosmic::widget::container(
                         cosmic::widget::button::icon(
@@ -757,6 +750,44 @@ impl cosmic::Application for AppModel {
                             .into(),
                     );
                 }
+            }
+            Page::Artist(page) => {
+                if self.artistpage_edit_dialog {
+                    return Some(page.artist_edit_dialog().into());
+                }
+            }
+            Page::Albums(_) => {}
+            Page::Playlists(val) => {
+                let icon = match &self.playlist_cover {
+                    None => cosmic::widget::container(
+                        cosmic::widget::button::icon(
+                            cosmic::widget::icon::from_name("view-list-images-symbolic")
+                                .size(6 * 8),
+                        )
+                        .padding(cosmic::theme::spacing().space_s)
+                        .on_press(Message::CreatePlaylistAddThumbnail)
+                        .class(cosmic::theme::Button::Suggested),
+                    )
+                    .class(cosmic::theme::Container::Secondary)
+                    .width(Length::Fixed(6.0 * 16.0))
+                    .height(Length::Fixed(6.0 * 16.0))
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .into(),
+                    Some(val) => cosmic::widget::container(
+                        cosmic::widget::button::custom_image_button(
+                            cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
+                                .content_fit(ContentFit::Fill),
+                            None,
+                        )
+                        .on_press(Message::CreatePlaylistAddThumbnail),
+                    )
+                    .width(Length::Fixed(6.0 * 16.0))
+                    .height(Length::Fixed(6.0 * 16.0))
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .into(),
+                };
 
                 if self.playlist_edit_dialog {
                     return Some(
@@ -932,10 +963,13 @@ impl cosmic::Application for AppModel {
                 Page::Artist(page) => page.viewport = Some(view),
             },
             Message::PlaylistDeleteConfirmed => {
-                if let Some(page) = self.nav.data_mut::<PlaylistPage>(self.playlistsid) {
-                    if let PlaylistPageState::PlaylistPage(page) = &page.playlist_page_state {
+                if let Page::Playlists(toppage) =
+                    self.nav.data_mut::<Page>(self.playlistsid).unwrap()
+                {
+                    if let PlaylistPageState::PlaylistPage(page) = &toppage.playlist_page_state {
                         match std::fs::remove_file(&page.playlist.path) {
                             Ok(_) => {
+                                toppage.playlist_page_state = PlaylistPageState::Loading;
                                 return cosmic::Task::future(async move { Message::OnNavEnter })
                                     .map(cosmic::Action::App);
                             }
@@ -949,6 +983,7 @@ impl cosmic::Application for AppModel {
                         }
                     }
                 }
+                log::error!("Event triggered in the wrong state");
                 self.playlist_delete_dialog = false;
             }
             Message::PlaylistEdit(path) => {
@@ -1858,7 +1893,7 @@ from track
                                         ).unwrap();
 
                                         let mut stmt = conn.prepare("
-select artists.name
+select artists.name, artists.artistpfp
 from artists
 where exists(select *
              from album
@@ -2292,7 +2327,20 @@ where a.name = ?    ",
                 }
 
                 if self.sink.empty() {
-                    let file = std::fs::File::open(filepath).expect("Failed to open file");
+                    let file = match std::fs::File::open(&filepath) {
+                        Ok(file) => file,
+                        Err(err) => {
+                            log::error!("Error: {}", err);
+
+                            return self
+                                .toasts
+                                .push(cosmic::widget::toaster::Toast::new(format!(
+                                    "Track found in database but not at the filepath: {}",
+                                    filepath.to_string()
+                                )))
+                                .map(cosmic::Action::App);
+                        }
+                    };
 
                     let decoder = rodio::Decoder::builder()
                         .with_byte_len(file.metadata().unwrap().len())

@@ -210,12 +210,12 @@ impl ArtistsPage {
                                 cosmic::widget::text::title3(artistpage.artist.name.as_str())
                                     .into(),
                                 cosmic::widget::vertical_space().into(),
-                                cosmic::widget::button::text(fl!("AddToQueue"))
-                                    .leading_icon(cosmic::widget::icon::from_name(
-                                        "media-playback-start-symbolic",
-                                    ))
-                                    .class(cosmic::theme::Button::Suggested)
-                                    .into(),
+                                // cosmic::widget::button::text(fl!("AddToQueue"))
+                                //     .leading_icon(cosmic::widget::icon::from_name(
+                                //         "media-playback-start-symbolic",
+                                //     ))
+                                //     .class(cosmic::theme::Button::Suggested)
+                                //     .into(),
                             ])
                             .height(Length::Fixed(128.0))
                             .spacing(cosmic::theme::spacing().space_s)
@@ -284,7 +284,7 @@ impl ArtistsPage {
                                         if let Some(cover_art) = &artist.image {
                                             cosmic::widget::container::Container::new(
                                                 cosmic::widget::image(cover_art)
-                                                    .content_fit(ContentFit::Fill),
+                                                    .content_fit(ContentFit::Cover),
                                             )
                                             .height((model.config.grid_item_size * 32) as f32)
                                             .width((model.config.grid_item_size * 32) as f32)
