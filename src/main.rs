@@ -7,6 +7,7 @@ mod config;
 mod i18n;
 mod log;
 mod database;
+mod novasink;
 
 
 fn main() -> cosmic::iced::Result {

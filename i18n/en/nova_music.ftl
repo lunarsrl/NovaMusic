@@ -26,7 +26,7 @@ pathtofolder = "Path to folder"
 # First Time Setup
 currentdir = Current directory
 firsttimetitle = Welcome to Nova Music!
-firsttimebody = Please select a folder for scanning to get Nova Music ready.
+firsttimebody = Please select a folder for scanning to get Nova Music ready. Also choose if you would like Nova Music to connect to the internet and use MusicBrainz to add metadata to your music files.
 firsttimeprimary = Scan folder & continue
 
 # Playlist Creation Dialog
@@ -53,6 +53,7 @@ Queue = Queue
 CreatePlaylist = Create Playlist
 ClearAll = Clear Queue
 NowPlaying = Now Playing
+None = None
 
 # Album Page
 AlbumLibrary = Album Library
