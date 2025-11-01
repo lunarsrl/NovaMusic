@@ -15,6 +15,11 @@ debian/*
 output.log
 
 #flatpak
+repo
 .flatapak-builder
 build-dir
+
+#perf
+perf.data
+test.perf
 
