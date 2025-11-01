@@ -1,5 +1,5 @@
 .cargo/
-.idea
+.idea/
 *.pdb
 **/*.rs.bk
 debug/
