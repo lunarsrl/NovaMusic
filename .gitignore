@@ -13,6 +13,8 @@ debian/*
 !debian/rules
 !debian/source
 output.log
-cosmic_music.db
-elisaDatabase.db
-.idea
+
+#flatpak
+.flatapak-builder
+build-dir
+
