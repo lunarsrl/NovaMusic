@@ -84,7 +84,7 @@ impl TrackPage {
                                     cosmic::widget::column::with_children(vec![
                                         cosmic::widget::text::title3("No Tracks Found In Database").into(),
                                         cosmic::widget::text::text("1. Go to View -> Settings \n 2. Choose the directory where your music is located \n 3. Click on the red \"Rescan\" button to create your music database.").into(),
-                                        cosmic::widget::text::caption_heading("Cosmic Music currently support FLAC & MP3 files").into(),
+                                        cosmic::widget::text::caption_heading("Nova Music currently support FLAC & MP3 files").into(),
                                     ])
                                         .spacing(cosmic::theme::spacing().space_s)
                                 )
