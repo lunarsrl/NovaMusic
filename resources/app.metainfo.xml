@@ -6,9 +6,9 @@
   <name>Nova Music</name>
   <summary>A music player written in the libcosmic toolkit</summary>
   <icon type="remote" width="64" height="64" scale="1">
-    https://github.com/SRiverol/NovaMusic.git/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
+    https://github.com/lunarsrl/NovaMusic.git/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
   </icon>
-  <url type="vcs-browser">https://github.com/SRiverol/CosmicMusic.git</url>
+  <url type="vcs-browser">https://github.com/lunarsrl/NovaMusic.git</url>
   <launchable type="desktop-id">dev.riveroluna.NovaMusic.desktop</launchable>
   <provides>
     <id>dev.riveroluna.NovaMusic</id>
@@ -32,4 +32,3 @@
   </keywords>
   <content_rating type="oars-1.1" />
 </component>
-
