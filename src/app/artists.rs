@@ -441,7 +441,7 @@ impl ArtistsPage {
             let icon = match &page.artist.image {
                 Some(handle) => cosmic::widget::container(
                     cosmic::widget::button::custom_image_button(
-                        cosmic::widget::image(handle).content_fit(ContentFit::Fill),
+                        cosmic::widget::image(handle).content_fit(ContentFit::Cover),
                         None,
                     )
                     .on_press(Message::ChooseFile(FileChooserEvents::ArtistPagePicture)),
@@ -558,7 +558,7 @@ impl ArtistPage {
                 cosmic::widget::button::custom(cosmic::widget::column::with_children(vec![
                     if let Some(cover_art) = &single.cover_art {
                         cosmic::widget::container::Container::new(
-                            cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
+                            cosmic::widget::image(cover_art).content_fit(ContentFit::Cover),
                         )
                         .height((model.config.grid_item_size * 32) as f32)
                         .width((model.config.grid_item_size * 32) as f32)
@@ -595,7 +595,7 @@ impl ArtistPage {
                 cosmic::widget::button::custom(cosmic::widget::column::with_children(vec![
                     if let Some(cover_art) = &album.cover_art {
                         cosmic::widget::container::Container::new(
-                            cosmic::widget::image(cover_art).content_fit(ContentFit::Fill),
+                            cosmic::widget::image(cover_art).content_fit(ContentFit::Cover),
                         )
                         .height((model.config.grid_item_size * 32) as f32)
                         .width((model.config.grid_item_size * 32) as f32)
