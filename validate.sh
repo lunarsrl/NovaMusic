@@ -1,1 +1,0 @@
-appstreamcli compose --no-partial-urls --prefix=/ --origin=${FLATPAK_ID} --media-baseurl=<repo-media-url> --media-dir=${FLATPAK_DEST}/share/app-info/media --result-root=${FLATPAK_DEST} --data-dir=${FLATPAK_DEST}/share/app-info/xmls --icons-dir=${FLATPAK_DEST}/share/app-info/icons/flatpak --components=${FLATPAK_ID} ${FLATPAK_DEST}
