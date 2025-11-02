@@ -53,6 +53,7 @@ Queue = Queue
 CreatePlaylist = Create Playlist
 ClearAll = Clear Queue
 NowPlaying = Now Playing
+None = None
 
 # Album Page
 AlbumLibrary = Album Library

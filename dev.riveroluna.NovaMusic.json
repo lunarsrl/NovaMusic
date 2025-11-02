@@ -1,0 +1,51 @@
+{
+	"app-id": "dev.riveroluna.NovaMusic",
+	"runtime": "org.freedesktop.Platform",
+	"runtime-version": "25.08",
+	"sdk": "org.freedesktop.Sdk",
+	"sdk-extensions" : [
+		"org.freedesktop.Sdk.Extension.rust-stable"
+	],
+	"build-options": {
+		"append-path": "/usr/lib/sdk/rust-stable/bin"
+	},
+
+	"append-path": "/usr/lib/sdk/rust-stable/bin",
+	"modules": [{
+		"name": "nova-music",
+		"buildsystem": "simple",
+	     	"build-options": {
+			"env": {
+				"CARGO_HOME": "/run/build/nova-music/cargo"
+	        	}
+
+		},
+		"build-commands": [
+			"cargo --offline fetch --manifest-path Cargo.toml --verbose",
+			"cargo --offline build --release --verbose",
+			"install -Dm0755 ./target/release/nova-music /app/bin/nova-music",
+			"install -Dm0644 ./resources/dev.riveroluna.NovaMusic.desktop /app/share/applications/dev.riveroluna",
+			"install -Dm0644 ./resources/dev.riveroluna.NovaMusic.metainfo.xml /app/share/applications/dev.riveroluna",
+			"install -Dm0644 ./resources/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg /app/share/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg"
+
+
+		],
+		"sources": [
+			{
+				"type": "dir",
+				"path": "."
+			},
+			"cargo-sources.json"
+		]
+	}],
+	"command": "nova-music",
+	"finish-args": [
+		"--socket=fallback-x11",
+		"--socket=pulseaudio",
+		"--socket=wayland",
+		"--device=dri",
+		"--filesystem=xdg-config/cosmic:rw",
+		"--filesystem=xdg-music:r",
+		"--talk-name=com.system76.CosmicSettingsDaemon"
+  	]
+}

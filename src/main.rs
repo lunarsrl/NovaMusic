@@ -4,10 +4,9 @@ use crate::log::setup_logger;
 
 mod app;
 mod config;
+mod database;
 mod i18n;
 mod log;
-mod database;
-
 
 fn main() -> cosmic::iced::Result {
     //start logging
@@ -28,4 +27,3 @@ fn main() -> cosmic::iced::Result {
     // Starts the application's event loop with `()` as the application's flags.
     cosmic::app::run::<app::AppModel>(settings, ())
 }
-

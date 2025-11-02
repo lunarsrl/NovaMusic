@@ -1,4 +1,5 @@
 .cargo/
+.idea/
 *.pdb
 **/*.rs.bk
 debug/
@@ -13,6 +14,13 @@ debian/*
 !debian/rules
 !debian/source
 output.log
-cosmic_music.db
-elisaDatabase.db
-.idea
+
+#flatpak
+repo
+.flatapak-builder
+build-dir
+
+#perf
+perf.data
+test.perf
+
