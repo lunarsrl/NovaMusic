@@ -5,8 +5,7 @@
 </div>
 
 <div align="center">
-    <img width="300" src="images/Screenshot_2025-10-28_14-43-37.png">
-    <img width="300" src="images/Screenshot_2025-10-28_14-43-18.png">
+    <img width="600" src="images/NowPlayingPlaylist.png">
 </div>
 
 ## Contents:
@@ -102,10 +101,10 @@ for use with Rust. The [mold][mold] linker will only improve link times if LTO i
 
 ## Screenshots
 
-<img src="images/Screenshot_2025-10-28_14-43-37.png">
-<img src="images/Screenshot_2025-10-28_14-43-18.png">
-<img src="images/Screenshot_2025-10-28_14-41-11.png">
-<img src="images/Screenshot_2025-10-28_14-42-59.png">
+<img src="images/NowPlayingPlaylist.png">
+<img src="images/Albums.png">
+<img src="images/TracklistSearch.png">
+
 
 [fluent]: https://projectfluent.org/
 
