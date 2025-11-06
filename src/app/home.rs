@@ -283,7 +283,7 @@ pub(crate) fn format_cover_page(
                     .into(),
                 Some(track) => cosmic::widget::image(track)
                     //todo make this customizable
-                    .content_fit(ContentFit::Cover)
+                    .content_fit(ContentFit::ScaleDowScaleDown
                     .border_radius([12.0, 12.0, 12.0, 12.0])
                     .into(),
             }])
