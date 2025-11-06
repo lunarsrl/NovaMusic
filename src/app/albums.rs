@@ -135,7 +135,7 @@ impl AlbumPage {
                                             if let Some(cover_art) = &album.cover_art {
                                                 cosmic::widget::container::Container::new(
                                                     cosmic::widget::image(cover_art)
-                                                        .content_fit(ContentFit::Cover),
+                                                        .content_fit(ContentFit::Fill),
                                                 )
                                                 .height((model.config.grid_item_size * 32) as f32)
                                                 .width((model.config.grid_item_size * 32) as f32)
@@ -623,7 +623,7 @@ impl FullAlbum {
                             .size(128)
                             .into(),
                         Some(handle) => cosmic::widget::image(handle)
-                            .content_fit(ContentFit::Cover)
+                            .content_fit(ContentFit::Fill)
                             .height(128.0)
                             .width(128.0)
                             .into(),

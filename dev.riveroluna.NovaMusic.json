@@ -24,8 +24,8 @@
 			"cargo --offline fetch --manifest-path Cargo.toml --verbose",
 			"cargo --offline build --release --verbose",
 			"install -Dm0755 ./target/release/nova-music /app/bin/nova-music",
-			"install -Dm0644 ./resources/dev.riveroluna.NovaMusic.desktop /app/share/applications/dev.riveroluna",
-			"install -Dm0644 ./resources/dev.riveroluna.NovaMusic.metainfo.xml /app/share/applications/dev.riveroluna",
+			"install -Dm0644 ./resources/dev.riveroluna.NovaMusic.desktop /app/share/applications/dev.riveroluna.NovaMusic.desktop",
+			"install -Dm0644 ./resources/dev.riveroluna.NovaMusic.metainfo.xml /app/share/metainfo/dev.riveroluna.NovaMusic.metainfo.xml",
 			"install -Dm0644 ./resources/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg /app/share/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg"
 
 
@@ -44,8 +44,7 @@
 		"--socket=pulseaudio",
 		"--socket=wayland",
 		"--device=dri",
-		"--filesystem=xdg-config/cosmic:rw",
-		"--filesystem=xdg-music:r",
+		"--filesystem=xdg-config/cosmic:rw",	
 		"--talk-name=com.system76.CosmicSettingsDaemon"
   	]
 }

@@ -370,7 +370,7 @@ impl cosmic::Application for AppModel {
         let config = config::Config::load();
         let config_handler = match config.0 {
             None => {
-                panic!("NO CONFIG");
+                panic!("NO CONFIG Exists");
             }
             Some(som) => som,
         };

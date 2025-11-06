@@ -20,14 +20,12 @@ humantime = "2.2.0"
 fern = "0.7.1"
 rodio = { version = "0.21.1", features = ["symphonia", "symphonia-all", "playback"], default-features = false }
 symphonia = { version = "0.5.4", features = ["all-codecs"] }
-strum_macros = "0.27.1"
 rusqlite = "0.35.0"
 colored = "3.0.0"
 futures = "0.3.31"
 rayon = "1.10.0"
 dirs = "6.0.0"
 regex = "1.11.1"
-tokio-stream = "0.1.17"
 
 [dependencies.i18n-embed]
 version = "0.15"
