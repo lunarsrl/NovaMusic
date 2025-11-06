@@ -207,13 +207,17 @@ fn search_group_display<'a>(
             "SearchFilterSpecify",
             filter = search_title
         ))
-        .into()])
+        .into()
+        ])
         .padding(cosmic::theme::spacing().space_xxs)
         .width(Length::Fill)
         .into(),
+        cosmic::widget::divider::horizontal::light().into(),
         track_list_display(&tracks),
     ]))
-    .class(cosmic::theme::Container::Secondary)
+
+    .class(cosmic::theme::Container::Primary)
+        .padding(cosmic::theme::spacing().space_xxs)
     .into()
 }
 
@@ -254,5 +258,8 @@ fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Me
             None => {}
         }
     }
-    list_widget.unwrap().into_element()
+
+        list_widget.unwrap().into_element()
+
+
 }
