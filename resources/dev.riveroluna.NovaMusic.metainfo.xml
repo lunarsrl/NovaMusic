@@ -1,35 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>dev.riveroluna.NovaMusic</id>
-  <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-2.0-or-later</project_license>
-  <name>Nova Music</name>
+  
+  <name>Nova Music </name>
   <summary>A music player written in the libcosmic toolkit</summary>
-  <icon type="remote" width="64" height="64" scale="1">
-	  https://github.com/lunarsrl/NovaMusic/resources/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg
-  </icon>
-  <url type="vcs-browser">https://github.com/SRiverol/NovaMusic.git</url>
-  <launchable type="desktop-id">dev.riveroluna.NovaMusic.desktop</launchable>
-  <provides>
-    <id>dev.riveroluna.NovaMusic</id>
-    <binaries>
-      <binary>nova-music</binary>
-    </binaries>
-  </provides>
-  <requires>
-    <display_length compare="ge">360</display_length>
-  </requires>
-  <supports>
-    <control>keyboard</control>
-    <control>pointing</control>
-    <control>touch</control>
-  </supports>
-  <categories>
-    <category>MUSIC</category>
-  </categories>
-  <keywords>
-    <keyword>MUSIC</keyword>
-  </keywords>
-  <content_rating type="oars-1.1" />
-</component>
+  <content_rating type="oars-1.0" />
+  <url type="homepage">https://github.com/lunarsrl/NovaMusic</url>
 
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>GPL-2.0-or-later</project_license>
+
+  `<developer id="@lunarpenguin@masto.es">
+	  <name>Samuel Rivero luna</name>
+  </developer>
+ 
+  <releases> 
+	  <release version="1.0" date = "2025-11-06" type="stable"> </release>
+  </releases>
+ 
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  
+  <description>
+    <p>
+      A music player written in the libcosmic toolkit. Scans a directory for audio files, loads metadata, and displays and organizes it across a number of pages. View your music by individual tracks, albums, or artists. Create m3u8 playlists easily from within the application, choose a name and icon and see it displayed on the playlists page for easy access to your favorite songs.
+    </p>
+  </description>
+  
+  <launchable type="desktop-id">dev.riveroluna.NovaMusic.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://github.com/lunarsrl/NovaMusic/blob/main/images/NowPlayingPlaylist.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://github.com/lunarsrl/NovaMusic/blob/main/images/Albums.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://github.com/lunarsrl/NovaMusic/blob/main/images/TracklistSearch.png</image>
+    </screenshot>
+  </screenshots>
+
+  <branding>
+	  <color type="primary" scheme_preference="light">#04a5e5</color>
+	  <color type="primary" scheme_preference="dark">#04a5e5</color>
+  </branding>
+</component>

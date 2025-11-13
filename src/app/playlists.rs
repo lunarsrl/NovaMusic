@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::{AppModel, Message};
 use cosmic::iced::{Alignment, ContentFit, Length};
 use cosmic::iced_widget::scrollable::Viewport;
@@ -390,7 +392,7 @@ impl PlaylistPage {
         cosmic::widget::container(
             cosmic::widget::column::with_children(vec![
                 cosmic::widget::row::with_children(vec![
-                    cosmic::widget::text::title2(fl!("playlists"))
+                    cosmic::widget::text::title3(fl!("playlists"))
                         .width(Length::FillPortion(2))
                         .into(),
                     cosmic::widget::horizontal_space()

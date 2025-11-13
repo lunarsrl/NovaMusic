@@ -51,6 +51,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufRead, Read, Write as OtherWrite};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
@@ -58,7 +59,8 @@ use std::{fs, io};
 use symphonia::default::get_probe;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
-const APP_ICON: &[u8] = include_bytes!("../resources/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg");
+const APP_ICON: &[u8] =
+    include_bytes!("../resources/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg");
 
 /// The application model stores app-specific state used to describe its interface and
 /// drive its logic.
@@ -100,7 +102,6 @@ pub struct AppModel {
     pub playlist_dialog_text: String,
     playlist_dialog_path: String,
     pub playlist_cover: Option<PathBuf>,
-    footer_toggled: bool,
     playlist_delete_dialog: bool,
     playlist_edit_dialog: bool,
 
@@ -179,7 +180,7 @@ pub enum Message {
     ChooseFile(FileChooserEvents),
 
     // Page Rendering
-    OnNavEnter,
+    OnNavEnter(ReEnterNavReason),
     ScrollView(Viewport),
 
     // Album Page
@@ -248,7 +249,7 @@ pub enum Message {
     VolumeSliderChange(f32),
 
     // Footer
-    FooterToggle,
+    ToggleFooter(bool),
 
     // Error Reporting
     Toasts(cosmic::widget::toaster::ToastId),
@@ -263,6 +264,14 @@ pub enum Message {
     EditPlaylistCancel,
     EditArtistConfirm,
     ArtistAddPicture(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum ReEnterNavReason {
+    UserInteraction,
+    Rescan,
+    ArtistEdit,
+    PlaylistEdit,
 }
 
 #[derive(Clone, Debug)]
@@ -418,8 +427,6 @@ impl cosmic::Application for AppModel {
             playlist_cover: None,
 
             // footer
-            footer_toggled: true,
-
             toasts: cosmic::widget::toaster::Toasts::new(|a| Message::Toasts(a)),
             albumsid,
             tracksid,
@@ -463,21 +470,8 @@ impl cosmic::Application for AppModel {
         None
     }
     fn footer(&self) -> Option<Element<Self::Message>> {
-        if !self.footer_toggled {
-            return Some(
-                cosmic::widget::container(
-                    cosmic::widget::row::with_children(vec![
-                        cosmic::widget::horizontal_space().into(),
-                        cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                            "go-down-symbolic",
-                        ))
-                        .on_press(Message::FooterToggle)
-                        .into(),
-                    ])
-                    .padding(cosmic::theme::spacing().space_xxs),
-                )
-                .into(),
-            );
+        if !self.config.footer {
+            return None;
         }
 
         let time_elapsed = crate::app::home::format_time(self.song_progress);
@@ -547,16 +541,12 @@ impl cosmic::Application for AppModel {
                                 cosmic::widget::text::heading(data.0.unwrap_or("")).into(),
                                 cosmic::widget::text::heading(data.1.unwrap_or("")).into(),
                                 cosmic::widget::text::heading(data.2.unwrap_or("")).into(),
-                                cosmic::widget::horizontal_space().into(),
-                                // todo Find a good way of letting users clear the queue from the footer
-                                // cosmic::widget::button::destructive(fl!("ClearAll"))
-                                //     .on_press(Message::ClearQueue)
-                                //     .into(),
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "go-up-symbolic",
-                                ))
-                                .on_press(Message::FooterToggle)
-                                .into(),
+                                cosmic::widget::horizontal_space().into(), // todo Context menu for mini player options
+                                                                           // cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                                                           //     "go-up-symbolic",
+                                                                           // ))
+                                                                           // .on_press(Message::ToggleFooter)
+                                                                           // .into(),
                             ])
                             .spacing(cosmic::theme::spacing().space_s)
                             .into(),
@@ -970,8 +960,10 @@ impl cosmic::Application for AppModel {
                         match std::fs::remove_file(&page.playlist.path) {
                             Ok(_) => {
                                 toppage.playlist_page_state = PlaylistPageState::Loading;
-                                return cosmic::Task::future(async move { Message::OnNavEnter })
-                                    .map(cosmic::Action::App);
+                                return cosmic::Task::future(async move {
+                                    Message::OnNavEnter(ReEnterNavReason::PlaylistEdit)
+                                })
+                                .map(cosmic::Action::App);
                             }
                             Err(err) => {
                                 log::error!("Failed to delete file \n -------- \n Err: {}", err);
@@ -1474,6 +1466,8 @@ impl cosmic::Application for AppModel {
 
                 // Settings: No rescan until current rescan finishes
                 self.rescan_available = false;
+
+                log::info!("{}", self.rescan_available);
                 self.config
                     .set_num_files_found(&self.config_handler, 0)
                     .expect("Failed to change config");
@@ -1508,7 +1502,7 @@ impl cosmic::Application for AppModel {
                     page.track_page_state = TrackPageState::Loading
                 }
 
-                // Playlists: FUll reset
+                // Playlists: Full reset
                 if let Page::Playlists(page) = self
                     .nav
                     .data_mut::<Page>(self.playlistsid)
@@ -1533,7 +1527,9 @@ impl cosmic::Application for AppModel {
                     100,
                     |mut tx| async move {
                         scan_directory(path, &mut tx).await;
-                        tx.send(Message::OnNavEnter).await.expect("de")
+                        tx.send(Message::OnNavEnter(ReEnterNavReason::Rescan))
+                            .await
+                            .expect("de")
                     },
                 ))
                 .map(cosmic::Action::App);
@@ -1636,7 +1632,6 @@ impl cosmic::Application for AppModel {
                 self.config
                     .set_files_scanned(&self.config_handler, self.config.files_scanned + 1)
                     .expect("Failed to save to config");
-                self.rescan_available = true;
             }
             Message::ProbeFail => {
                 self.config
@@ -1659,8 +1654,28 @@ impl cosmic::Application for AppModel {
                     dat.albums = Arc::from(new_album)
                 }
             }
-            Message::OnNavEnter => {
+            Message::OnNavEnter(reasoning) => {
+                //always
                 self.search_field = "".to_string();
+
+                // re-entered nav because:
+                match reasoning {
+                    ReEnterNavReason::UserInteraction => {
+                        // normal
+                    }
+                    ReEnterNavReason::Rescan => {
+                        // rescan must have finished, make it available again
+                        self.rescan_available = true;
+                    }
+                    ReEnterNavReason::ArtistEdit => {
+                        // an artist was edited
+                        // todo: less obtrusive reloading of the page
+                    }
+                    ReEnterNavReason::PlaylistEdit => {
+                        // a playlist was edited
+                        // todo: less obtrusive reloading of the page
+                    }
+                }
 
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(_) => {}
@@ -2728,7 +2743,9 @@ where a.name = ?    ",
                 {
                     val.playlist_page_state = PlaylistPageState::Loading
                 }
-                return cosmic::task::future(async move { Message::OnNavEnter });
+                return cosmic::task::future(async move {
+                    Message::OnNavEnter(ReEnterNavReason::PlaylistEdit)
+                });
             }
             Message::CreatePlaylistIconChosen(path) => {
                 log::info!("Image: {}", path.to_string_lossy());
@@ -2908,21 +2925,10 @@ where a.name = ?    ",
                     .set_volume(&self.config_handler, val)
                     .expect("Failed to set volume");
             }
-            Message::FooterToggle => {
-                if let Page::Albums(page) = self
-                    .nav
-                    .data_mut::<Page>(self.albumsid)
-                    .expect("Should always be intialized")
-                {
-                    log::info!("page:  {:?}", page.albums)
-                } else {
-                    log::info!("When did this happen")
-                }
-
-                match self.footer_toggled {
-                    true => self.footer_toggled = false,
-                    false => self.footer_toggled = true,
-                }
+            Message::ToggleFooter(val) => {
+                self.config
+                    .set_footer(&self.config_handler, val)
+                    .expect("Failed to edit config");
             }
             app::Message::AddTrackById((t_type, id)) => {
                 let conn = connect_to_db();
@@ -3032,8 +3038,6 @@ where a.name = ?    ",
                     return task;
                 }
             }
-
-            _ => {}
         };
         Task::none()
     }
@@ -3064,7 +3068,7 @@ fn handle_keybinds(
     match event {
         Event::Keyboard(key) => {
             if let keyboard::Event::KeyPressed { key, .. } = key {
-                log::info!("{:?}", key);
+                log::info!("[{:?}]", key);
                 match key {
                     cosmic::iced::keyboard::Key::Named(
                         cosmic::iced::keyboard::key::Named::Space,
@@ -3137,7 +3141,9 @@ impl AppModel {
         }
 
         fn do_thing() -> Task<cosmic::Action<Message>> {
-            return cosmic::task::future(async move { Message::OnNavEnter });
+            return cosmic::task::future(async move {
+                Message::OnNavEnter(ReEnterNavReason::UserInteraction)
+            });
         }
 
         if let Some(id) = self.core.main_window_id() {

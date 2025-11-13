@@ -78,11 +78,12 @@ FilesScanned = Files Scanned
 MusicScanning = Music Scanning
 FullRescan = Full Rescan
 Rescan = Rescan
-ScanProgress = Scan Progress
+ScanProgress = Scan Progress:
 UserInterface = User Interface
 GridItemSize = Grid Item Size
 MusicPlayer = Music Player
 AppVolume = App Volume {$volume}
+FooterToggle = Toggle Mini-Player
 
 # Error
 SearchFailed = Search failed!

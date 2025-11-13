@@ -1,11 +1,11 @@
 [Desktop Entry]
-Name=Nova Music
-Comment=A music player written in the libcosmic toolkit
+Version=1.0
 Type=Application
+
+Name=Nova Music 
+Comment=A music player written in the libcosmic toolkit
+Categories=AudioVideo;Player;
+
 Icon=dev.riveroluna.NovaMusic
-Exec=nova-music %F
+Exec=nova-music
 Terminal=false
-StartupNotify=true
-Categories=Audio;AudioVideo
-Keywords=Music
-MimeType=

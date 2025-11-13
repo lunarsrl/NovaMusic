@@ -148,7 +148,7 @@ impl HomePage {
                                     .spacing(cosmic::theme::spacing().space_xs),
                                 )
                                 .padding(cosmic::theme::spacing().space_xxs)
-                                .class(cosmic::style::Container::Secondary)
+                                .class(cosmic::style::Container::Card)
                                 .into(),
                             ])
                             .spacing(cosmic::theme::spacing().space_xs),

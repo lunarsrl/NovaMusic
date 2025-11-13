@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::{AppTrack, Message};
 use crate::{app, fl};
 use cosmic::iced;
@@ -54,7 +56,7 @@ impl TrackPage {
                     cosmic::widget::row::with_children(vec![
                         // HEADING AREA
                         cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text::title2(fl!("TrackLibrary"))
+                            cosmic::widget::text::title3(fl!("TrackLibrary"))
                                 .width(Length::FillPortion(2))
                                 .into(),
                             cosmic::widget::horizontal_space()
@@ -207,17 +209,15 @@ fn search_group_display<'a>(
             "SearchFilterSpecify",
             filter = search_title
         ))
-        .into()
-        ])
+        .into()])
         .padding(cosmic::theme::spacing().space_xxs)
         .width(Length::Fill)
         .into(),
         cosmic::widget::divider::horizontal::light().into(),
         track_list_display(&tracks),
     ]))
-
     .class(cosmic::theme::Container::Primary)
-        .padding(cosmic::theme::spacing().space_xxs)
+    .padding(cosmic::theme::spacing().space_xxs)
     .into()
 }
 
@@ -259,7 +259,5 @@ fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Me
         }
     }
 
-        list_widget.unwrap().into_element()
-
-
+    list_widget.unwrap().into_element()
 }

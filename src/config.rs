@@ -14,6 +14,7 @@ pub struct Config {
     pub tracks_found: u32,
     pub albums_found: u32,
     pub volume: f32,
+    pub footer: bool,
 }
 
 impl Config {
@@ -43,6 +44,7 @@ impl Default for Config {
             tracks_found: 0,
             albums_found: 0,
             volume: 100.0,
+            footer: true,
         }
     }
 }

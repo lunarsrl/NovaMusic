@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 use crate::app::tracks::SearchResult;
 use crate::app::{AppModel, Message};
 use crate::{app, fl};
@@ -630,7 +632,7 @@ impl FullAlbum {
                     },
                     cosmic::widget::Column::with_children([
                         // Album Title and Author Column
-                        cosmic::widget::text::title2(self.album.name.as_str()).into(),
+                        cosmic::widget::text::title3(self.album.name.as_str()).into(),
                         cosmic::widget::text::title4(fl!(
                             "AlbumAttribution",
                             artist = self.album.artist.as_str()
