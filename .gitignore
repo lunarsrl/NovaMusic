@@ -19,6 +19,7 @@ output.log
 repo
 .flatapak-builder
 build-dir
+gen-flaca.py
 
 #perf
 perf.data
