@@ -6,6 +6,6 @@ Name=Nova Music
 Comment=A music player written in the libcosmic toolkit
 Categories=AudioVideo;Player;
 
-Icon=dev.riveroluna.NovaMusic
+Icon=dev.lunarsrl.NovaMusic
 Exec=nova-music
 Terminal=false

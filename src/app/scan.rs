@@ -26,6 +26,10 @@ async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, index: &mut u32) {
             }
         }
     } else {
-        todo!("error toast")
+        tx.send(Message::ToastError(String::from(format!(
+            "Error at path: {}",
+            path.to_string_lossy().to_string()
+        ))))
+        .await;
     }
 }

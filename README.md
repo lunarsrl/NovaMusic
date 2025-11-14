@@ -1,5 +1,5 @@
 <div align="center" >
-  <img width="182" src="resources/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg">
+  <img width="182" src="resources/icons/hicolor/scalable/apps/dev.lunarsrl.NovaMusic.svg">
   <h1>Nova Music</h1>
   <p>A music player written with the libcosmic toolkit</p>
 </div>

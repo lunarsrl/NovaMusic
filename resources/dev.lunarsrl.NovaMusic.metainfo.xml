@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>dev.riveroluna.NovaMusic</id>
+  <id>dev.lunarsrl.NovaMusic</id>
   
   <name>Nova Music </name>
   <summary>A music player written in the libcosmic toolkit</summary>
@@ -29,7 +29,7 @@
     </p>
   </description>
   
-  <launchable type="desktop-id">dev.riveroluna.NovaMusic.desktop</launchable>
+  <launchable type="desktop-id">dev.lunarsrl.NovaMusic.desktop</launchable>
   <screenshots>
     <screenshot type="default">
       <image>https://github.com/lunarsrl/NovaMusic/blob/main/images/NowPlayingPlaylist.png</image>

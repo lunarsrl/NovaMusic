@@ -422,7 +422,7 @@ impl ArtistsPage {
                 .into()])
                 .spacing(cosmic::theme::spacing().space_xxs)
                 .into(),
-                cosmic::widget::divider::horizontal::default().into(),
+                // cosmic::widget::divider::horizontal::default().into(),
                 body,
             ])
             .spacing(cosmic::theme::spacing().space_xs),

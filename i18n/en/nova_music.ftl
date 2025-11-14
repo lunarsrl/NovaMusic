@@ -87,3 +87,4 @@ FooterToggle = Toggle Mini-Player
 
 # Error
 SearchFailed = Search failed!
+ScanFileDoesNotExist = The music directory could not be found

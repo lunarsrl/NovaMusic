@@ -60,7 +60,7 @@ use symphonia::default::get_probe;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] =
-    include_bytes!("../resources/icons/hicolor/scalable/apps/dev.riveroluna.NovaMusic.svg");
+    include_bytes!("../resources/icons/hicolor/scalable/apps/dev.lunarsrl.NovaMusic.svg");
 
 /// The application model stores app-specific state used to describe its interface and
 /// drive its logic.
@@ -301,7 +301,7 @@ impl cosmic::Application for AppModel {
     type Message = Message;
 
     /// Unique identifier in RDNN (reverse domain name notation) format.
-    const APP_ID: &'static str = "dev.riveroluna.NovaMusic";
+    const APP_ID: &'static str = "dev.lunarsrl.NovaMusic";
 
     fn core(&self) -> &cosmic::Core {
         &self.core
@@ -651,12 +651,11 @@ impl cosmic::Application for AppModel {
                                 self.config.scan_dir.as_str(),
                             )
                             .on_input(|val| Message::ManualScanDirEdit(val))
-                            .width(Length::FillPortion(1))
                             .into(),
                             cosmic::widget::horizontal_space().into(),
                             cosmic::widget::button::text(fl!("folderselect"))
+                                .class(cosmic::theme::style::Button::Standard)
                                 .on_press(Message::ChooseFolder)
-                                .width(Length::FillPortion(1))
                                 .into(),
                         ]),
                     ))
@@ -931,7 +930,9 @@ impl cosmic::Application for AppModel {
                     }
                 }
             }
-            Message::ManualScanDirEdit(val) => {}
+            Message::ManualScanDirEdit(val) => {
+                self.config.set_scan_dir(&self.config_handler, val).unwrap();
+            }
             Message::ToastError(error) => {
                 return self
                     .toasts
@@ -960,6 +961,11 @@ impl cosmic::Application for AppModel {
                         match std::fs::remove_file(&page.playlist.path) {
                             Ok(_) => {
                                 toppage.playlist_page_state = PlaylistPageState::Loading;
+                                match self.playlist_delete_dialog {
+                                    true => self.playlist_delete_dialog = false,
+                                    false => self.playlist_delete_dialog = true,
+                                }
+
                                 return cosmic::Task::future(async move {
                                     Message::OnNavEnter(ReEnterNavReason::PlaylistEdit)
                                 })
@@ -1456,6 +1462,13 @@ impl cosmic::Application for AppModel {
                             handle.abort()
                         }
                     }
+                }
+
+                if fs::exists(self.config.scan_dir.as_str()).is_err() {
+                    return cosmic::Task::future(async move {
+                        Message::ToastError(fl!("ScanFileDoesNotExist"))
+                    })
+                    .map(cosmic::Action::App);
                 }
 
                 self.queue_pos = 0;
@@ -3193,7 +3206,7 @@ fn connect_to_db() -> rusqlite::Connection {
     let conn = match rusqlite::Connection::open(
         dirs::data_local_dir()
             .unwrap()
-            .join("dev.riveroluna.NovaMusic")
+            .join("dev.lunarsrl.NovaMusic")
             .join("nova_music.db"),
     ) {
         Ok(conn) => conn,

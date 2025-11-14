@@ -86,4 +86,4 @@ AppVolume = Volumen del applicacion {$volume}
 
 # Error
 SearchFailed = Error con la buscada!
-None = ""
+ScanFileDoesNotExist = No se encuentra el directorio de música

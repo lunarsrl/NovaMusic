@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// SPDX-License-Identifier: GPL-2.0-or-later
-
 use crate::app::tracks::SearchResult;
 use crate::app::{AppModel, Message};
 use crate::{app, fl};
@@ -60,12 +58,10 @@ impl AlbumPage {
                             .into()
                     } else {
                         cosmic::widget::container(
-
                             cosmic::widget::column::with_children(
                                 vec![
-
                                     cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::text::title2(fl!("AlbumLibrary"))
+                                        cosmic::widget::text::title3(fl!("AlbumLibrary"))
                                             .width(Length::FillPortion(2))
                                             .into(),
                                         cosmic::widget::horizontal_space()
@@ -105,7 +101,7 @@ impl AlbumPage {
                 cosmic::widget::container(
                     cosmic::widget::column::with_children(vec![
                         cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text::title2(fl!("AlbumLibrary"))
+                            cosmic::widget::text::title3(fl!("AlbumLibrary"))
                                 .width(Length::FillPortion(2))
                                 .into(),
                             cosmic::widget::horizontal_space()
