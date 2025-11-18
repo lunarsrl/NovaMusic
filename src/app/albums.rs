@@ -8,7 +8,7 @@ use cosmic::iced::{Alignment, ContentFit, Length};
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::widget::JustifyContent;
 use cosmic::{iced, Application, Element, Theme};
-use std::cmp::PartialEq;
+use std::cmp::{Ordering, PartialEq};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -443,7 +443,6 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
                 val.push(container);
             }
         }
-        log::info!("{}", discs.len())
     }
 
     let mut disc_lists = vec![];
@@ -642,8 +641,8 @@ impl FullAlbum {
                             .on_press(Message::AddAlbumToQueue(
                                 self.tracks
                                     .iter()
-                                    .map(|a| a.file_path.clone())
-                                    .collect::<Vec<String>>(),
+                                    .map(|a| (a.file_path.clone(), a.disc_number))
+                                    .collect::<Vec<(String, u32)>>(),
                             ))
                             .into(),
                     ])

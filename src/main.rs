@@ -15,8 +15,8 @@ fn main() -> cosmic::iced::Result {
     let requested_languages = &i18n_embed::DesktopLanguageRequester::requested_languages();
 
     // Override language for debug or for screenshots
-    // let requested_languages: &Vec<LanguageIdentifier> =
-    //     &vec!["en-US".parse().expect("Failed to parse.")];
+    //let requested_languages: &Vec<LanguageIdentifier> =
+    //    &vec!["en-US".parse().expect("Failed to parse.")];
 
     // Enable localizations to be applied.
     i18n::init(requested_languages);

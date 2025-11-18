@@ -1,49 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+
 <component type="desktop-application">
-  <id>dev.lunarsrl.NovaMusic</id>
-  
-  <name>Nova Music </name>
-  <summary>A music player written in the libcosmic toolkit</summary>
-  <content_rating type="oars-1.0" />
-  <url type="homepage">https://github.com/lunarsrl/NovaMusic</url>
+    <id>dev.lunarsrl.NovaMusic</id>
 
-  <metadata_license>FSFAP</metadata_license>
-  <project_license>GPL-2.0-or-later</project_license>
+    <name>Nova Music</name>
+    <summary>A music player written in the libcosmic toolkit</summary>
+    <content_rating type="oars-1.0"/>
+    <url type="homepage">https://github.com/lunarsrl/NovaMusic</url>
 
-  `<developer id="@lunarpenguin@masto.es">
-	  <name>Samuel Rivero luna</name>
-  </developer>
- 
-  <releases> 
-	  <release version="1.0" date = "2025-11-06" type="stable"> </release>
-  </releases>
- 
-  <supports>
-    <control>pointing</control>
-    <control>keyboard</control>
-  </supports>
-  
-  <description>
-    <p>
-      A music player written in the libcosmic toolkit. Scans a directory for audio files, loads metadata, and displays and organizes it across a number of pages. View your music by individual tracks, albums, or artists. Create m3u8 playlists easily from within the application, choose a name and icon and see it displayed on the playlists page for easy access to your favorite songs.
-    </p>
-  </description>
-  
-  <launchable type="desktop-id">dev.lunarsrl.NovaMusic.desktop</launchable>
-  <screenshots>
-    <screenshot type="default">
-      <image>https://github.com/lunarsrl/NovaMusic/blob/main/images/NowPlayingPlaylist.png</image>
-    </screenshot>
-    <screenshot>
-      <image>https://github.com/lunarsrl/NovaMusic/blob/main/images/Albums.png</image>
-    </screenshot>
-    <screenshot>
-      <image>https://github.com/lunarsrl/NovaMusic/blob/main/images/TracklistSearch.png</image>
-    </screenshot>
-  </screenshots>
+    <metadata_license>FSFAP</metadata_license>
+    <project_license>GPL-2.0-or-later</project_license>
 
-  <branding>
-	  <color type="primary" scheme_preference="light">#04a5e5</color>
-	  <color type="primary" scheme_preference="dark">#04a5e5</color>
-  </branding>
+    `
+    <developer id="@lunarpenguin@masto.es">
+        <name>Samuel Rivero luna</name>
+    </developer>
+
+    <releases>
+        <release version="1.0" date="2025-11-06" type="stable"></release>
+    </releases>
+
+    <supports>
+        <control>pointing</control>
+        <control>keyboard</control>
+    </supports>
+
+    <description>
+        <p>
+            A music player written in the libcosmic toolkit. Scans a directory for audio files, loads metadata, and
+            displays and organizes it across a number of pages. View your music by individual tracks, albums, or
+            artists. Create m3u8 playlists easily from within the application, choose a name and icon and see it
+            displayed on the playlists page for easy access to your favorite songs.
+        </p>
+    </description>
+
+    <launchable type="desktop-id">dev.lunarsrl.NovaMusic.desktop</launchable>
+    <screenshots>
+        <screenshot type="default">
+            <image>
+                https://lunarsrl.dev/static/images/NovaMusic/NowPlaying.png
+            </image>
+        </screenshot>
+        <screenshot>
+            <image>
+                https://lunarsrl.dev/static/images/NovaMusic/Album.png
+            </image>
+        </screenshot>
+        <screenshot>
+            <image>
+                https://lunarsrl.dev/static/images/NovaMusic/Tracks.png
+            </image>
+        </screenshot>
+    </screenshots>
+
+    <branding>
+        <color type="primary" scheme_preference="light">#04a5e5</color>
+        <color type="primary" scheme_preference="dark">#04a5e5</color>
+    </branding>
 </component>

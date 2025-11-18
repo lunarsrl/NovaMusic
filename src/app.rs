@@ -33,6 +33,7 @@ use crate::database::{create_database, create_database_entry, find_visual};
 use crate::{app, config, fl};
 use colored::Colorize;
 use cosmic::app::context_drawer;
+use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key;
 use cosmic::iced::task::Handle;
@@ -200,7 +201,7 @@ pub enum Message {
     AddTrackToQueue(String),
     AddTrackById((TrackType, u32)),
     //todo Make albums in queue fancier kinda like Elisa does it
-    AddAlbumToQueue(Vec<String>),
+    AddAlbumToQueue(Vec<(String, u32)>),
 
     // Track Page
     TracksLoaded,
@@ -2643,12 +2644,16 @@ where a.name = ?    ",
                     Message::SongFinished(QueueUpdateReason::Previous)
                 });
             }
-            app::Message::AddAlbumToQueue(paths) => {
+            app::Message::AddAlbumToQueue(mut paths) => {
                 return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
                     0,
                     |mut tx| async move {
+                        paths.sort_by(|a, b| a.1.cmp(&b.1));
+
                         for file in paths {
-                            tx.send(Message::AddTrackToQueue(file)).await.expect("send")
+                            tx.send(Message::AddTrackToQueue(file.0))
+                                .await
+                                .expect("send")
                         }
                     },
                 ))

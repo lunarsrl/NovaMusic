@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// SPDX-License-Identifier: GPL-2.0-or-later
-
 use crate::app::{AppModel, Message};
 use cosmic::iced::{Alignment, ContentFit, Length};
 use cosmic::iced_widget::scrollable::Viewport;
@@ -228,8 +226,8 @@ impl PlaylistPage {
                                             playlist
                                                 .tracks
                                                 .iter()
-                                                .map(|a| a.path.clone())
-                                                .collect::<Vec<String>>(),
+                                                .map(|a| (a.path.clone(), 0))
+                                                .collect::<Vec<(String, u32)>>(),
                                         ))
                                         .into(),
                                     cosmic::widget::row::with_children(vec![
