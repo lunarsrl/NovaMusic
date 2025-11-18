@@ -5,7 +5,7 @@
 </div>
 
 <div align="center">
-    <img width="600" src="images/NowPlayingPlaylist.png">
+    <img width="600" src="https://lunarsrl.dev/static/images/NovaMusic/NowPlaying.png">
 </div>
 
 ## Contents:
@@ -50,23 +50,21 @@ A [justfile](./justfile) is included by default for the [casey/just][just] comma
 
 ## Todo:
 
-#### Priority:
-
+#### Important:
 - Exploring CPAL instead of Rodio
 - Gapless Playback
 - Crossfade support
 
 #### Other:
 
-- Artist View
 - Optional network features (ex: Musicbrainz integration for automatic metadata)
 - Genres
 - Shuffle options
-- Basic Keybinds
 - Flatpak release!
 
 #### Completed:
-
+- ~~Artist View~~
+- ~~Basic Keybinds~~
 - ~~[ ! ] Replace current playlist implementation with m3u~~
 - ~~Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
 - ~~Localization update~~
@@ -101,9 +99,9 @@ for use with Rust. The [mold][mold] linker will only improve link times if LTO i
 
 ## Screenshots
 
-<img src="images/NowPlayingPlaylist.png">
-<img src="images/Albums.png">
-<img src="images/TracklistSearch.png">
+<img src="https://lunarsrl.dev/static/images/NovaMusic/NowPlaying.png">
+<img src="https://lunarsrl.dev/static/images/NovaMusic/Album.png">
+<img src="https://lunarsrl.dev/static/images/NovaMusic/Tracks.png">
 
 
 [fluent]: https://projectfluent.org/
