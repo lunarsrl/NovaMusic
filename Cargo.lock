@@ -3446,6 +3446,7 @@ dependencies = [
  "rodio",
  "rusqlite",
  "rust-embed",
+ "serde",
  "symphonia",
  "tokio",
  "vergen",

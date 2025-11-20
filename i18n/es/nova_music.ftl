@@ -83,7 +83,8 @@ UserInterface = Interface de usuario
 GridItemSize = Tamaño de elementos
 MusicPlayer = Reproducidor de Música
 AppVolume = Volumen del applicacion {$volume}
-
+FooterToggle = Mostrar barra de reproducion
+Theme = Tema
 # Error
 SearchFailed = Error con la buscada!
 ScanFileDoesNotExist = No se encuentra el directorio de música

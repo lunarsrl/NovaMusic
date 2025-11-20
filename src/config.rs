@@ -3,11 +3,30 @@
 use crate::app;
 use cosmic::cosmic_config::{self, cosmic_config_derive::CosmicConfigEntry, CosmicConfigEntry};
 use cosmic::Application;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum AppTheme {
+    Light,
+    Dark,
+    System,
+}
+
+impl AppTheme {
+    pub fn theme(&self) -> cosmic::theme::Theme {
+        match &self {
+            AppTheme::Light => cosmic::theme::system_light(),
+            AppTheme::Dark => cosmic::theme::system_dark(),
+            AppTheme::System => cosmic::theme::system_preference(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, CosmicConfigEntry, PartialEq)]
 #[version = 1]
 pub struct Config {
     pub scan_dir: String,
+    pub app_theme: AppTheme,
     pub grid_item_size: u32,
     pub num_files_found: u32,
     pub files_scanned: u32,
@@ -37,6 +56,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
+            app_theme: AppTheme::System,
             scan_dir: "".to_string(),
             grid_item_size: 3,
             num_files_found: 0,

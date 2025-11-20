@@ -84,7 +84,7 @@ GridItemSize = Grid Item Size
 MusicPlayer = Music Player
 AppVolume = App Volume {$volume}
 FooterToggle = Toggle Mini-Player
-
+Theme = Theme
 # Error
 SearchFailed = Search failed!
 ScanFileDoesNotExist = The music directory could not be found

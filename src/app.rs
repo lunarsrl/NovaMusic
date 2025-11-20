@@ -28,7 +28,7 @@ use crate::app::playlists::{
 use crate::app::scan::scan_directory;
 use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::Message::ArtistPageEdit;
-use crate::config::Config;
+use crate::config::{AppTheme, Config};
 use crate::database::{create_database, create_database_entry, find_visual};
 use crate::{app, config, fl};
 use colored::Colorize;
@@ -78,6 +78,7 @@ pub struct AppModel {
     // Configuration data that persists between application runs.
     config: Config,
     config_handler: cosmic_config::Config,
+    // COSMIC Related
 
     //Settings Page
     pub rescan_available: bool,
@@ -162,7 +163,7 @@ pub enum FileChooserEvents {
 pub enum Message {
     OpenRepositoryUrl,
     ToggleContextPage(ContextPage),
-    _UpdateConfig(Config),
+    UpdateTheme(AppTheme),
     LaunchUrl(String),
 
     // Config change related
@@ -380,23 +381,23 @@ impl cosmic::Application for AppModel {
         let config = config::Config::load();
         let config_handler = match config.0 {
             None => {
-                panic!("NO CONFIG Exists");
+                panic!("No config exists");
             }
             Some(som) => som,
         };
-        let config = config.1;
 
         // init toasts
-
-        sink.set_volume(config.volume / 100.0);
+        sink.set_volume(config.1.volume / 100.0);
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
             context_page: ContextPage::default(),
             nav,
             key_binds: HashMap::new(),
+            // COSMIC Related
+
             // Optional configuration file for an application.
-            config,
+            config: config.1,
             config_handler,
             rescan_available: true,
             // Audio
@@ -436,7 +437,7 @@ impl cosmic::Application for AppModel {
             homeid,
         };
 
-        // Create a startup command that sets the window title.
+        // Start up commands
         let command = app.update_title();
 
         (app, command)
@@ -896,6 +897,10 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::UpdateTheme(selection) => {
+                self.config.set_app_theme(&self.config_handler, selection);
+                return cosmic::command::set_theme(self.config.app_theme.theme());
+            }
             Message::EditArtistConfirm => {
                 if let Page::Artist(artist) = self.nav.active_data_mut::<Page>().unwrap() {
                     if let ArtistPageState::ArtistPage(ref page) = artist.page_state {
@@ -1171,9 +1176,6 @@ impl cosmic::Application for AppModel {
                     self.context_page = context_page;
                     self.core.window.show_context = true;
                 }
-            }
-            Message::_UpdateConfig(config) => {
-                self.config = config;
             }
             Message::UpdateSearch(search) => {
                 self.search_field = search;
@@ -3070,7 +3072,10 @@ where a.name = ?    ",
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
         struct KeybindSubscription;
 
-        cosmic::iced::Subscription::batch(vec![cosmic::iced::event::listen_with(handle_keybinds)])
+        cosmic::iced::Subscription::batch(vec![
+            // Watch for application configuration changes.
+            cosmic::iced::event::listen_with(handle_keybinds),
+        ])
     }
 }
 
