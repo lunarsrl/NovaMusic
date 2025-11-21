@@ -41,16 +41,19 @@
             <image>
                 https://lunarsrl.dev/static/images/NovaMusic/NowPlaying.png
             </image>
+	    <caption>Nova Music "Now Playing" Page</caption>
         </screenshot>
         <screenshot>
             <image>
                 https://lunarsrl.dev/static/images/NovaMusic/Album.png
-            </image>
+	    </image>
+	    <caption>Nova Music "Album Library" Page</caption>
         </screenshot>
         <screenshot>
             <image>
                 https://lunarsrl.dev/static/images/NovaMusic/Tracks.png
             </image>
+	    <caption>Nova Music "Track Library" Page</caption>
         </screenshot>
     </screenshots>
 
