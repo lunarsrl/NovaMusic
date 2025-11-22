@@ -22,6 +22,11 @@
 > [!NOTE]
 > This project is still a work in progress
 
+#### Flathub:
+<a href='https://flathub.org/apps/dev.lunarsrl.NovaMusic'>
+  <img width='240' alt='Get it on Flathub' src='https://flathub.org/api/badge?locale=en'/>
+</a>
+
 #### Arch Linux:
 
 Thank you to [@rwinkhart](https://github.com/rwinkhart) for publishing the AUR Package!  
