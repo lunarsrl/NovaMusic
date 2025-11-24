@@ -46,26 +46,22 @@ A [justfile](./justfile) is included by default for the [casey/just][just] comma
 
 ## Updates
 
-- Playlists now stored in local data directory as utf8 m3u files.
-- Creating a playlist allows you to choose and icon to display. (Filepath to icon is saved in the M3U)
-- When scanning the music directory, Nova Music will detect m3u files and make a personal copy in the local data
-  directory.
-- The user is now notified in the case of most errors rather than doing nothing or crashing.
-- All the text in the app is now utilizing localization with i18n so translations are now possible.
+- Added artists view
+- UI changes accross most pages
+- Released on flatpak
 
 ## Todo:
 
 #### Important:
 - Exploring CPAL instead of Rodio
 - Gapless Playback
+- MPRIS support
 - Crossfade support
 
 #### Other:
-
+- Shuffle options
 - Optional network features (ex: Musicbrainz integration for automatic metadata)
 - Genres
-- Shuffle options
-- Flatpak release!
 
 #### Completed:
 - ~~Artist View~~
@@ -73,6 +69,7 @@ A [justfile](./justfile) is included by default for the [casey/just][just] comma
 - ~~[ ! ] Replace current playlist implementation with m3u~~
 - ~~Playlist updates: Allow M3U import from inside app, allow custom cover art, delete playlists from inside app~~
 - ~~Localization update~~
+- ~~Flatpak release~~
 
 ## Translators
 
