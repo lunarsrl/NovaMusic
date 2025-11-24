@@ -7,18 +7,17 @@ mod config;
 mod database;
 mod i18n;
 mod log;
+mod mpris;
 
 fn main() -> cosmic::iced::Result {
     //start logging
     setup_logger().expect("Could not setup logger");
+
     // Get the system's preferred languages.
     let requested_languages = &i18n_embed::DesktopLanguageRequester::requested_languages();
-
     // Override language for debug or for screenshots
     //let requested_languages: &Vec<LanguageIdentifier> =
     //    &vec!["en-US".parse().expect("Failed to parse.")];
-
-    // Enable localizations to be applied.
     i18n::init(requested_languages);
 
     // Settings for configuring the application window and iced runtime.

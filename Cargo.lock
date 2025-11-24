@@ -3450,6 +3450,7 @@ dependencies = [
  "symphonia",
  "tokio",
  "vergen",
+ "zbus 5.12.0",
 ]
 
 [[package]]
