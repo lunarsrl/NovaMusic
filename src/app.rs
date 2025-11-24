@@ -30,6 +30,7 @@ use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::Message::ArtistPageEdit;
 use crate::config::{AppTheme, Config};
 use crate::database::{create_database, create_database_entry, find_visual};
+use crate::mpris::MPRISRootInterface;
 use crate::{app, config, fl};
 use colored::Colorize;
 use cosmic::app::context_drawer;
@@ -44,9 +45,11 @@ use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{action, cosmic_config, cosmic_theme, theme};
-use futures_util::{SinkExt, StreamExt};
+use event_listener::Listener;
+use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use rodio::{Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
@@ -58,6 +61,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
 use symphonia::default::get_probe;
+use zbus::{connection, Connection};
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] =
@@ -68,17 +72,18 @@ const APP_ICON: &[u8] =
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
     core: cosmic::Core,
-    /// Display a context drawer with the designated page if defined.
+
+    // MPRIS
+    pub connection: Option<zbus::Connection>,
+
+    // Navigation
     context_page: ContextPage,
-    /// Contains items assigned to the nav bar panel.
     nav: nav_bar::Model,
-    /// Dialog
-    /// Key bindings for the application's menu bar.
     key_binds: HashMap<menu::KeyBind, Action>,
-    // Configuration data that persists between application runs.
+
+    // Config
     config: Config,
     config_handler: cosmic_config::Config,
-    // COSMIC Related
 
     //Settings Page
     pub rescan_available: bool,
@@ -165,6 +170,8 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     UpdateTheme(AppTheme),
     LaunchUrl(String),
+
+    // MPRIS
 
     // Config change related
     RescanDir,
@@ -391,10 +398,12 @@ impl cosmic::Application for AppModel {
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
+            connection: None,
+
+            //Navigation:
             context_page: ContextPage::default(),
             nav,
             key_binds: HashMap::new(),
-            // COSMIC Related
 
             // Optional configuration file for an application.
             config: config.1,
@@ -438,9 +447,12 @@ impl cosmic::Application for AppModel {
         };
 
         // Start up commands
-        let command = app.update_title();
 
-        (app, command)
+        let commands = cosmic::Task::batch(vec![
+            app.update_title(),
+            // cosmic::Task::future(async { Message::MPRISCheck }).map(action::app),
+        ]);
+        (app, commands)
     }
 
     /// Elements to pack at the start of the header bar.
@@ -3070,11 +3082,51 @@ where a.name = ?    ",
     }
 
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
-        struct KeybindSubscription;
+        struct MPRISSubscription;
 
+        let mpris = cosmic::iced::Subscription::run_with_id(
+            TypeId::of::<MPRISSubscription>(),
+            cosmic::iced_futures::stream::channel(1, |mut output| async move {
+                log::info!("whats going down chat");
+                // tokio::task::spawn_blocking(async || {
+                let rootinterface = MPRISRootInterface::new();
+                let listener = rootinterface.event.listen();
+
+                let playerinterface = MPRISRootInterface::new();
+                let listener = rootinterface.event.listen();
+
+                let connection = connection::Builder::session()
+                    .unwrap()
+                    .name("org.mpris.MediaPlayer2.NovaMusic")
+                    .unwrap()
+                    .serve_at("/org/mpris/MediaPlayer2", rootinterface)
+                    .unwrap()
+                    .build()
+                    .await
+                    .unwrap();
+
+                let connection = connection::Builder::session()
+                    .unwrap()
+                    .name("org.mpris.MediaPlayer2.NovaMusic")
+                    .unwrap()
+                    .serve_at("/org/mpris/MediaPlayer2", playerinterface)
+                    .unwrap()
+                    .build()
+                    .await
+                    .unwrap();
+
+                loop {
+                    // do something else, wait forever or timeout here:
+                    // handling D-Bus messages is done in the background
+                    std::future::pending::<()>().await;
+                }
+                // });
+            }),
+        );
         cosmic::iced::Subscription::batch(vec![
             // Watch for application configuration changes.
             cosmic::iced::event::listen_with(handle_keybinds),
+            mpris,
         ])
     }
 }
