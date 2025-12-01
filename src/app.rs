@@ -1,34 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::app::artists::ArtistInfo;
+use crate::mpris::player::MPRISPlayer;
 use cosmic::dialog::file_chooser::Error;
 use regex::Regex;
 
 use rayon::iter::IndexedParallelIterator;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-mod albums;
-mod artists;
+
 pub(crate) mod home;
-mod playlists;
+mod page;
+
 mod scan;
 mod settings;
-mod tracks;
 
-use crate::app::albums::{
-    get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
-};
-
-use crate::app::artists::ArtistPageState::ArtistPage;
-use crate::app::artists::{ArtistPageState, ArtistsPage};
 use crate::app::home::HomePage;
-use crate::app::playlists::{
+use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, FullAlbum};
+use crate::app::page::artists::{ArtistInfo, ArtistPage, ArtistPageState, ArtistsPage};
+use crate::app::page::genre::{GenrePage, GenrePageState};
+use crate::app::page::playlists::{
     FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
 };
+use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::scan::scan_directory;
-use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::Message::ArtistPageEdit;
-use crate::config::{AppTheme, Config};
+use crate::config::{AppTheme, Config, SortBy};
 use crate::database::{create_database, create_database_entry, find_visual};
 use crate::mpris::MPRISRootInterface;
 use crate::{app, config, fl};
@@ -41,6 +37,7 @@ use cosmic::iced::task::Handle;
 use cosmic::iced::window::Id;
 use cosmic::iced::Alignment::Start;
 use cosmic::iced::{keyboard, Alignment, Color, ContentFit, Event, Length};
+use cosmic::iced_widget::list;
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
@@ -61,7 +58,8 @@ use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
 use symphonia::default::get_probe;
-use zbus::{connection, Connection};
+use zbus::export::ordered_stream::OrderedStreamExt;
+use zbus::{connection, Connection, MatchRule, MessageStream};
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] =
@@ -121,6 +119,7 @@ pub struct AppModel {
     artistsid: nav_bar::Id,
     playlistsid: nav_bar::Id,
     homeid: nav_bar::Id,
+    genreid: nav_bar::Id,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -215,7 +214,7 @@ pub enum Message {
     TracksLoaded,
     TrackLoaded(Vec<AppTrack>),
     UpdateSearch(String),
-    SearchResults(Vec<crate::app::tracks::SearchResult>),
+    SearchResults(Vec<SearchResult>),
     ToggleTitle(bool),
     ToggleAlbum(bool),
     ToggleArtist(bool),
@@ -273,6 +272,7 @@ pub enum Message {
     EditPlaylistCancel,
     EditArtistConfirm,
     ArtistAddPicture(String),
+    Sort(SortBy),
 }
 
 #[derive(Clone, Debug)]
@@ -373,7 +373,7 @@ impl cosmic::Application for AppModel {
         let albumsid = nav
             .insert()
             .text(fl!("albums"))
-            .data::<Page>(Page::Albums(AlbumPage::new(vec![])))
+            .data::<Page>(Page::Albums(AlbumPage::new()))
             .icon(icon::from_name("media-optical-symbolic"))
             .id();
 
@@ -381,6 +381,13 @@ impl cosmic::Application for AppModel {
             .insert()
             .text(fl!("playlists"))
             .data::<Page>(Page::Playlists(PlaylistPage::new()))
+            .icon(icon::from_name("playlist-symbolic"))
+            .id();
+
+        let genreid = nav
+            .insert()
+            .text(fl!("genres"))
+            .data::<Page>(Page::Genre(GenrePage::new()))
             .icon(icon::from_name("playlist-symbolic"))
             .id();
 
@@ -444,6 +451,7 @@ impl cosmic::Application for AppModel {
             artistsid,
             playlistsid,
             homeid,
+            genreid,
         };
 
         // Start up commands
@@ -457,16 +465,38 @@ impl cosmic::Application for AppModel {
 
     /// Elements to pack at the start of the header bar.
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        let menu_bar = menu::bar(vec![menu::Tree::with_children(
-            menu::root(fl!("view")).apply(Element::from),
-            menu::items(
-                &self.key_binds,
-                vec![
-                    menu::Item::Button(fl!("settings"), None, Action::Settings),
-                    menu::Item::Button(fl!("about"), None, Action::About),
-                ],
+        let menu_bar = menu::bar(vec![
+            menu::Tree::with_children(
+                menu::root(fl!("view")).apply(Element::from),
+                menu::items(
+                    &self.key_binds,
+                    vec![
+                        menu::Item::Button(fl!("settings"), None, Action::Settings),
+                        menu::Item::Button(fl!("about"), None, Action::About),
+                    ],
+                ),
             ),
-        )]);
+            menu::Tree::with_children(
+                menu::root(fl!("sort")).apply(Element::from),
+                menu::items(
+                    &self.key_binds,
+                    vec![
+                        menu::Item::CheckBox(
+                            "A-Z",
+                            None,
+                            self.config.sort_option == SortBy::AscendingName,
+                            Action::SortChange(SortBy::AscendingName),
+                        ),
+                        menu::Item::CheckBox(
+                            "Z-A",
+                            None,
+                            self.config.sort_option == SortBy::DescendingName,
+                            Action::SortChange(SortBy::DescendingName),
+                        ),
+                    ],
+                ),
+            ),
+        ]);
 
         vec![menu_bar.into()]
     }
@@ -682,183 +712,6 @@ impl cosmic::Application for AppModel {
             );
         }
 
-        // Dialogs from page user interactions
-        match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(page) => {
-                let icon = match &self.playlist_cover {
-                    None => cosmic::widget::container(
-                        cosmic::widget::button::icon(
-                            cosmic::widget::icon::from_name("view-list-images-symbolic")
-                                .size(6 * 8),
-                        )
-                        .padding(cosmic::theme::spacing().space_s)
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-                        .class(cosmic::theme::Button::Suggested),
-                    )
-                    .class(cosmic::theme::Container::Secondary)
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                    Some(val) => cosmic::widget::container(
-                        cosmic::widget::button::custom_image_button(
-                            cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
-                                .content_fit(ContentFit::Fill),
-                            None,
-                        )
-                        .on_press(Message::CreatePlaylistAddThumbnail),
-                    )
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                };
-
-                if self.playlist_creation_dialog {
-                    return Some(
-                        cosmic::widget::dialog::Dialog::new()
-                            .title(fl!("DialogPlaylistTitle"))
-                            .control(
-                                cosmic::widget::container(
-                                    cosmic::widget::row::with_children(vec![
-                                        icon,
-                                        cosmic::widget::text_input(
-                                            fl!("PlaylistInputPlaceholder"),
-                                            self.playlist_dialog_text.as_str(),
-                                        )
-                                        .on_input(|input| Message::UpdatePlaylistName(input))
-                                        .into(),
-                                    ])
-                                    .align_y(Vertical::Bottom)
-                                    .spacing(cosmic::theme::spacing().space_m),
-                                )
-                                .align_x(Horizontal::Center),
-                            )
-                            .primary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "object-select-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Suggested)
-                                .on_press(Message::CreatePlaylistConfirm),
-                            )
-                            .secondary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "window-close-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Standard)
-                                .on_press(Message::CreatePlaylistCancel),
-                            )
-                            .into(),
-                    );
-                }
-            }
-            Page::Artist(page) => {
-                if self.artistpage_edit_dialog {
-                    return Some(page.artist_edit_dialog().into());
-                }
-            }
-            Page::Albums(_) => {}
-            Page::Playlists(val) => {
-                let icon = match &self.playlist_cover {
-                    None => cosmic::widget::container(
-                        cosmic::widget::button::icon(
-                            cosmic::widget::icon::from_name("view-list-images-symbolic")
-                                .size(6 * 8),
-                        )
-                        .padding(cosmic::theme::spacing().space_s)
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-                        .class(cosmic::theme::Button::Suggested),
-                    )
-                    .class(cosmic::theme::Container::Secondary)
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                    Some(val) => cosmic::widget::container(
-                        cosmic::widget::button::custom_image_button(
-                            cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
-                                .content_fit(ContentFit::Fill),
-                            None,
-                        )
-                        .on_press(Message::CreatePlaylistAddThumbnail),
-                    )
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                };
-
-                if self.playlist_edit_dialog {
-                    return Some(
-                        cosmic::widget::dialog::Dialog::new()
-                            .title(fl!("DialogPlaylistEdit"))
-                            .control(
-                                cosmic::widget::container(
-                                    cosmic::widget::row::with_children(vec![
-                                        icon,
-                                        cosmic::widget::text_input(
-                                            fl!("PlaylistInputPlaceholder"),
-                                            self.playlist_dialog_text.as_str(),
-                                        )
-                                        .on_input(|input| Message::UpdatePlaylistName(input))
-                                        .into(),
-                                    ])
-                                    .align_y(Vertical::Bottom)
-                                    .spacing(cosmic::theme::spacing().space_m),
-                                )
-                                .align_x(Horizontal::Center),
-                            )
-                            .primary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "object-select-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Suggested)
-                                .on_press(Message::EditPlaylistConfirm),
-                            )
-                            .secondary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "window-close-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Standard)
-                                .on_press(Message::EditPlaylistCancel),
-                            )
-                            .into(),
-                    );
-                }
-                // Dialog for deleting a playlist
-                if self.playlist_delete_dialog {
-                    if let PlaylistPageState::PlaylistPage(val) = &val.playlist_page_state {
-                        return Some(
-                            cosmic::widget::dialog::Dialog::new()
-                                .title(fl!("DialogPlaylistDelete"))
-                                .body(fl!(
-                                    "DialogPlaylistDeleteClarify",
-                                    path = val.playlist.path.as_str()
-                                ))
-                                .primary_action(
-                                    cosmic::widget::button::text(fl!(
-                                        "DialogPlaylistDeleteConfirm"
-                                    ))
-                                    .class(cosmic::theme::Button::Destructive)
-                                    .on_press(Message::PlaylistDeleteConfirmed),
-                                )
-                                .secondary_action(
-                                    cosmic::widget::button::text(fl!("Cancel"))
-                                        .class(cosmic::theme::Button::Standard)
-                                        .on_press(Message::PlaylistDeleteSafety),
-                                )
-                                .into(),
-                        );
-                    }
-                }
-            }
-            Page::Tracks(_) => {}
-        }
-
         None
     }
 
@@ -894,6 +747,7 @@ impl cosmic::Application for AppModel {
             Page::Artist(artists_page) => body = artists_page.load_page(self),
             Page::Albums(album_page) => body = album_page.load_page(self),
             Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
+            Page::Genre(genre_page) => body = genre_page.load_page(self),
         }
 
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
@@ -909,6 +763,13 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::Sort(val) => {
+                if val != self.config.sort_option {
+                    self.config
+                        .set_sort_option(&self.config_handler, val)
+                        .expect("Config change failed");
+                }
+            }
             Message::UpdateTheme(selection) => {
                 self.config.set_app_theme(&self.config_handler, selection);
                 return cosmic::command::set_theme(self.config.app_theme.theme());
@@ -970,6 +831,7 @@ impl cosmic::Application for AppModel {
                 Page::Playlists(page) => page.viewport = Some(view),
                 Page::Tracks(page) => page.viewport = Some(view),
                 Page::Artist(page) => page.viewport = Some(view),
+                Page::Genre(page) => page.viewport = Some(view),
             },
             Message::PlaylistDeleteConfirmed => {
                 if let Page::Playlists(toppage) =
@@ -1458,6 +1320,7 @@ impl cosmic::Application for AppModel {
                             .map(action::Action::App),
                         );
                     }
+                    &app::Page::Genre(_) => todo!(),
                 }
             }
 
@@ -1707,291 +1570,11 @@ impl cosmic::Application for AppModel {
 
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(_) => {}
-                    Page::Albums(val) => {
-                        if let AlbumPageState::Loading = val.page_state {
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                                5,
-                                |mut tx| async move {
-                                    tokio::task::spawn_blocking(move || {
-                                        let conn =
-                                            match rusqlite::Connection::open(
-                                                dirs::data_local_dir().unwrap().join(Self::APP_ID).join("nova_music.db")
-                                            ) {
-                                                Ok(conn) => conn,
-                                                Err(err) => {
-                                                    panic!("{}", err)
-                                                }
-                                            };
-
-
-                                        let mut stmt = match conn
-                                            .prepare(
-                                                "
-                                            SELECT a.id, a.name,
-                                            a.disc_number, a.track_number, a.album_cover, art.name as artist_name
-                                            FROM album a
-                                            left JOIN artists art ON a.artist_id = art.id",
-                                            ) {
-                                            Ok(stmt) => stmt,
-                                            Err(err) => {
-                                                panic!("{}", err)
-                                            }
-                                        };
-
-                                        let album_iter = stmt
-                                            .query_map([], |row| {
-                                                Ok((
-                                                    row.get::<_, String>("name").unwrap_or("None".to_string()),
-                                                    row.get::<_, String>("artist_name").unwrap_or_default(),
-                                                    row.get::<_, u32>("disc_number").unwrap_or(0),
-                                                    row.get::<_, u32>("track_number").unwrap_or(0),
-                                                    match row.get::<_, Vec<u8>>("album_cover") {
-                                                        Ok(val) => Some(val),
-                                                        Err(e) => {
-                                                            log::info!("Album iter error [on nav enter] : {}", e);
-                                                            None
-                                                        }
-                                                    },
-                                                ))
-                                            })
-                                            .expect("error executing query");
-
-
-                                        let albums: Vec<(String, String, u32, u32, Option<Vec<u8>>)> =
-                                            album_iter.filter_map(|a| {
-                                                a.ok()
-                                            }).collect();
-                                        for each in &albums {
-                                            log::info!("ALBUM: {:?}", each.0);
-                                        }
-                                        get_top_album_info(&mut tx, albums);
-
-                                        tx.try_send(Message::AlbumsLoaded)
-                                    });
-                                },
-                            ))
-                                .map(cosmic::Action::App);
-                        }
-                    }
-                    Page::Playlists(page) => {
-                        match &page.playlist_page_state {
-                            PlaylistPageState::Loading => {
-                                match dirs::data_local_dir()
-                                    .unwrap()
-                                    .join(crate::app::AppModel::APP_ID)
-                                    .join("Playlists")
-                                    .is_dir()
-                                {
-                                    true => {}
-                                    false => fs::create_dir(
-                                        dirs::data_local_dir()
-                                            .unwrap()
-                                            .join(crate::app::AppModel::APP_ID)
-                                            .join("Playlists"),
-                                    )
-                                        .unwrap(),
-                                }
-
-                                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                                    5,
-                                    |mut tx| async move {
-                                        tokio::task::spawn_blocking(move || {
-                                            let dir = fs::read_dir(
-                                                dirs::data_local_dir()
-                                                    .unwrap()
-                                                    .join(crate::app::AppModel::APP_ID)
-                                                    .join("Playlists"),
-                                            )
-                                                .expect("yo");
-
-                                            let mut playlists = vec![];
-
-                                            for file in dir.flatten() {
-                                                let files = io::BufReader::new(
-                                                    fs::File::open(file.path()).unwrap(),
-                                                );
-                                                let path = file.path();
-                                                let mut is_m3u = false;
-                                                let mut title = String::from("");
-                                                let mut cover_path = None;
-
-                                                for (_, line) in
-                                                    files.lines().map_while(Result::ok).enumerate()
-                                                {
-                                                    if line.contains("#EXTM3U") {
-                                                        is_m3u = true;
-                                                    }
-
-                                                    if line.contains("#PLAYLIST:") && is_m3u {
-                                                        title = line.replace("#PLAYLIST:", "");
-                                                    } else if title.is_empty() {
-                                                        title = path.file_name().unwrap().to_str().unwrap().to_string();
-                                                    }
-
-                                                    if line.contains("#EXTALBUMARTURL:") && cover_path.is_none() && is_m3u {
-                                                        cover_path = Some(cosmic::widget::image::Handle::from_path(PathBuf::from(line.replace("#EXTALBUMARTURL:", ""))))
-                                                    }
-                                                }
-
-                                                playlists.push(
-                                                    Playlist {
-                                                        title,
-                                                        path: path.to_string_lossy().to_string(),
-                                                        thumbnail: cover_path,
-                                                    }
-                                                )
-                                            }
-                                            tx.try_send(Message::PlaylistFound(playlists))
-                                                .expect("send error");
-                                        });
-                                    },
-                                ))
-                                    .map(cosmic::Action::App);
-                            }
-                            PlaylistPageState::Loaded => {}
-                            PlaylistPageState::PlaylistPage(_) => {}
-                            PlaylistPageState::Search(_) => {
-                                page.playlist_page_state = PlaylistPageState::Loaded
-                            }
-                        }
-                    }
-                    Page::Tracks(page) => match page.track_page_state {
-                        TrackPageState::Loading => {
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                                100,
-                                |mut tx| async move {
-                                    tokio::task::spawn_blocking(move || {
-                                        let conn = rusqlite::Connection::open(
-                                            dirs::data_local_dir()
-                                                .unwrap()
-                                                .join(Self::APP_ID)
-                                                .join("nova_music.db"),
-                                        )
-                                            .unwrap();
-                                        let stmt = conn.prepare(
-                                            "
-select track.id as id, track.name as title, art.name as artist, track.path, a.name as album_title
-from track
-         left join main.album_tracks at on track.id = at.track_id
-         left join main.artists art on track.artist_id = art.id
-         left join main.album a on at.album_id = a.id;
-                        ",
-                                        );
-
-                                        if let Ok(mut stmt) = stmt {
-                                            let tracks = stmt
-                                                .query_map([], |row| {
-                                                    Ok(AppTrack {
-                                                        id: row.get("id").unwrap_or(0),
-                                                        title: row
-                                                            .get("title")
-                                                            .unwrap_or("No Data".to_string()),
-                                                        artist: row
-                                                            .get("artist")
-                                                            .unwrap_or("N/A".to_string()),
-                                                        album_title: row
-                                                            .get("album_title")
-                                                            .unwrap_or("N/A".to_string()),
-                                                        path_buf: PathBuf::from(
-                                                            row.get::<&str, String>("path")
-                                                                .expect("This should never happen"),
-                                                        ),
-                                                        cover_art: None,
-                                                    })
-                                                })
-                                                .expect("error executing query");
-
-                                            let tracks =
-                                                tracks.into_iter().filter_map(|a| a.ok()).collect();
-
-                                            tx.try_send(Message::TrackLoaded(tracks))
-                                                .expect("Failed to send");
-                                            tx.try_send(Message::TracksLoaded)
-                                                .expect("Failed to send");
-                                        } else {
-                                            tx.try_send(Message::TracksLoaded)
-                                                .expect("Failed to send");
-                                        }
-                                    });
-                                },
-                            ))
-                                .map(cosmic::Action::App);
-                        }
-                        TrackPageState::Loaded => {}
-                        TrackPageState::Search => {
-                            page.track_page_state = TrackPageState::Loaded;
-                        }
-                    },
-                    Page::Artist(page) => match &page.page_state {
-                        ArtistPageState::Loading => {
-                            return cosmic::Task::stream(
-                                cosmic::iced_futures::stream::channel(100, |mut tx| async move {
-                                    tokio::task::spawn_blocking(move || {
-                                        let mut artists: Vec<ArtistInfo> = vec![];
-                                        let conn = rusqlite::Connection::open(
-                                            dirs::data_local_dir()
-                                                .unwrap()
-                                                .join(Self::APP_ID)
-                                                .join("nova_music.db"),
-                                        ).unwrap();
-
-                                        let mut stmt = conn.prepare("
-select artists.name, artists.artistpfp
-from artists
-where exists(select *
-             from album
-             where album.artist_id = artists.id)
-   or exists(select *
-             from single
-             where exists(select *
-                          from track
-                          where single.track_id = track.id
-                            and track.artist_id = artists.id))
-                                        ").expect("Statement Faulty @ OnNavEnter Artists");
-
-                                        let rows = stmt.query_map([], |row| {
-                                            let name = row.get::<_, String>("name").expect("Should be string");
-                                            let regex = regex::RegexBuilder::new(r"feat\.|with|ft\.|&").case_insensitive(true).build().unwrap();
-
-
-                                            match regex.is_match(&name) {
-                                                false => {
-                                                    return Ok(
-                                                        ArtistInfo {
-                                                            name: name,
-                                                            path: String::from(""),
-                                                            image: match row.get::<_, Vec<u8>>("artistpfp") {
-                                                                Ok(val) => {
-                                                                    Some(cosmic::widget::image::Handle::from_bytes(val))
-                                                                }
-                                                                Err(e) => {
-                                                                    log::warn!("Potential Error @ OnNavEnter Artists: {}", e);
-                                                                    None
-                                                                }
-                                                            },
-                                                        }
-                                                    )
-                                                }
-                                                true => {
-                                                    return Err(rusqlite::Error::UnwindingPanic)
-                                                }
-                                            };
-                                        }).expect("Query map failed");
-
-                                        artists = rows.into_iter().filter_map(|a| a.ok()).collect();
-
-
-                                        tx.try_send(Message::ArtistsLoaded(artists))
-                                    });
-                                })
-                                    .map(cosmic::Action::App),
-                            )
-                        }
-                        ArtistPageState::Search(_) => {}
-                        ArtistPageState::Loaded => {}
-                        ArtistPageState::ArtistPage(page) => {}
-                        &ArtistPageState::Album(_) => {}
-                    },
+                    Page::Albums(val) => {}
+                    Page::Playlists(page) => {}
+                    Page::Tracks(page) => {}
+                    Page::Artist(page) => {}
+                    Page::Genre(page) => {}
                 }
             }
 
@@ -2069,7 +1652,7 @@ where a.name = ?    ",
                     |row| row.get::<_, Vec<u8>>("artistpfp"),
                 );
 
-                let new_page = crate::app::artists::ArtistPage {
+                let new_page = ArtistPage {
                     artist: ArtistInfo {
                         name: artist,
                         path: String::from(""),
@@ -2266,43 +1849,7 @@ where a.name = ?    ",
                 }
             }
             Message::AlbumRequested(dat) => {
-                match self
-                    .nav
-                    .active_data_mut::<Page>()
-                    .expect("Should always be intialized")
-                {
-                    Page::Albums(page) => {
-                        return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                            0,
-                            |mut tx| async move {
-                                let album = get_album_info(dat.0, dat.1).await;
-                                tx.send(Message::AlbumInfoRetrieved(album))
-                                    .await
-                                    .expect("send")
-                            },
-                        ))
-                        .map(cosmic::Action::App)
-                    }
-                    Page::Artist(toppage) => {
-                        if let ArtistPageState::ArtistPage(page) = &toppage.page_state {
-                            toppage.artist_page_cache = Some(page.clone());
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                                0,
-                                |mut tx| async move {
-                                    let album = get_album_info(dat.0, dat.1).await;
-                                    tx.send(Message::AlbumInfoRetrieved(album))
-                                        .await
-                                        .expect("send")
-                                },
-                            ))
-                            .map(cosmic::Action::App);
-                        }
-                    }
-                    _ => {
-                        // should never happen
-                        log::error!("Requested album info while outside albums page somehow")
-                    }
-                }
+                todo!()
             }
             app::Message::GridSliderChange(val) => {
                 self.config
@@ -2903,25 +2450,7 @@ where a.name = ?    ",
                 }
             }
             Message::SearchResults(tracks) => {
-                match self
-                    .nav
-                    .active_data_mut::<Page>()
-                    .expect("Should always be intialized")
-                {
-                    Page::NowPlaying(_) => {}
-
-                    Page::Albums(page) => page.page_state = AlbumPageState::Search(tracks),
-                    Page::Playlists(page) => {
-                        page.playlist_page_state = PlaylistPageState::Search(tracks)
-                    }
-                    Page::Tracks(track_list) => {
-                        track_list.track_page_state = TrackPageState::Search;
-                        track_list.search = tracks;
-                    }
-                    Page::Artist(page) => {
-                        page.page_state = ArtistPageState::Search(tracks);
-                    }
-                }
+                todo!()
             }
             Message::ToggleTitle(val) => {
                 if let Page::Tracks(page) = self
@@ -3087,27 +2616,17 @@ where a.name = ?    ",
         let mpris = cosmic::iced::Subscription::run_with_id(
             TypeId::of::<MPRISSubscription>(),
             cosmic::iced_futures::stream::channel(1, |mut output| async move {
-                log::info!("whats going down chat");
-                // tokio::task::spawn_blocking(async || {
                 let rootinterface = MPRISRootInterface::new();
-                let listener = rootinterface.event.listen();
+                let rootlistener = rootinterface.event.listen();
 
-                let playerinterface = MPRISRootInterface::new();
-                let listener = rootinterface.event.listen();
+                let playerinterface = MPRISPlayer::new();
+                let playerlistener = playerinterface.event.clone();
 
                 let connection = connection::Builder::session()
                     .unwrap()
                     .name("org.mpris.MediaPlayer2.NovaMusic")
                     .unwrap()
                     .serve_at("/org/mpris/MediaPlayer2", rootinterface)
-                    .unwrap()
-                    .build()
-                    .await
-                    .unwrap();
-
-                let connection = connection::Builder::session()
-                    .unwrap()
-                    .name("org.mpris.MediaPlayer2.NovaMusic")
                     .unwrap()
                     .serve_at("/org/mpris/MediaPlayer2", playerinterface)
                     .unwrap()
@@ -3116,11 +2635,10 @@ where a.name = ?    ",
                     .unwrap();
 
                 loop {
-                    // do something else, wait forever or timeout here:
-                    // handling D-Bus messages is done in the background
-                    std::future::pending::<()>().await;
+                    let listener = playerlistener.listen();
+                    listener.await;
+                    log::info!("Something was requested of player")
                 }
-                // });
             }),
         );
         cosmic::iced::Subscription::batch(vec![
@@ -3227,6 +2745,21 @@ impl AppModel {
             Task::none()
         }
     }
+
+    fn update_pageinfo(&mut self) {
+        match self.nav.active_data::<Page>().unwrap() {
+            Page::Tracks(page) => {
+                if let TrackPageState::Search = page.track_page_state {
+                    log::error!("NOT YET")
+                } else {
+                    log::info!("PROPER")
+                }
+            }
+            _ => {
+                log::error!("NOT YET")
+            }
+        }
+    }
 }
 
 /// The page to display in the application.
@@ -3237,6 +2770,7 @@ pub enum Page {
     Albums(AlbumPage),
     Playlists(PlaylistPage),
     Tracks(TrackPage),
+    Genre(GenrePage),
 }
 
 /// The context page to display in the context drawer.
@@ -3251,6 +2785,7 @@ pub enum ContextPage {
 pub enum Action {
     About,
     Settings,
+    SortChange(SortBy),
 }
 
 impl menu::action::MenuAction for Action {
@@ -3260,6 +2795,7 @@ impl menu::action::MenuAction for Action {
         match self {
             Action::About => Message::ToggleContextPage(ContextPage::About),
             Action::Settings => Message::ToggleContextPage(ContextPage::Settings),
+            Action::SortChange(val) => Message::Sort(*val),
         }
     }
 }

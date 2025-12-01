@@ -12,6 +12,7 @@ tracks = Pistas
 artists = Artistas
 albums = Álbumes
 playlists = Playlists
+genres = TODO!
 Loading = Cargando...
 
 # Common Terms
@@ -21,7 +22,8 @@ artist = Artista
 pageresults = {$number} Resultados
 singles = Sencillos
 scandir = Escanear Directorio
-pathtofolder = "Ruta a un directorio"
+pathtofolder = Ruta a un directorio
+gensearch = Escribe para buscar...
 
 # First Time Setup
 currentdir = Directorio eligido

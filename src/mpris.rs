@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-mod player;
+pub mod player;
 
 use zbus::interface;
 pub struct MPRISRootInterface {

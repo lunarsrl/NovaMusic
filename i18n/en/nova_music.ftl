@@ -1,10 +1,13 @@
 app-title = Nova Music
 
-# Context Pages
+# Menu Bar
 view = View
-about = About
+sort = Sort
+
+# Context Pages
 git-description = Git commit {$hash} on {$date}
 settings = Settings
+about = About
 
 # Pages
 home = Home
@@ -12,6 +15,7 @@ tracks = Tracks
 artists = Artists
 albums = Albums
 playlists = Playlists
+genres = Genres
 Loading = Loading...
 
 # Common Terms
@@ -21,7 +25,8 @@ artist = Artist
 pageresults = Results {$number}
 singles = Singles
 scandir = Scan directory
-pathtofolder = "Path to folder"
+pathtofolder = Path to folder
+gensearch = Type to search...
 
 # First Time Setup
 currentdir = Current directory
