@@ -505,8 +505,8 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
         // If album already exists, no need to add extra info
         // log::info!("Looking to insert {}", album.name);
         match conn.query_row(
-            "select id from album where name = ?",
-            &[&album.name],
+            "select id from album where name = ? and artist_id = ?",
+            (&album.name, &artist.id),
             |row| row.get::<usize, u32>(0),
         ) {
             Ok(val) => {

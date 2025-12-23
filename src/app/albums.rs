@@ -143,7 +143,7 @@ impl AlbumPage {
                                                     cosmic::widget::icon::from_name(
                                                         "media-optical-symbolic",
                                                     )
-                                                    .size(192),
+                                                        .size((model.config.grid_item_size * 32) as u16),
                                                 )
                                                 .align_x(Alignment::Center)
                                                 .align_y(Alignment::Center)
@@ -295,7 +295,7 @@ impl AlbumPage {
                                                 cosmic::widget::icon::from_name(
                                                     "media-optical-symbolic",
                                                 )
-                                                .size(192),
+                                                .size((model.config.grid_item_size  * 32) as u16),
                                             )
                                             .align_x(Alignment::Center)
                                             .align_y(Alignment::Center)

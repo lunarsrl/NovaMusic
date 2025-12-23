@@ -565,7 +565,8 @@ impl ArtistPage {
                         .into()
                     } else {
                         cosmic::widget::container(
-                            cosmic::widget::icon::from_name("media-optical-symbolic").size(192),
+                            cosmic::widget::icon::from_name("media-optical-symbolic")
+                                .size((model.config.grid_item_size * 32) as u16),
                         )
                         .align_x(Alignment::Center)
                         .align_y(Alignment::Center)
@@ -602,7 +603,8 @@ impl ArtistPage {
                         .into()
                     } else {
                         cosmic::widget::container(
-                            cosmic::widget::icon::from_name("media-optical-symbolic").size(192),
+                            cosmic::widget::icon::from_name("media-optical-symbolic")
+                            .size((model.config.grid_item_size * 32) as u16),
                         )
                         .align_x(Alignment::Center)
                         .align_y(Alignment::Center)
