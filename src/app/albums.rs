@@ -492,20 +492,48 @@ pub async fn get_album_info(title: String, artist: String) -> FullAlbum {
     .expect("Nothing");
 
     log::info!("After DB");
-    let row_num = conn
-        .query_row(
-            "SELECT * FROM album WHERE name = ?",
-            [title.as_str()],
-            |row| {
-                Ok((
-                    row.get::<usize, u32>(0),
-                    row.get::<usize, u32>(3),
-                    row.get::<usize, u32>(4),
-                    row.get::<&str, Vec<u8>>("album_cover"),
-                ))
-            },
-        )
-        .unwrap();
+
+    let row_num;
+    if artist.is_empty() {
+        row_num = conn
+            .query_row(
+                "
+SELECT * FROM album
+WHERE album.name = ?
+            ",
+                [title.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<usize, u32>(0),
+                        row.get::<usize, u32>(3),
+                        row.get::<usize, u32>(4),
+                        row.get::<&str, Vec<u8>>("album_cover"),
+                    ))
+                },
+            )
+            .unwrap();
+
+
+    } else {
+        row_num = conn
+            .query_row(
+                "
+SELECT * FROM album
+    left join artists art on album.artist_id = art.id
+WHERE album.name = ? and art.name = ?
+            ",
+                [title.as_str(), artist.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<usize, u32>(0),
+                        row.get::<usize, u32>(3),
+                        row.get::<usize, u32>(4),
+                        row.get::<&str, Vec<u8>>("album_cover"),
+                    ))
+                },
+            )
+            .unwrap();
+    }
 
     let album = Album {
         name: title,

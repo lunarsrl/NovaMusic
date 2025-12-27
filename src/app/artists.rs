@@ -172,7 +172,7 @@ impl ArtistsPage {
                 let data = artistpage.product_cover_button(model);
 
                 let icon = match &artistpage.artist.image {
-                    None => cosmic::widget::icon::from_name("media-optical-symbolic")
+                    None => cosmic::widget::icon::from_name("avatar-default-symbolic")
                         .size(128)
                         .into(),
                     Some(handle) => cosmic::widget::image(handle)
