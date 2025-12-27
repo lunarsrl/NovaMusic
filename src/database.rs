@@ -7,6 +7,7 @@ use rusqlite::fallible_iterator::FallibleIterator;
 use std::fs;
 use std::path::PathBuf;
 use cosmic::dialog::file_chooser::open::file;
+use rusqlite::Connection;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
 
@@ -461,14 +462,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
         }
     }
 
-    // todo: I dont know if this is 100% a safe assumption to make I'll consider it later
-    //      I imagine it would make organization easier because from my experience the AlbumArtist
-    //      metadata tag is less likely to be applied than the Artist metadata tag and often contain
-    //      the same or similar data.
-    // if album.artist_id == 0 && artist.id != 0 {
-    //     album.artist_id = artist.id
-    // }
-
     conn.execute(
         "INSERT INTO track (name, path, artist_id) VALUES (?, ?, ?)",
         (&track.name, filepath.to_str().unwrap(), artist.id),
@@ -577,51 +570,33 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
 
         if a_similar.len() > 0 {
             // if at least one album already exists with the same name, compare artists to verify if it is actually the same album
+            let mut insertion = false;
             for artist_id in a_similar {
                     if artist_id.1.is_none() {
                         // if there is no artist value associated, but there is an album with the same name, insert anyway it's probably correct
-                        album.id = artist_id.0
+                        album.id = artist_id.0;
+                        insertion = true;
 
                     } else {
                         if artist_id.1.unwrap() == album.artist_id.unwrap() as u32 {
                             // if album name is the same and artist_id this is probably the correct album
                             album.id = artist_id.0;
+                            insertion = true;
                         }
                     }
             }
+
+            if insertion == false {
+                // if artist id does not match with any previous album entries, it probably is a different album
+                let image_dat = find_visual(filepath);
+                insert_track_to_grouping(&album, track.id, image_dat, &conn);
+                album.id = conn.last_insert_rowid() as u32
+            }
+
         } else {
             // if there are no matching albums create a new one, or if there is only one track associated, assume it is a single
             let image_dat = find_visual(filepath);
-
-            if album.num_of_tracks == 1 {
-                // SINGLES
-                match conn.execute(
-                    "INSERT INTO single (track_id, cover) VALUES (?, ?)",
-                    (&track.id, image_dat),
-                ) {
-                    Ok(_) => {
-                        log::info!("{}", "Successfully inserted a SINGLE!".green());
-                    }
-                    Err(err) => {
-                        log::error!("{} \n ERROR: {}", "Failed to insert SINGLE".red(), err);
-                    }
-                }
-            } else {
-                // ALBUMS
-                match conn.execute(
-                    "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
-                    (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, image_dat),
-                ) {
-                    Ok(_) => {
-                        log::info!("{}", "Successfully added album without visual!".purple());
-                    }
-                    Err(err) => {
-                        log::error!("{} \n {}", "Failed to insert album data without visual".red(), err.to_string());
-
-                    }
-                }
-            }
-
+            insert_track_to_grouping(&album, track.id, image_dat, &conn);
             album.id = conn.last_insert_rowid() as u32
         }
 
@@ -639,6 +614,38 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
             }
         }
     }
+}
+
+fn insert_track_to_grouping(album: &Album, track_id: u64, image_dat: Option<Box<[u8]>>, conn: &Connection) {
+    if album.num_of_tracks != 1 {
+        //Album
+        match conn.execute(
+            "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
+            (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, image_dat),
+        ) {
+            Ok(_) => {
+                log::info!("{}", "Successfully added ALBUM!".purple());
+            }
+            Err(err) => {
+                log::error!("{} \n ERROR: {}", "Failed to insert ALBUM".red(), err);
+
+            }
+        }
+    } else {
+        //Single
+        match conn.execute(
+            "INSERT INTO single (track_id, cover) VALUES (?, ?)",
+            (&track_id, image_dat),
+        ) {
+            Ok(_) => {
+                log::info!("{}", "Successfully added SINGLE!".green());
+            }
+            Err(err) => {
+                log::error!("{} \n ERROR: {}", "Failed to insert SINGLE".red(), err);
+            }
+        }
+    }
+
 }
 
 pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
