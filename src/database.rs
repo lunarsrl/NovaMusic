@@ -6,6 +6,7 @@ use regex::{Match, Regex};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::fs;
 use std::path::PathBuf;
+use cosmic::dialog::file_chooser::open::file;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
 
@@ -575,34 +576,49 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
         log::info!("Similarities: {}", a_similar.len());
 
         if a_similar.len() > 0 {
-            // if at least one album exists with the same name, compare artists to verify
+            // if at least one album already exists with the same name, compare artists to verify if it is actually the same album
             for artist_id in a_similar {
-                    // log::info!("Attempting to insert album {} from artist {}, into album {} with {}", album.name, album.artist_id, artist_id.0, artist_id.1.as_ref().unwrap());
-
                     if artist_id.1.is_none() {
-                        // if there is no artist value associated, but there is an album with the same name, insert anyway
+                        // if there is no artist value associated, but there is an album with the same name, insert anyway it's probably correct
                         album.id = artist_id.0
 
                     } else {
                         if artist_id.1.unwrap() == album.artist_id.unwrap() as u32 {
                             // if album name is the same and artist_id this is probably the correct album
-
                             album.id = artist_id.0;
                         }
                     }
             }
         } else {
-            // if there are no matching albums create a new one
-            match conn.execute(
-                "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
-                (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, None::<Box<[u8]>>),
-            ) {
-                Ok(_) => {
-                    log::info!("{}", "Successfully added album without visual!".purple());
-                }
-                Err(err) => {
-                    log::error!("{} \n {}", "Failed to insert album data without visual".red(), err.to_string());
+            // if there are no matching albums create a new one, or if there is only one track associated, assume it is a single
+            let image_dat = find_visual(filepath);
 
+            if album.num_of_tracks == 1 {
+                // SINGLES
+                match conn.execute(
+                    "INSERT INTO single (track_id, cover) VALUES (?, ?)",
+                    (&track.id, image_dat),
+                ) {
+                    Ok(_) => {
+                        log::info!("{}", "Successfully inserted a SINGLE!".green());
+                    }
+                    Err(err) => {
+                        log::error!("{} \n ERROR: {}", "Failed to insert SINGLE".red(), err);
+                    }
+                }
+            } else {
+                // ALBUMS
+                match conn.execute(
+                    "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
+                    (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, image_dat),
+                ) {
+                    Ok(_) => {
+                        log::info!("{}", "Successfully added album without visual!".purple());
+                    }
+                    Err(err) => {
+                        log::error!("{} \n {}", "Failed to insert album data without visual".red(), err.to_string());
+
+                    }
                 }
             }
 
@@ -619,18 +635,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 }
                 Err(err) => {
                     log::error!("album_track insertion went wrong \n ------ \n  {}", err.to_string());
-                }
-            }
-        } else {
-            match conn.execute(
-                "INSERT INTO single (track.id, cover) VALUES (?, ?)",
-                (&track.id, None::<Box<[u8]>>),
-            ) {
-                Ok(_) => {
-                    log::info!("{}", "Added SINGLE with some visual!".green());
-                }
-                Err(_) => {
-                    log::error!("{}", "UNABLE TO INSERT *SINGLE* DATA W/ VISUAL".red());
                 }
             }
         }
