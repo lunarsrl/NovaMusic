@@ -15,7 +15,7 @@ jobs:
 
     steps:
     - name: Depencencies
-      run: sudo apt install libxkbcommon-dev sudo apt install librust-alsa-sys-dev
+      run: sudo apt install libxkbcommon-dev librust-alsa-sys-dev
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
