@@ -3,21 +3,24 @@
 use colored::Colorize;
 use cosmic::Application;
 use regex::{Match, Regex};
+use rusqlite::fallible_iterator::FallibleIterator;
 use std::fs;
 use std::path::PathBuf;
+use cosmic::dialog::file_chooser::open::file;
+use rusqlite::Connection;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
 
 struct Artist {
-    id: u64,
+    id: u32,
     name: Option<String>,
 }
 
 struct Album {
     id: u32,
     name: String,
-    artist_id: u64,
-    num_of_discs: u64,
+    artist_id: Option<u32>,
+    num_of_discs: u32,
     num_of_tracks: u64,
 }
 
@@ -120,7 +123,7 @@ pub fn create_database() {
         "
         CREATE TABLE album (
             id INTEGER PRIMARY KEY,
-            name TEXT UNIQUE,
+            name TEXT,
             artist_id INTEGER,
             disc_number INTEGER,
             track_number INTEGER,
@@ -162,7 +165,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
     let mut album = Album {
         id: 0,
         name: "".to_string(),
-        artist_id: 0,
+        artist_id: None,
         num_of_discs: 1,
         num_of_tracks: 0,
     };
@@ -205,17 +208,17 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                         match conn.execute("INSERT INTO artists (name) VALUES (?)", [name.trim()]) {
                             Ok(_) => {
                                 // log::info!("Added artist {} to artists", name);
-                                album.artist_id = conn.last_insert_rowid() as u64;
+                                album.artist_id = Some(conn.last_insert_rowid() as u32);
                             }
                             Err(_) => {
                                 // log::warn!("Artist: {} already created", name);
-                                album.artist_id =
+                                album.artist_id = Some(
                                     conn.query_row(
                                         "SELECT id FROM artists WHERE name = ?",
                                         &[&name],
                                         |row| row.get::<usize, u32>(0),
                                     )
-                                    .unwrap() as u64;
+                                        .unwrap());
                                 // log::info!("ARTIST ID:  {}", album.artist_id);
                             }
                         }
@@ -265,7 +268,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 },
                 StandardTagKey::DiscSubtitle => {}
                 StandardTagKey::DiscTotal => match tag.value {
-                    Value::String(val) => album.num_of_discs = val.parse::<u64>().unwrap(),
+                    Value::String(val) => album.num_of_discs = val.parse::<u32>().unwrap(),
                     _ => {
                         // log::error!("Disc number is not a number");
                     }
@@ -284,7 +287,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                         ) {
                             Ok(_) => {}
                             Err(err) => {
-                                log::error!("error: {}", err);
+                                // log::error!("error: {}", err);
                             }
                         }
 
@@ -373,7 +376,6 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                                 .parse()
                                 .unwrap();
                         }
-                        log::info!("FINAL VAL: {}", final_val.on_red());
 
                         album_tracks.track_number = final_val
                             .parse::<u64>()
@@ -435,11 +437,16 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
         }
     }
 
+
+
+
+    log::info!(" {} BY {} IN {}", &track.name.as_ref().unwrap().on_blue(),  &artist.name.as_ref().unwrap().on_bright_yellow().black(), &album.name.on_bright_blue());
+
     match artist.name {
         Some(name) => match conn.execute("INSERT INTO artists (name) VALUES (?)", [&name]) {
             Ok(_) => {
                 // log::info!("Added artist {} to artists", name);
-                artist.id = conn.last_insert_rowid() as u64;
+                artist.id = conn.last_insert_rowid() as u32;
             }
             Err(_) => {
                 // log::warn!("Artist: {} already created", name);
@@ -447,11 +454,11 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     .query_row("SELECT id FROM artists WHERE name = ?", &[&name], |row| {
                         row.get::<usize, u32>(0)
                     })
-                    .unwrap() as u64;
+                    .unwrap() ;
             }
         },
         None => {
-            // log::error!("Artist name is None");
+            // log::error!("No artist was found");
         }
     }
 
@@ -499,93 +506,98 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
         }
     }
 
-    // log::info!("{}", album.name.on_red());
     if album.name.is_empty() {
+        log::warn!("{}", "No album title in file mdat".red())
     } else {
-        // If album already exists, no need to add extra info
-        // log::info!("Looking to insert {}", album.name);
-        match conn.query_row(
-            "select id from album where name = ?",
-            &[&album.name],
-            |row| row.get::<usize, u32>(0),
-        ) {
-            Ok(val) => {
-                // log::info!(
-                //     "Album with title, {}, found \n {}",
-                //     album.name.white().on_blue().bold(),
-                //     val
-                // );
-                // Album already exists
-                album.id = val
+        // Check how many albums exist with this name
+        let a_similar: Vec<(u32, Option<u32>)>;
+
+        if album.artist_id.is_some() {
+            let mut similar_albums = match conn
+                .prepare(
+                    "
+                select main.album.id as id, art.id as aid from main.album
+                    join main.artists art on main.album.artist_id = art.id
+                where main.album.name = ?
+            ",
+                ) {
+                Ok(val) => val,
+                Err(err) => {
+                    log::error!("{}", err);
+                    panic!("Faulty sql request")
+                },
+            };
+
+            let a_iter = similar_albums
+                .query_map(&[&album.name], |row| {
+                    Ok(
+                        (row.get::<&str, u32>("id").unwrap(),
+                         Some(row.get::<&str, u32>("aid").unwrap())))
+                })
+                .unwrap();
+
+            a_similar = a_iter.into_iter().filter_map(|a| a.ok()).collect::<Vec<(u32, Option<u32>)>>();
+        } else {
+            let mut similar_albums = match conn
+                .prepare(
+                    "
+                select main.album.id as id from main.album
+                where main.album.name = ?
+            ",
+                ) {
+                Ok(val) => val,
+                Err(err) => {
+                    log::error!("{}", err);
+                    panic!("Faulty sql request")
+                },
+            };
+
+            let a_iter = similar_albums
+                .query_map(&[&album.name], |row| {
+                    Ok(
+                        (row.get::<&str, u32>("id").unwrap(),
+                         None
+                        )
+                    )
+                })
+                .unwrap();
+
+            a_similar = a_iter.into_iter().filter_map(|a| a.ok()).collect::<Vec<(u32, Option<u32>)>>();
+        }
+
+
+        log::info!("Similarities: {}", a_similar.len());
+
+        if a_similar.len() > 0 {
+            // if at least one album already exists with the same name, compare artists to verify if it is actually the same album
+            let mut insertion = false;
+            for artist_id in a_similar {
+                    if artist_id.1.is_none() {
+                        // if there is no artist value associated, but there is an album with the same name, insert anyway it's probably correct
+                        album.id = artist_id.0;
+                        insertion = true;
+
+                    } else {
+                        if artist_id.1.unwrap() == album.artist_id.unwrap() as u32 {
+                            // if album name is the same and artist_id this is probably the correct album
+                            album.id = artist_id.0;
+                            insertion = true;
+                        }
+                    }
             }
-            Err(_err) => {
-                // log::info!(
-                //     "No album with title, {}, found; Creating a new one \n ------ \n {}",
-                //     album.name.white().on_blue().bold(),
-                //     err.to_string()
-                // );
-                // Album does not exist yet
 
-                if let Some(visual) = find_visual(filepath) {
-                    //If visual data exists
-
-                    if album.num_of_tracks == 1 {
-                        match conn.execute(
-                            "INSERT INTO single (track_id, cover) VALUES (?, ?)",
-                            (&track.id, &visual),
-                        ) {
-                            Ok(_) => {
-                                log::info!("{}", "Added SINGLE with some visual!".green());
-                            }
-                            Err(err) => {
-                                log::error!("{}", "UNABLE TO INSERT *SINGLE* DATA W/ VISUAL".red());
-                                panic!("{}", err)
-                            }
-                        }
-                    } else {
-                        match conn.execute(
-                        "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
-                        (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, &visual),
-                    ) {
-                        Ok(_) => {
-                            log::info!("{}", "Added ALBUM with some visual!".green());
-                        }
-                        Err(_) => {
-                            log::error!("{}", "UNABLE TO INSERT ALBUM DATA W/ VISUAL".red());
-                        }
-                    }
-                    }
-                } else {
-                    //If visual data does not exist
-                    if album.num_of_tracks == 1 {
-                        match conn.execute(
-                            "INSERT INTO single (track.id, cover) VALUES (?, ?)",
-                            (&track.id, None::<Box<[u8]>>),
-                        ) {
-                            Ok(_) => {
-                                log::info!("{}", "Added SINGLE with some visual!".green());
-                            }
-                            Err(_) => {
-                                log::error!("{}", "UNABLE TO INSERT *SINGLE* DATA W/ VISUAL".red());
-                            }
-                        }
-                    } else {
-                        match conn.execute(
-                        "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
-                        (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, None::<Box<[u8]>>),
-                    ) {
-                        Ok(_) => {
-                            log::info!("{}", "Added album without visual!".purple());
-                        }
-                        Err(err) => {
-                            log::error!("{} \n {}", "UNABLE TO INSERT ALBUM DATA W/O VISUAL".red(), err.to_string());
-
-                        }
-                    }
-                    }
-                }
+            if insertion == false {
+                // if artist id does not match with any previous album entries, it probably is a different album
+                let image_dat = find_visual(filepath);
+                insert_track_to_grouping(&album, track.id, image_dat, &conn);
                 album.id = conn.last_insert_rowid() as u32
             }
+
+        } else {
+            // if there are no matching albums create a new one, or if there is only one track associated, assume it is a single
+            let image_dat = find_visual(filepath);
+            insert_track_to_grouping(&album, track.id, image_dat, &conn);
+            album.id = conn.last_insert_rowid() as u32
         }
 
         if album.num_of_tracks != 1 {
@@ -602,6 +614,38 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
             }
         }
     }
+}
+
+fn insert_track_to_grouping(album: &Album, track_id: u64, image_dat: Option<Box<[u8]>>, conn: &Connection) {
+    if album.num_of_tracks != 1 {
+        //Album
+        match conn.execute(
+            "INSERT INTO album (name, disc_number, track_number, artist_id, album_cover) VALUES (?, ?, ?, ?, ?)",
+            (&album.name, &album.num_of_discs, &album.num_of_tracks, &album.artist_id, image_dat),
+        ) {
+            Ok(_) => {
+                log::info!("{}", "Successfully added ALBUM!".purple());
+            }
+            Err(err) => {
+                log::error!("{} \n ERROR: {}", "Failed to insert ALBUM".red(), err);
+
+            }
+        }
+    } else {
+        //Single
+        match conn.execute(
+            "INSERT INTO single (track_id, cover) VALUES (?, ?)",
+            (&track_id, image_dat),
+        ) {
+            Ok(_) => {
+                log::info!("{}", "Successfully added SINGLE!".green());
+            }
+            Err(err) => {
+                log::error!("{} \n ERROR: {}", "Failed to insert SINGLE".red(), err);
+            }
+        }
+    }
+
 }
 
 pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
