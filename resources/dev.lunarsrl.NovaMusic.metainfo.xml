@@ -8,6 +8,8 @@
     <summary>A music player written in the libcosmic toolkit</summary>
     <content_rating type="oars-1.0"/>
     <url type="homepage">https://github.com/lunarsrl/NovaMusic</url>
+    <url type="bugtracker">https://github.com/lunarsrl/NovaMusic/issues</url>
+    <url type="vcs-browser">https://github.com/lunarsrl/NovaMusic</url>
 
     <metadata_license>FSFAP</metadata_license>
     <project_license>GPL-2.0-or-later</project_license>
