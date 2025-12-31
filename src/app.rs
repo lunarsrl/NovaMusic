@@ -22,8 +22,9 @@ use crate::app::page::playlists::{
     FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
 };
 use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
+use crate::app::page::CoverArt;
+use crate::app::page::CoverArt::SomeLoaded;
 use crate::app::scan::scan_directory;
-use crate::app::Message::ArtistPageEdit;
 use crate::config::{AppTheme, Config, SortBy};
 use crate::database::{create_database, create_database_entry, find_visual};
 use crate::mpris::MPRISRootInterface;
@@ -41,6 +42,7 @@ use cosmic::iced_widget::list;
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
+use cosmic::Action::App;
 use cosmic::{action, cosmic_config, cosmic_theme, theme};
 use event_listener::Listener;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
@@ -103,6 +105,7 @@ pub struct AppModel {
     pub artistspage_edit_dialog: bool,
 
     // Searches
+    pub search_active: bool,
     pub search_field: String,
     pub playlist_dialog_text: String,
     playlist_dialog_path: String,
@@ -120,6 +123,7 @@ pub struct AppModel {
     playlistsid: nav_bar::Id,
     homeid: nav_bar::Id,
     genreid: nav_bar::Id,
+    search_id: cosmic::iced_core::id::Id,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,7 +141,7 @@ pub struct AppTrack {
     pub artist: String,
     pub album_title: String,
     pub path_buf: PathBuf,
-    pub cover_art: Option<cosmic::widget::image::Handle>,
+    pub cover_art: crate::app::page::CoverArt,
 }
 
 /// Minimum amount of info required to display fully expose a Single track
@@ -213,8 +217,6 @@ pub enum Message {
     // Track Page
     TracksLoaded,
     TrackLoaded(Vec<AppTrack>),
-    UpdateSearch(String),
-    SearchResults(Vec<SearchResult>),
     ToggleTitle(bool),
     ToggleAlbum(bool),
     ToggleArtist(bool),
@@ -264,6 +266,7 @@ pub enum Message {
     ToastError(String),
 
     //experimenting
+    /// Dialogs
     CreatePlaylistCancel,
     CreatePlaylistAddThumbnail,
     CreatePlaylistIconChosen(PathBuf),
@@ -272,7 +275,14 @@ pub enum Message {
     EditPlaylistCancel,
     EditArtistConfirm,
     ArtistAddPicture(String),
+
+    // Menu Bar
     Sort(SortBy),
+    SearchActivate,
+    SearchClear,
+    SearchInput(String),
+    SearchResults,
+    PageDataRecieved(Vec<AppTrack>),
 }
 
 #[derive(Clone, Debug)]
@@ -426,7 +436,10 @@ impl cosmic::Application for AppModel {
             queue_pos: 0,
             clear: false,
             task_handle: None,
+
+            // Search related
             search_field: "".to_string(),
+            search_active: false,
 
             // dialogs toggles
 
@@ -452,6 +465,7 @@ impl cosmic::Application for AppModel {
             playlistsid,
             homeid,
             genreid,
+            search_id: cosmic::iced_core::id::Id::unique(),
         };
 
         // Start up commands
@@ -497,8 +511,24 @@ impl cosmic::Application for AppModel {
                 ),
             ),
         ]);
-
         vec![menu_bar.into()]
+    }
+
+    fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
+        let search = match self.search_active {
+            true => widget::text_input::search_input("", &self.search_field)
+                .width(Length::Fixed(240.0))
+                .id(self.search_id.clone())
+                .on_clear(Message::SearchClear)
+                .on_input(Message::SearchInput)
+                .into(),
+            false => widget::button::icon(widget::icon::from_name("system-search-symbolic"))
+                .on_press(Message::SearchActivate)
+                .padding(8)
+                .into(),
+        };
+
+        vec![search]
     }
 
     fn on_close_requested(&self, _id: Id) -> Option<Self::Message> {
@@ -543,10 +573,10 @@ impl cosmic::Application for AppModel {
                 let album = Some(self.queue.get(self.queue_pos).unwrap().album_title.as_str());
 
                 let cover = match &self.queue.get(self.queue_pos).unwrap().cover_art {
-                    None => cosmic::widget::icon::from_name("media-playback-start-symbolic")
+                    _ => cosmic::widget::icon::from_name("media-playback-start-symbolic")
                         .size(FOOTER_IMAGE_SIZE as u16)
                         .into(),
-                    Some(val) => cosmic::widget::image(val)
+                    SomeLoaded(val) => cosmic::widget::image(val)
                         .width(Length::Fixed(FOOTER_IMAGE_SIZE))
                         .height(Length::Fixed(FOOTER_IMAGE_SIZE))
                         .content_fit(ContentFit::ScaleDown)
@@ -763,6 +793,15 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::SearchInput(val) => self.search_field = val,
+            Message::SearchClear => {
+                self.search_active = false;
+                self.search_field = String::from("");
+            }
+            Message::SearchActivate => {
+                self.search_active = true;
+                return cosmic::widget::text_input::focus(self.search_id.clone());
+            }
             Message::Sort(val) => {
                 if val != self.config.sort_option {
                     self.config
@@ -1051,279 +1090,6 @@ impl cosmic::Application for AppModel {
                     self.core.window.show_context = true;
                 }
             }
-            Message::UpdateSearch(search) => {
-                self.search_field = search;
-
-                let regex = match regex::RegexBuilder::new(self.search_field.as_str())
-                    .case_insensitive(true)
-                    .build()
-                {
-                    Ok(a) => a,
-                    Err(err) => {
-                        log::error!("Update Search Error: {:?}", err);
-                        return self
-                            .toasts
-                            .push(cosmic::widget::toaster::Toast::new(fl!("SearchFailed")))
-                            .map(cosmic::Action::App);
-                    }
-                };
-
-                match self.nav.active_data::<Page>().unwrap() {
-                    Page::NowPlaying(_) => {}
-                    Page::Albums(page) => {
-                        let cloned_albums = page.albums.clone();
-                        return cosmic::Task::stream(
-                            cosmic::iced_futures::stream::channel(0, |mut tx| async move {
-                                tokio::task::spawn_blocking(move || {
-                                    let mut albums = cloned_albums
-                                        .par_iter()
-                                        .enumerate()
-                                        .map(|(index, album)| {
-                                            return match regex.find(&album.name) {
-                                                None => SearchResult {
-                                                    tracks_index: index,
-                                                    score: 999,
-                                                },
-                                                Some(val) => {
-                                                    if val.range().start == 0 {
-                                                        if val.range().end == album.name.len() {
-                                                            // Exact Match
-                                                            return SearchResult {
-                                                                tracks_index: index,
-                                                                score: 0,
-                                                            };
-                                                        }
-                                                        // Matches at the beginning
-
-                                                        return SearchResult {
-                                                            tracks_index: index,
-                                                            score: 1,
-                                                        };
-                                                    }
-                                                    // Matches somewhere else
-                                                    SearchResult {
-                                                        tracks_index: index,
-                                                        score: 2,
-                                                    }
-                                                }
-                                            };
-                                        })
-                                        .collect::<Vec<SearchResult>>();
-
-                                    albums.sort_by(|a, b| a.score.cmp(&b.score));
-                                    tx.try_send(Message::SearchResults(albums))
-                                });
-                                ()
-                            })
-                            .map(action::Action::App),
-                        );
-                    }
-                    Page::Playlists(page) => {
-                        let cloned_playlists = page.playlists.clone();
-
-                        return cosmic::Task::stream(
-                            cosmic::iced_futures::stream::channel(0, |mut tx| async move {
-                                tokio::task::spawn_blocking(move || {
-                                    let mut playlists = cloned_playlists
-                                        .par_iter()
-                                        .enumerate()
-                                        .map(|(index, playlist)| {
-                                            return match regex.find(&playlist.title) {
-                                                None => SearchResult {
-                                                    tracks_index: index,
-                                                    score: 999,
-                                                },
-                                                Some(val) => {
-                                                    if val.range().start == 0 {
-                                                        if val.range().end == playlist.title.len() {
-                                                            // Exact Match
-                                                            return SearchResult {
-                                                                tracks_index: index,
-                                                                score: 0,
-                                                            };
-                                                        }
-                                                        // Matches at the beginning
-
-                                                        return SearchResult {
-                                                            tracks_index: index,
-                                                            score: 1,
-                                                        };
-                                                    }
-                                                    // Matches somewhere else
-                                                    SearchResult {
-                                                        tracks_index: index,
-                                                        score: 2,
-                                                    }
-                                                }
-                                            };
-                                        })
-                                        .collect::<Vec<SearchResult>>();
-
-                                    playlists.sort_by(|a, b| a.score.cmp(&b.score));
-                                    tx.try_send(Message::SearchResults(playlists))
-                                });
-                                ()
-                            })
-                            .map(action::Action::App),
-                        );
-                    }
-                    Page::Tracks(page) => {
-                        let cloned_tracks = page.tracks.clone();
-
-                        return cosmic::Task::stream(
-                            cosmic::iced_futures::stream::channel(0, |mut tx| async move {
-                                tokio::task::spawn_blocking(move || {
-                                    let mut tracks = cloned_tracks
-                                        .par_iter()
-                                        .enumerate()
-                                        .map(|(index, track)| {
-                                            match regex.find(&track.title) {
-                                                None => {
-                                                    match regex.find(&track.album_title) {
-                                                        None => {
-                                                            match regex.find(&track.artist) {
-                                                                None => SearchResult {
-                                                                    tracks_index: index,
-                                                                    score: 999,
-                                                                },
-                                                                Some(val) => {
-                                                                    if val.range().start == 0 {
-                                                                        if val.range().end
-                                                                            == track.artist.len()
-                                                                        {
-                                                                            // Exact Match
-                                                                            return SearchResult {
-                                                                                tracks_index: index,
-                                                                                score: 6,
-                                                                            };
-                                                                        }
-                                                                        // Matches at the beginning
-
-                                                                        return SearchResult {
-                                                                            tracks_index: index,
-                                                                            score: 7,
-                                                                        };
-                                                                    }
-                                                                    // Matches somewhere else
-                                                                    return SearchResult {
-                                                                        tracks_index: index,
-                                                                        score: 8,
-                                                                    };
-                                                                }
-                                                            }
-                                                        }
-                                                        Some(val) => {
-                                                            if val.range().start == 0 {
-                                                                if val.range().end
-                                                                    == track.album_title.len()
-                                                                {
-                                                                    // Exact Match
-                                                                    return SearchResult {
-                                                                        tracks_index: index,
-                                                                        score: 3,
-                                                                    };
-                                                                }
-                                                                // Matches at the beginning
-
-                                                                return SearchResult {
-                                                                    tracks_index: index,
-                                                                    score: 4,
-                                                                };
-                                                            }
-                                                            // Matches somewhere else
-                                                            return SearchResult {
-                                                                tracks_index: index,
-                                                                score: 5,
-                                                            };
-                                                        }
-                                                    }
-                                                }
-                                                Some(val) => {
-                                                    if val.range().start == 0 {
-                                                        if val.range().end == track.title.len() {
-                                                            // Exact Match
-                                                            return SearchResult {
-                                                                tracks_index: index,
-                                                                score: 0,
-                                                            };
-                                                        }
-                                                        // Matches at the beginning
-
-                                                        return SearchResult {
-                                                            tracks_index: index,
-                                                            score: 1,
-                                                        };
-                                                    }
-                                                    // Matches somewhere else
-                                                    return SearchResult {
-                                                        tracks_index: index,
-                                                        score: 2,
-                                                    };
-                                                }
-                                            }
-                                        })
-                                        .collect::<Vec<SearchResult>>();
-
-                                    tracks.sort_by(|a, b| a.score.cmp(&b.score));
-                                    tx.try_send(Message::SearchResults(tracks))
-                                });
-                                ()
-                            })
-                            .map(action::Action::App),
-                        );
-                    }
-                    Page::Artist(page) => {
-                        let cloned_artists = page.artists.clone();
-                        return cosmic::Task::stream(
-                            cosmic::iced_futures::stream::channel(0, |mut tx| async move {
-                                tokio::task::spawn_blocking(move || {
-                                    let mut albums = cloned_artists
-                                        .par_iter()
-                                        .enumerate()
-                                        .map(|(index, album)| {
-                                            return match regex.find(&album.name) {
-                                                None => SearchResult {
-                                                    tracks_index: index,
-                                                    score: 999,
-                                                },
-                                                Some(val) => {
-                                                    if val.range().start == 0 {
-                                                        if val.range().end == album.name.len() {
-                                                            // Exact Match
-                                                            return SearchResult {
-                                                                tracks_index: index,
-                                                                score: 0,
-                                                            };
-                                                        }
-                                                        // Matches at the beginning
-
-                                                        return SearchResult {
-                                                            tracks_index: index,
-                                                            score: 1,
-                                                        };
-                                                    }
-                                                    // Matches somewhere else
-                                                    SearchResult {
-                                                        tracks_index: index,
-                                                        score: 2,
-                                                    }
-                                                }
-                                            };
-                                        })
-                                        .collect::<Vec<SearchResult>>();
-
-                                    albums.sort_by(|a, b| a.score.cmp(&b.score));
-                                    tx.try_send(Message::SearchResults(albums))
-                                });
-                                ()
-                            })
-                            .map(action::Action::App),
-                        );
-                    }
-                    &app::Page::Genre(_) => todo!(),
-                }
-            }
-
             Message::LaunchUrl(url) => match open::that_detached(&url) {
                 Ok(()) => {}
                 Err(err) => {
@@ -1572,10 +1338,59 @@ impl cosmic::Application for AppModel {
                     Page::NowPlaying(_) => {}
                     Page::Albums(val) => {}
                     Page::Playlists(page) => {}
-                    Page::Tracks(page) => {}
+                    Page::Tracks(page) => {
+                        let mut page_ref = page.clone();
+                        return cosmic::Task::future(async move {
+                            let conn = connect_to_db();
+
+                            let mut stmt = conn.prepare(
+                                "
+                                select track.id as id, track.name as title, art.name as artist, track.path, a.name as album_title
+                                from track
+                                    left join main.album_tracks at on track.id = at.track_id
+                                    left join main.artists art on track.artist_id = art.id
+                                    left join main.album a on at.album_id = a.id;
+                            ").unwrap();
+
+                            let tracks = stmt.query_map([], |row| {
+                                Ok(
+                                    AppTrack {
+                                        id: row.get("id").unwrap_or(0),
+                                        title: row
+                                            .get("title")
+                                            .unwrap_or("N/A".to_string()),
+                                        artist: row
+                                            .get("artist")
+                                            .unwrap_or("N/A".to_string()),
+                                        album_title: row
+                                            .get("album_title")
+                                            .unwrap_or("N/A".to_string()),
+                                        path_buf: PathBuf::from(
+                                            row.get::<&str, String>("path")
+                                                .expect("This should never happen"),
+                                        ),
+                                        cover_art: CoverArt::None,
+                                    }
+                                )
+                            }).expect("Should never break");
+
+                            let tracks = tracks.filter_map(|a| a.ok()).collect::<Vec<AppTrack>>();
+                            log::info!("{:?}", tracks);
+
+                            Message::PageDataRecieved(tracks)
+                        }).map(cosmic::Action::App);
+                    }
                     Page::Artist(page) => {}
                     Page::Genre(page) => {}
                 }
+            }
+            Message::PageDataRecieved(tracks) => {
+                let dats = self.nav.active_data_mut::<Page>().unwrap();
+                if let Page::Tracks(dat) = dats {
+                    dat.tracks = Arc::from(tracks);
+                }
+
+                self.update(Message::SearchClear);
             }
 
             Message::ArtistRequested(artist) => {
@@ -1899,8 +1714,10 @@ where a.name = ?    ",
                                     .expect("There should always be a file path"),
                             ),
                             cover_art: match row.get::<&str, Vec<u8>>("album_cover") {
-                                Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
-                                Err(_) => None,
+                                Ok(val) => {
+                                    SomeLoaded(cosmic::widget::image::Handle::from_bytes(val))
+                                }
+                                Err(_) => CoverArt::None,
                             },
                         })
                     }) {
@@ -2449,7 +2266,7 @@ where a.name = ?    ",
                     page.playlist_page_state = PlaylistPageState::Loading
                 }
             }
-            Message::SearchResults(tracks) => {
+            Message::SearchResults => {
                 todo!()
             }
             Message::ToggleTitle(val) => {
@@ -2520,8 +2337,10 @@ where a.name = ?    ",
                             TrackType::Single => String::from(""),
                         },
                         cover_art: match visual {
-                            Some(cover) => Some(cosmic::widget::image::Handle::from_bytes(cover)),
-                            None => None,
+                            Some(cover) => {
+                                SomeLoaded(cosmic::widget::image::Handle::from_bytes(cover))
+                            }
+                            None => CoverArt::None,
                         },
                     })
                 }) {
