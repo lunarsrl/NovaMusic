@@ -11,10 +11,11 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
+    - name: Depencencies
+      run: sudo apt-get install -y libxkbcommon-dev
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
