@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::app::page::PageBuilder;
+use crate::app::page::CoverArt::SomeLoaded;
+use crate::app::page::{Page, PageBuilder};
 use crate::app::{AppModel, AppTrack, Message};
+use crate::fl;
+use cosmic::iced::alignment::Vertical;
 use cosmic::iced::widget::scrollable::Viewport;
-use cosmic::iced::ContentFit;
+use cosmic::iced::{ContentFit, Length};
 use cosmic::Element;
 use std::sync::Arc;
 
@@ -16,6 +19,7 @@ pub struct TrackPage {
     pub viewport: Option<Viewport>,
     pub load_depth: u32,
     pub scrollbar_id: cosmic::iced_core::widget::Id,
+
     pub search_by_artist: bool,
     pub search_by_album: bool,
     pub search_by_title: bool,
@@ -34,6 +38,24 @@ pub struct SearchResult {
     pub score: u32,
 }
 
+// Page Definition
+impl Page for TrackPage {
+    fn title(&self) -> String {
+        String::from(fl!("TrackLibrary"))
+    }
+    fn body(&self) -> Element<Message> {
+        let mut tracks = vec![];
+        for track in self.tracks.as_slice() {
+            tracks.push(track.display())
+        }
+
+        cosmic::widget::scrollable(
+            cosmic::widget::column::with_children(tracks), // .spacing(cosmic::theme::spacing().space_s)
+        )
+        .into()
+    }
+}
+
 impl TrackPage {
     pub fn new() -> TrackPage {
         TrackPage {
@@ -50,28 +72,40 @@ impl TrackPage {
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
-        self.header(model.search_field.clone())
+        self.page()
     }
 }
 
 impl AppTrack {
-    fn display(&self) -> Element<Message> {
+    pub fn display(&self) -> Element<Message> {
         let track_image = match &self.cover_art {
-            None => cosmic::widget::icon::from_name("store-relax-symbolic")
-                .size(32)
-                .into(),
-            Some(cover) => cosmic::widget::image(cover)
+            SomeLoaded(visual) => cosmic::widget::image(visual)
                 .width(32)
                 .height(32)
                 .content_fit(ContentFit::Cover)
                 .into(),
+            _ => cosmic::widget::icon::from_name("applications-multimedia-symbolic").into(),
         };
-        cosmic::widget::container(cosmic::widget::row::with_children(vec![
-            track_image,
-            cosmic::widget::text(self.title.as_str()).into(),
-            cosmic::widget::text(self.artist.as_str()).into(),
-            cosmic::widget::text(self.album_title.as_str()).into(),
-        ]))
+        cosmic::widget::container(
+            cosmic::widget::row::with_children(vec![
+                track_image,
+                cosmic::widget::horizontal_space()
+                    .width(Length::FillPortion(1))
+                    .into(),
+                cosmic::widget::text(self.title.as_str())
+                    .width(Length::FillPortion(3))
+                    .into(),
+                cosmic::widget::horizontal_space().into(),
+                cosmic::widget::text(self.artist.as_str())
+                    .width(Length::FillPortion(3))
+                    .into(),
+                cosmic::widget::horizontal_space().into(),
+                cosmic::widget::text(self.album_title.as_str())
+                    .width(Length::FillPortion(3))
+                    .into(),
+            ])
+            .align_y(Vertical::Center),
+        )
         .into()
     }
 }

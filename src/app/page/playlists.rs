@@ -53,6 +53,6 @@ impl PlaylistPage {
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
-        self.header(model.search_field.clone())
+        self.header()
     }
 }

@@ -6,9 +6,11 @@ use crate::fl;
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::Alignment::Start;
 use cosmic::iced::{ContentFit, Length, Pixels};
-use cosmic::widget::{image, list_column};
+use cosmic::widget::list_column;
 use cosmic::{iced, Element};
 
+use crate::app::page::CoverArt;
+use crate::app::page::CoverArt::SomeLoaded;
 use cosmic::iced_core::text::Wrapping;
 use cosmic::iced_widget::scrollable::Viewport;
 
@@ -33,7 +35,7 @@ impl HomePage {
         let cover;
         match model.queue.is_empty() {
             true => {
-                cover = format_cover_page(&"".to_string(), &"".to_string(), None, &None);
+                cover = format_cover_page(&"".to_string(), &"".to_string(), None, &CoverArt::None);
             }
             false => {
                 cover = format_cover_page(
@@ -267,21 +269,21 @@ pub fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, M
     list.unwrap().into_element()
 }
 
-pub(crate) fn format_cover_page(
+pub(crate) fn format_cover_page<'a>(
     title: &String,
     artist: &String,
     album: Option<&String>,
-    handle: &Option<image::Handle>,
-) -> Element<'static, Message> {
+    handle: &CoverArt,
+) -> Element<'a, Message> {
     const COVER_ART_SIZE: u32 = 192;
 
     cosmic::widget::row::with_children(vec![
         cosmic::widget::container(
             cosmic::widget::Column::with_children(vec![match handle {
-                None => cosmic::widget::icon::from_name("applications-audio-symbolic")
+                _ => cosmic::widget::icon::from_name("applications-audio-symbolic")
                     .size(192)
                     .into(),
-                Some(track) => cosmic::widget::image(track)
+                SomeLoaded(track) => cosmic::widget::image(track)
                     //todo make this customizable
                     .content_fit(ContentFit::ScaleDown)
                     .border_radius([12.0, 12.0, 12.0, 12.0])
