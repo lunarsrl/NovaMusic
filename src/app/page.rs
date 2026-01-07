@@ -44,6 +44,7 @@ impl<T: Page> PageBuilder for T {
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
             self.header(),
             self.body(),
+
         ]))
         .height(Length::Fill)
         .width(Length::Fill)

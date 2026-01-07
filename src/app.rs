@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use rayon::prelude::*;
+use std::sync::{Mutex, RwLock};
 use crate::mpris::player::MPRISPlayer;
 use cosmic::dialog::file_chooser::Error;
 use regex::Regex;
@@ -43,7 +45,7 @@ use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::Action::App;
-use cosmic::{action, cosmic_config, cosmic_theme, theme};
+use cosmic::{action, cosmic_config, cosmic_theme, task, theme};
 use event_listener::Listener;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use rodio::{Sink, Source};
@@ -62,6 +64,7 @@ use std::{fs, io};
 use symphonia::default::get_probe;
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::{connection, Connection, MatchRule, MessageStream};
+use crate::app::Message::LoadTrackImages;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] =
@@ -283,6 +286,7 @@ pub enum Message {
     SearchInput(String),
     SearchResults,
     PageDataRecieved(Vec<AppTrack>),
+    LoadTrackImages(AppTrack),
 }
 
 #[derive(Clone, Debug)]
@@ -426,6 +430,7 @@ impl cosmic::Application for AppModel {
             config: config.1,
             config_handler,
             rescan_available: true,
+
             // Audio
             mixer,
             sink,
@@ -1009,7 +1014,7 @@ impl cosmic::Application for AppModel {
                                     )
                                 }
                                 Error::Close(err) => {
-                                    error = String::from(format!("Closer: {}", err.to_string()))
+                                    error = String::from(format!("Closed: {}", err.to_string()))
                                 }
                                 Error::Open(err) => {
                                     error = String::from(format!("Open: {}", err.to_string()))
@@ -1150,7 +1155,6 @@ impl cosmic::Application for AppModel {
                 }
 
                 // Tracks: Full reset
-
                 let tracks = self
                     .nav
                     .data_mut::<Page>(self.tracksid)
@@ -1339,8 +1343,11 @@ impl cosmic::Application for AppModel {
                     Page::Albums(val) => {}
                     Page::Playlists(page) => {}
                     Page::Tracks(page) => {
-                        let mut page_ref = page.clone();
-                        return cosmic::Task::future(async move {
+                       if let TrackPageState::Loaded = page.track_page_state  {
+
+                           return task::none()
+                       }
+                        return cosmic::Task::future( async move {
                             let conn = connect_to_db();
 
                             let mut stmt = conn.prepare(
@@ -1376,7 +1383,6 @@ impl cosmic::Application for AppModel {
 
                             let tracks = tracks.filter_map(|a| a.ok()).collect::<Vec<AppTrack>>();
                             log::info!("{:?}", tracks);
-
                             Message::PageDataRecieved(tracks)
                         }).map(cosmic::Action::App);
                     }
@@ -1385,12 +1391,32 @@ impl cosmic::Application for AppModel {
                 }
             }
             Message::PageDataRecieved(tracks) => {
-                let dats = self.nav.active_data_mut::<Page>().unwrap();
-                if let Page::Tracks(dat) = dats {
-                    dat.tracks = Arc::from(tracks);
+                if let Page::Tracks(data) = self.nav.data_mut::<Page>(self.tracksid).unwrap() {
+                    data.tracks = Arc::from(RwLock::from(Vec::with_capacity(tracks.len())));
                 }
 
-                self.update(Message::SearchClear);
+
+                let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+
+                std::thread::spawn(move || {
+                    tracks.into_iter().for_each(|mut val| {
+                        val.title = "Hello!".to_string();
+
+                        tx.send(LoadTrackImages(val)).unwrap();
+                    });
+                });
+
+                return cosmic::Task::stream(tokio_stream::wrappers::UnboundedReceiverStream::new(rx)).map(cosmic::Action::App);
+                if let Page::Tracks(track)= self.nav.active_data_mut::<crate::app::Page>().unwrap() {
+                    track.tracks = Arc::from(RwLock::from(tracks));
+                }
+            }
+
+            Message::LoadTrackImages(track) => {
+                if let Page::Tracks(page) = self.nav.active_data_mut::<Page>().unwrap() {
+                    page.tracks.write().unwrap().push(track)
+                }
+
             }
 
             Message::ArtistRequested(artist) => {
@@ -1594,7 +1620,7 @@ where a.name = ?    ",
                     .data_mut::<Page>(self.tracksid)
                     .expect("Should always be intialized")
                 {
-                    dat.tracks = Arc::new(track)
+                    dat.tracks = Arc::new(RwLock::from(track))
                 }
             }
             Message::TracksLoaded => {

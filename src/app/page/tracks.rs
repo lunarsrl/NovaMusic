@@ -8,11 +8,12 @@ use cosmic::iced::alignment::Vertical;
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::{ContentFit, Length};
 use cosmic::Element;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
+use rayon::iter::IntoParallelIterator;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
-    pub tracks: Arc<Vec<AppTrack>>,
+    pub tracks: Arc<RwLock<Vec<AppTrack>>>,
     pub search: Vec<SearchResult>,
     pub SearchTerm: String,
     pub track_page_state: TrackPageState,
@@ -44,12 +45,25 @@ impl Page for TrackPage {
         String::from(fl!("TrackLibrary"))
     }
     fn body(&self) -> Element<Message> {
+        log::info!("LOCK STATE: {:?}", self.tracks.is_poisoned());
         let mut tracks = vec![];
-        for track in self.tracks.as_slice() {
-            tracks.push(track.display())
+
+        for (index, track) in self.tracks.clone().read().unwrap().iter().enumerate() {
+            let owned_track = track.clone();
+            let display_element: Element<Message> = owned_track.display().into();
+
+            if index % 2 == 0 {
+                tracks.push(
+                    cosmic::widget::container::Container::new(display_element).class(cosmic::theme::Container::Primary).into()
+                )
+            } else {
+                tracks.push(
+                    cosmic::widget::container::Container::new(display_element).class(cosmic::theme::Container::List).into()
+                )
+            }
         }
 
-        cosmic::widget::scrollable(
+        return cosmic::widget::scrollable(
             cosmic::widget::column::with_children(tracks), // .spacing(cosmic::theme::spacing().space_s)
         )
         .into()
@@ -59,7 +73,7 @@ impl Page for TrackPage {
 impl TrackPage {
     pub fn new() -> TrackPage {
         TrackPage {
-            tracks: Arc::new(vec![]),
+            tracks: Arc::new(RwLock::from(vec![])),
             search: vec![],
             SearchTerm: String::from(""),
             track_page_state: TrackPageState::Loading,
@@ -77,35 +91,35 @@ impl TrackPage {
 }
 
 impl AppTrack {
-    pub fn display(&self) -> Element<Message> {
+    pub fn display(self) -> Element<'static, Message> {
         let track_image = match &self.cover_art {
-            SomeLoaded(visual) => cosmic::widget::image(visual)
-                .width(32)
-                .height(32)
-                .content_fit(ContentFit::Cover)
-                .into(),
+            SomeLoaded(visual) => {
+                cosmic::widget::image(visual)
+                .width(64)
+                .height(64)
+                .into()},
             _ => cosmic::widget::icon::from_name("applications-multimedia-symbolic").into(),
         };
-        cosmic::widget::container(
+
             cosmic::widget::row::with_children(vec![
                 track_image,
                 cosmic::widget::horizontal_space()
                     .width(Length::FillPortion(1))
                     .into(),
-                cosmic::widget::text(self.title.as_str())
+                cosmic::widget::text(self.title.to_string())
                     .width(Length::FillPortion(3))
                     .into(),
                 cosmic::widget::horizontal_space().into(),
-                cosmic::widget::text(self.artist.as_str())
+                cosmic::widget::text(self.artist.to_string())
                     .width(Length::FillPortion(3))
                     .into(),
                 cosmic::widget::horizontal_space().into(),
-                cosmic::widget::text(self.album_title.as_str())
+                cosmic::widget::text(self.album_title.to_string())
                     .width(Length::FillPortion(3))
                     .into(),
             ])
-            .align_y(Vertical::Center),
-        )
-        .into()
+                .height(Length::Fixed(64.0))
+                .align_y(Vertical::Center)
+                .into()
     }
 }
