@@ -4,6 +4,7 @@ Type=Application
 
 Name=Nova Music 
 Comment=A music player written in the libcosmic toolkit
+Comment[cs]=Hudební přehrávač napsaný v toolkitu libcosmic
 Categories=AudioVideo;Player;
 
 Icon=dev.lunarsrl.NovaMusic
