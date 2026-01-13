@@ -6,6 +6,7 @@
 
     <name>Nova Music</name>
     <summary>A music player written in the libcosmic toolkit</summary>
+    <summary xml:lang="cs">Hudební přehrávač napsaný v toolkitu libcosmic</summary>
     <content_rating type="oars-1.0"/>
     <url type="homepage">https://github.com/lunarsrl/NovaMusic</url>
     <url type="bugtracker">https://github.com/lunarsrl/NovaMusic/issues</url>
@@ -14,7 +15,6 @@
     <metadata_license>FSFAP</metadata_license>
     <project_license>GPL-2.0-or-later</project_license>
 
-    `
     <developer id="@lunarpenguin@masto.es">
         <name>Samuel Rivero luna</name>
     </developer>
@@ -37,25 +37,31 @@
         </p>
     </description>
 
+    <description xml:lang="cs">
+        <p>
+            Hudební přehrávač napsaný v toolkitu libcosmic. Prohledává vybraný adresář s audio soubory, načítá metadata a 
+            zobrazuje je i organizuje na několika stránkách. Hudbu si můžete prohlížet podle jednotlivých skladeb, alb nebo
+            umělců. Přímo v aplikaci lze snadno vytvářet playlisty ve formátu m3u8 – zvolíte název, ikonu a playlist se 
+            poté zobrazí na stránce seznamů skladeb pro rychlý přístup k oblíbeným písním.
+        </p>
+    </description>
+
     <launchable type="desktop-id">dev.lunarsrl.NovaMusic.desktop</launchable>
     <screenshots>
         <screenshot type="default">
-            <image>
-                https://lunarsrl.dev/static/images/NovaMusic/NowPlaying.png
-            </image>
-	    <caption>Nova Music "Now Playing" Page</caption>
+            <image>https://lunarsrl.dev/static/images/NovaMusic/NowPlaying.png</image>
+            <caption>Nova Music "Now Playing" Page</caption>
+            <caption xml:lang="cs">Stránka „Nyní hraje“ v Nova Music</caption>
         </screenshot>
         <screenshot>
-            <image>
-                https://lunarsrl.dev/static/images/NovaMusic/Album.png
-	    </image>
-	    <caption>Nova Music "Album Library" Page</caption>
+            <image>https://lunarsrl.dev/static/images/NovaMusic/Album.png</image>
+            <caption>Nova Music "Album Library" Page</caption>
+            <caption xml:lang="cs">Stránka „Knihovna alb“ v Nova Music</caption>
         </screenshot>
         <screenshot>
-            <image>
-                https://lunarsrl.dev/static/images/NovaMusic/Tracks.png
-            </image>
-	    <caption>Nova Music "Track Library" Page</caption>
+            <image>https://lunarsrl.dev/static/images/NovaMusic/Tracks.png</image>
+            <caption>Nova Music "Track Library" Page</caption>
+            <caption xml:lang="cs">Stránka „Knihovna skladeb“ v Nova Music</caption>
         </screenshot>
     </screenshots>
 

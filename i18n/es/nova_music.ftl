@@ -62,12 +62,11 @@ AlbumInputPlaceholder = Título de álbum
 AlbumDiscNumber = Disco {$number}
 AlbumAttribution = {$artist}
 
-
 # Artist Page
 ArtistInputPlaceholder = Nombre de algun artista
 ArtistsPageEmpty = Sin artistas
 
-#Track Page
+# Track Page
 TrackLibrary = Biblioteca de Pistas
 TrackInputPlaceholder = Informacíon sobre alguna pista
 SearchFilter = Busca por
@@ -87,6 +86,7 @@ MusicPlayer = Reproducidor de Música
 AppVolume = Volumen del applicacion {$volume}
 FooterToggle = Mostrar barra de reproducion
 Theme = Tema
+
 # Error
 SearchFailed = Error con la buscada!
 ScanFileDoesNotExist = No se encuentra el directorio de música
