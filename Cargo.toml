@@ -33,7 +33,7 @@ image = "0.25.9"
 tokio-stream = "0.1.17"
 
 [dependencies.i18n-embed]
-version = "0.15"
+version = "0.15.0"
 features = ["fluent-system", "desktop-requester"]
 
 [dependencies.libcosmic]

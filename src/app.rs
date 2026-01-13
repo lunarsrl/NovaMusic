@@ -59,7 +59,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{fs, io};
 use symphonia::default::get_probe;
 use zbus::export::ordered_stream::OrderedStreamExt;
@@ -873,7 +873,7 @@ impl cosmic::Application for AppModel {
                     page.viewport = Some(view);
                 }
                 Page::Playlists(page) => page.viewport = Some(view),
-                Page::Tracks(page) => page.viewport = Some(view),
+                Page::Tracks(page) => { page.viewport = Some(view) },
                 Page::Artist(page) => page.viewport = Some(view),
                 Page::Genre(page) => page.viewport = Some(view),
             },
@@ -1316,6 +1316,7 @@ impl cosmic::Application for AppModel {
                 }
             }
             Message::OnNavEnter(reasoning) => {
+                let timer = std::time::Instant::now();
                 //always
                 self.search_field = "".to_string();
 
@@ -1341,82 +1342,66 @@ impl cosmic::Application for AppModel {
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(_) => {}
                     Page::Albums(val) => {}
-                    Page::Playlists(page) => {}
+                    Page::Playlists(page) => {
+
+                    }
                     Page::Tracks(page) => {
-                       if let TrackPageState::Loaded = page.track_page_state  {
+                        match page.track_page_state {
+                            TrackPageState::Loading => {
+                                return page.load_page_data();
+                            }
+                            TrackPageState::Loaded => {
+                                return task::none();
+                            }
+                            TrackPageState::Search => {
 
-                           return task::none()
-                       }
-                        return cosmic::Task::future( async move {
-                            let conn = connect_to_db();
-
-                            let mut stmt = conn.prepare(
-                                "
-                                select track.id as id, track.name as title, art.name as artist, track.path, a.name as album_title
-                                from track
-                                    left join main.album_tracks at on track.id = at.track_id
-                                    left join main.artists art on track.artist_id = art.id
-                                    left join main.album a on at.album_id = a.id;
-                            ").unwrap();
-
-                            let tracks = stmt.query_map([], |row| {
-                                Ok(
-                                    AppTrack {
-                                        id: row.get("id").unwrap_or(0),
-                                        title: row
-                                            .get("title")
-                                            .unwrap_or("N/A".to_string()),
-                                        artist: row
-                                            .get("artist")
-                                            .unwrap_or("N/A".to_string()),
-                                        album_title: row
-                                            .get("album_title")
-                                            .unwrap_or("N/A".to_string()),
-                                        path_buf: PathBuf::from(
-                                            row.get::<&str, String>("path")
-                                                .expect("This should never happen"),
-                                        ),
-                                        cover_art: CoverArt::None,
-                                    }
-                                )
-                            }).expect("Should never break");
-
-                            let tracks = tracks.filter_map(|a| a.ok()).collect::<Vec<AppTrack>>();
-                            log::info!("{:?}", tracks);
-                            Message::PageDataRecieved(tracks)
-                        }).map(cosmic::Action::App);
+                            },
+                            TrackPageState::Waiting => {
+                                return task::none();
+                            }
+                        }
                     }
                     Page::Artist(page) => {}
                     Page::Genre(page) => {}
                 }
             }
-            Message::PageDataRecieved(tracks) => {
+            Message::PageDataRecieved(mut tracks) => {
+                let timer = std::time::Instant::now();
+                let size = tracks.len();
                 if let Page::Tracks(data) = self.nav.data_mut::<Page>(self.tracksid).unwrap() {
-                    data.tracks = Arc::from(RwLock::from(Vec::with_capacity(tracks.len())));
-                }
-
-
-                let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
-
-                std::thread::spawn(move || {
-                    tracks.into_iter().for_each(|mut val| {
-                        val.title = "Hello!".to_string();
-
-                        tx.send(LoadTrackImages(val)).unwrap();
+                    tracks.sort_by(|a, b| {
+                        let achar = a.title.chars().next().unwrap();
+                        let bchar = b.title.chars().next().unwrap();
+                        achar.cmp(&bchar)
                     });
-                });
 
-                return cosmic::Task::stream(tokio_stream::wrappers::UnboundedReceiverStream::new(rx)).map(cosmic::Action::App);
-                if let Page::Tracks(track)= self.nav.active_data_mut::<crate::app::Page>().unwrap() {
-                    track.tracks = Arc::from(RwLock::from(tracks));
+                    data.tracks = Arc::from(RwLock::from(Vec::with_capacity(size)));
+
+                    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+
+                    tracks.into_iter().for_each(|track| {
+                        tx.send(LoadTrackImages(track)).expect("failed to send loadtrackimage");
+                    });
+                    tx.send(Message::ToastError(format!("Finished loading {} tracks in {}ms", size, timer.elapsed().as_millis()))).expect("Unable to send");
+
+                    return cosmic::Task::stream(
+                        tokio_stream::wrappers::UnboundedReceiverStream::new(rx)
+                    ).map(cosmic::Action::App);
                 }
             }
 
             Message::LoadTrackImages(track) => {
                 if let Page::Tracks(page) = self.nav.active_data_mut::<Page>().unwrap() {
-                    page.tracks.write().unwrap().push(track)
-                }
 
+                    let cloned_tracks: Arc<RwLock<Vec<AppTrack>>> = Arc::clone(&page.tracks);
+
+                    tokio::task::spawn_blocking(move || {
+                        let timer = std::time::Instant::now();
+                        cloned_tracks.write().unwrap().push(track);
+                        log::info!("spawn locking timer: {}", timer.elapsed().as_millis())
+                    });
+
+                }
             }
 
             Message::ArtistRequested(artist) => {

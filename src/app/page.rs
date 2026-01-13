@@ -16,6 +16,7 @@ use cosmic::iced::{Alignment, Length};
 use cosmic::{iced, Element};
 use std::fmt::Display;
 
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CoverArt {
     None,
@@ -68,7 +69,7 @@ impl<T: Page> PageBuilder for T {
             .align_y(Alignment::Center)
             .spacing(cosmic::theme::spacing().space_s)
             .into(),
-            cosmic::widget::divider::horizontal::light().into(),
+            cosmic::widget::divider::horizontal::default().into(),
         ])
         .spacing(cosmic::theme::spacing().space_s)
         .into()
@@ -115,3 +116,5 @@ impl Page for AlbumPage {
         todo!()
     }
 }
+
+
