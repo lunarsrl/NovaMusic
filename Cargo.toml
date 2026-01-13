@@ -11,7 +11,7 @@ vergen = { version = "8", features = ["git", "gitcl"] }
 
 [dependencies]
 futures-util = "0.3.31"
-i18n-embed-fl = "0.9.2"
+i18n-embed-fl = "0.10.0"
 open = "5.3.0"
 rust-embed = "8.5.0"
 tokio = { version = "1.41.0", features = ["full"] }
@@ -20,7 +20,7 @@ humantime = "2.2.0"
 fern = "0.7.1"
 rodio = { version = "0.21.1", features = ["symphonia", "symphonia-all", "playback"], default-features = false }
 symphonia = { version = "0.5.4", features = ["all-codecs"] }
-rusqlite = "0.35.0"
+rusqlite = "0.38.0"
 colored = "3.0.0"
 futures = "0.3.31"
 rayon = "1.10.0"
@@ -33,7 +33,7 @@ image = "0.25.9"
 tokio-stream = "0.1.17"
 
 [dependencies.i18n-embed]
-version = "0.15.0"
+version = "0.16.0"
 features = ["fluent-system", "desktop-requester"]
 
 [dependencies.libcosmic]
