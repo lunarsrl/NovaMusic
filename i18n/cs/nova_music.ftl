@@ -65,7 +65,7 @@ AlbumAttribution = {$artist}
 ArtistInputPlaceholder = Vložit jméno umělce
 ArtistsPageEmpty = Žádní umělci
 
-#Track Page
+# Track Page
 TrackLibrary = Knihovna skladeb
 TrackInputPlaceholder = Vložit informace o skladbě
 SearchFilter = Vyhledat pomocí
@@ -85,6 +85,7 @@ MusicPlayer = Přehrávač hudby
 AppVolume = Hlasitost aplikace {$volume}
 FooterToggle = Přepnout mini-přehrávač
 Theme = Téma
+
 # Error
 SearchFailed = Vyhledávání selhalo!
 ScanFileDoesNotExist = Adresář s hudbou nebyl nalezen
