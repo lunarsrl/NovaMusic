@@ -23,9 +23,14 @@ impl AppTheme {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Copy, Eq)]
-pub enum SortBy {
-    AscendingName,
-    DescendingName,
+pub enum SortOrder {
+    Ascending,
+    Descending,
+}
+
+pub enum SortData {
+    Time,
+    String,
 }
 
 #[derive(Debug, Clone, CosmicConfigEntry, PartialEq)]
@@ -40,7 +45,7 @@ pub struct Config {
     pub albums_found: u32,
     pub volume: f32,
     pub footer: bool,
-    pub sort_option: SortBy,
+    pub sort_order: SortOrder,
 }
 
 impl Config {
@@ -72,7 +77,7 @@ impl Default for Config {
             albums_found: 0,
             volume: 100.0,
             footer: true,
-            sort_option: SortBy::AscendingName,
+            sort_order: SortOrder::Ascending,
         }
     }
 }

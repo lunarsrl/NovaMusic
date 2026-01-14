@@ -27,7 +27,7 @@ use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::page::CoverArt;
 use crate::app::page::CoverArt::SomeLoaded;
 use crate::app::scan::scan_directory;
-use crate::config::{AppTheme, Config, SortBy};
+use crate::config::{AppTheme, Config, SortOrder};
 use crate::database::{create_database, create_database_entry, find_visual};
 use crate::mpris::MPRISRootInterface;
 use crate::{app, config, fl};
@@ -280,12 +280,12 @@ pub enum Message {
     ArtistAddPicture(String),
 
     // Menu Bar
-    Sort(SortBy),
+    Sort(SortOrder),
     SearchActivate,
     SearchClear,
     SearchInput(String),
     SearchResults,
-    PageDataRecieved(Vec<AppTrack>),
+    TrackDataRecieved(Vec<AppTrack>),
     LoadTrackImages(AppTrack),
 }
 
@@ -503,14 +503,14 @@ impl cosmic::Application for AppModel {
                         menu::Item::CheckBox(
                             "A-Z",
                             None,
-                            self.config.sort_option == SortBy::AscendingName,
-                            Action::SortChange(SortBy::AscendingName),
+                            self.config.sort_order == SortOrder::Ascending,
+                            Action::SortChange(SortOrder::Ascending),
                         ),
                         menu::Item::CheckBox(
                             "Z-A",
                             None,
-                            self.config.sort_option == SortBy::DescendingName,
-                            Action::SortChange(SortBy::DescendingName),
+                            self.config.sort_order == SortOrder::Descending,
+                            Action::SortChange(SortOrder::Descending),
                         ),
                     ],
                 ),
@@ -808,9 +808,9 @@ impl cosmic::Application for AppModel {
                 return cosmic::widget::text_input::focus(self.search_id.clone());
             }
             Message::Sort(val) => {
-                if val != self.config.sort_option {
+                if val != self.config.sort_order {
                     self.config
-                        .set_sort_option(&self.config_handler, val)
+                        .set_sort_order(&self.config_handler, val)
                         .expect("Config change failed");
                 }
             }
@@ -1365,15 +1365,27 @@ impl cosmic::Application for AppModel {
                     Page::Genre(page) => {}
                 }
             }
-            Message::PageDataRecieved(mut tracks) => {
+            Message::TrackDataRecieved(mut tracks) => {
                 let timer = std::time::Instant::now();
                 let size = tracks.len();
                 if let Page::Tracks(data) = self.nav.data_mut::<Page>(self.tracksid).unwrap() {
-                    tracks.sort_by(|a, b| {
-                        let achar = a.title.chars().next().unwrap();
-                        let bchar = b.title.chars().next().unwrap();
-                        achar.cmp(&bchar)
-                    });
+                    match self.config.sort_order {
+                        SortOrder::Ascending => {
+                            tracks.sort_by(|a, b| {
+                                let achar = a.title.chars().next().unwrap();
+                                let bchar = b.title.chars().next().unwrap();
+                                achar.cmp(&bchar)
+                            });
+                        }
+                        SortOrder::Descending => {
+                            tracks.sort_by(|b, a| {
+                                let achar = a.title.chars().next().unwrap();
+                                let bchar = b.title.chars().next().unwrap();
+                                achar.cmp(&bchar)
+                            });
+                        }
+                    }
+
 
                     data.tracks = Arc::from(RwLock::from(Vec::with_capacity(size)));
 
@@ -2615,7 +2627,7 @@ pub enum ContextPage {
 pub enum Action {
     About,
     Settings,
-    SortChange(SortBy),
+    SortChange(SortOrder),
 }
 
 impl menu::action::MenuAction for Action {

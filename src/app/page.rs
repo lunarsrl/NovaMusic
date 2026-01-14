@@ -15,7 +15,9 @@ use crate::fl;
 use cosmic::iced::{Alignment, Length};
 use cosmic::{iced, Element};
 use std::fmt::Display;
-
+use cosmic::iced::alignment::Vertical;
+use cosmic::widget::JustifyContent;
+use crate::config::SortOrder;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CoverArt {
@@ -69,7 +71,7 @@ impl<T: Page> PageBuilder for T {
             .align_y(Alignment::Center)
             .spacing(cosmic::theme::spacing().space_s)
             .into(),
-            cosmic::widget::divider::horizontal::default().into(),
+            cosmic::widget::divider::horizontal::heavy().into(),
         ])
         .spacing(cosmic::theme::spacing().space_s)
         .into()
@@ -118,3 +120,38 @@ impl Page for AlbumPage {
 }
 
 
+// useful stuff for multiple pages
+pub fn list_sort_header<'a>(field1: String, field2: String, field3: String, selection: crate::config::SortOrder) -> Element<'a, Message>{
+    let sort_order_icon = match selection {
+        SortOrder::Ascending => {
+            cosmic::widget::icon::from_name("pan-down-symbolic").into()
+        }
+        SortOrder::Descending => {
+            cosmic::widget::icon::from_name("pan-up-symbolic").into()
+        }
+    };
+
+    return cosmic::widget::flex_row(vec![
+        cosmic::widget::button::custom(
+            cosmic::widget::row::with_children(vec![
+                cosmic::widget::text::heading(field1).into(),
+                sort_order_icon
+            ]).align_y(Vertical::Center)
+        ).class(cosmic::theme::Button::MenuRoot)
+            .into(),
+        cosmic::widget::button::custom(
+            cosmic::widget::row::with_children(vec![
+                cosmic::widget::text::heading("Modifiable Field 1").into(),
+            ]).align_y(Vertical::Center)
+        ).class(cosmic::theme::Button::MenuRoot)
+            .into(),
+        cosmic::widget::button::custom(
+            cosmic::widget::row::with_children(vec![
+                cosmic::widget::text::heading("Modifiable Field 2 ").into(),
+            ]).align_y(Vertical::Center)
+        ).class(cosmic::theme::Button::MenuRoot)
+            .into(),
+    ]).justify_content(JustifyContent::SpaceBetween)
+        .align_items(Alignment::Center)
+        .into();
+}

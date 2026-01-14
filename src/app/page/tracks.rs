@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::cell::Cell;
-use std::ops::Div;
-use std::path::PathBuf;
 use crate::app::page::CoverArt::SomeLoaded;
-use crate::app::page::{CoverArt, Page, PageBuilder};
+use crate::app::page::{list_sort_header, CoverArt, Page, PageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
+use crate::config::SortOrder;
 use crate::fl;
+use colored::Colorize;
 use cosmic::iced::alignment::Vertical;
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::{widget, ContentFit, Length, Point};
-use cosmic::{iced_core, Element, Task};
-use std::sync::{Arc, Mutex, RwLock};
 use cosmic::iced_core::{Alignment, Size};
 use cosmic::iced_widget::scrollable::AbsoluteOffset;
 use cosmic::widget::JustifyContent;
+use cosmic::{iced_core, Element, Task};
 use rayon::iter::IntoParallelIterator;
 use rusqlite::fallible_iterator::FallibleIterator;
+use std::cell::Cell;
+use std::ops::Div;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, RwLock};
+use symphonia::core::conv::IntoSample;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {
@@ -32,7 +35,6 @@ pub struct TrackPage {
     pub search_by_album: bool,
     pub search_by_title: bool,
     pub size_opt: Cell<Option<Size>>,
-
 }
 
 #[derive(Debug, Clone)]
@@ -56,51 +58,40 @@ impl Page for TrackPage {
     }
     fn body(&self) -> Element<Message> {
         if let TrackPageState::Waiting = self.track_page_state {
-            return cosmic::widget::text::heading("Loading...").into()
+            return cosmic::widget::text::heading("Loading...").into();
         }
 
         let visible_height = match self.viewport {
-            None => {
-                log::info!("Using None height");
-                250.0
-            }
-            Some(val) => {
-                log::info!("Using bounds height");
-                val.bounds().height
-            }
+            None => 0.0,
+            Some(val) => val.bounds().height,
         };
 
         let visible_rect = iced_core::Rectangle::new(
             iced_core::Point::new(
                 f32::from(cosmic::theme::spacing().space_s),
                 match self.viewport {
-                    None => {
-                        1.0
-
-                    }
-                    Some(val) => {
-                        log::info!("height: {} width: {} \n x: {} y: {}", self.viewport.unwrap().bounds().height, self.viewport.unwrap().bounds().width, self.viewport.unwrap().bounds().x, self.viewport.unwrap().bounds().y);
-                        val.absolute_offset().y
-                    }
-                }
+                    None => 1.0,
+                    Some(val) => val.absolute_offset().y,
+                },
             ),
-            iced_core::Size::new(3.0, visible_height)
+            iced_core::Size::new(3.0, visible_height),
         );
 
-
-        let mut tracks : Vec<Element<Message>> = vec![];
+        let mut tracks: Vec<Element<Message>> = vec![];
 
         let mut tracks_rect = iced_core::Rectangle::new(
-            iced_core::Point::new(f32::from(cosmic::theme::spacing().space_s), 5.0),
-            iced_core::Size::new(3.0, 2.0)
+            iced_core::Point::new(f32::from(cosmic::theme::spacing().space_s), 1.0),
+            iced_core::Size::new(3.0, 64.0),
         );
 
-        if cosmic::iced_core::mouse::Cursor::is_over(cosmic::iced_core::mouse::Cursor::default(), tracks_rect) {
-            log::info!("this is true somehow")
+        if cosmic::iced_core::mouse::Cursor::is_over(
+            cosmic::iced_core::mouse::Cursor::default(),
+            tracks_rect,
+        ) {
+            log::info!("{}", "this is true somehow".to_string().on_bright_yellow())
         }
 
         let mut loaded = 0;
-        log::info!("pre loading -----------------");
         for (index, track) in self.tracks.clone().read().unwrap().iter().enumerate() {
             loaded += 1;
             tracks_rect.y += 64.0;
@@ -111,84 +102,42 @@ impl Page for TrackPage {
 
                 if index % 2 == 0 {
                     tracks.push(
-                        cosmic::widget::container::Container::new(display_element).align_y(Vertical::Center).class(cosmic::theme::Container::Primary).into()
+                        cosmic::widget::container::Container::new(display_element)
+                            .align_y(Vertical::Center)
+                            .class(cosmic::theme::Container::Primary)
+                            .into(),
                     )
                 } else {
                     tracks.push(
-                        cosmic::widget::container::Container::new(display_element).align_y(Vertical::Center).class(cosmic::theme::Container::List).into()
+                        cosmic::widget::container::Container::new(display_element)
+                            .align_y(Vertical::Center)
+                            .class(cosmic::theme::Container::List)
+                            .into(),
                     )
                 }
             } else {
-                log::info!("Loaded {} elements", loaded);
-                return cosmic::widget::container(
-                    cosmic::widget::scrollable(
-                        cosmic::widget::column::with_children(vec![
-
-                            cosmic::widget::flex_row(vec![
-                                cosmic::widget::button::custom(
-                                    cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::text::heading("Name").into(),
-                                        cosmic::widget::icon::from_name("pan-down-symbolic").into()
-                                    ]).align_y(Vertical::Center)
-                                ).class(cosmic::theme::Button::Text).into(),
-                                cosmic::widget::button::custom(
-                                    cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::text::heading("Field 1").into(),
-                                    ]).align_y(Vertical::Center)
-                                ).class(cosmic::theme::Button::Text).into(),
-                                cosmic::widget::button::custom(
-                                    cosmic::widget::row::with_children(vec![
-                                        cosmic::widget::text::heading("Field 2 ").into(),
-                                    ]).align_y(Vertical::Center)
-                                ).class(cosmic::theme::Button::Text).into(),
-
-
-                            ]).justify_content(JustifyContent::SpaceBetween).align_items(Alignment::Center).into(),
-                            cosmic::widget::divider::horizontal::default().into(),
-
-                            cosmic::widget::column::with_children(
-                                tracks
-                            ).into()
-                        ])
-                    )
-                ).into()
-
+                tracks.push(
+                    cosmic::widget::column::with_children(vec![])
+                        .height(Length::Fixed(64.0))
+                        .into(),
+                );
             }
         }
-        log::info!("Loaded all elements");
+
         return cosmic::widget::container(
-            cosmic::widget::scrollable(
-                cosmic::widget::column::with_children(vec![
-                    // sorting header thing
-                    cosmic::widget::row::with_children(vec![
-                        cosmic::widget::button::custom(
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading("Track Info").into(),
-                                cosmic::widget::icon::from_name("pan-down-symbolic").into()
-                            ]).align_y(Vertical::Center)
-                        ).into(),
-                        cosmic::widget::button::custom(
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading("editable field 1").into(),
-                                cosmic::widget::icon::from_name("pan-down-symbolic").into()
-                            ]).align_y(Vertical::Center)
-                        ).into(),
-                        cosmic::widget::button::custom(
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading("editable field 2 ").into(),
-                                cosmic::widget::icon::from_name("pan-down-symbolic").into()
-                            ]).align_y(Vertical::Center)
-                        ).into(),
-
-                    ]).into(),
-                    cosmic::widget::divider::horizontal::default().into(),
-
-                    cosmic::widget::column::with_children(
-                        tracks
-                    ).into()
-                ])
-            )
-        ).into()
+            cosmic::widget::scrollable(cosmic::widget::column::with_children(vec![
+                // sorting header thing
+                list_sort_header(
+                    "Title".to_string(),
+                    "Modifiable 1".to_string(),
+                    "Modifiable 2".to_string(),
+                    SortOrder::Ascending,
+                ),
+                cosmic::widget::column::with_children(tracks).into(),
+            ]))
+            .on_scroll(|a| Message::ScrollView(a)),
+        )
+        .into();
     }
 }
 
@@ -212,7 +161,6 @@ impl TrackPage {
         self.page()
     }
     pub fn load_page_data(&self) -> Task<cosmic::Action<Message>> {
-
         return cosmic::Task::future( async move {
             let conn = connect_to_db();
 
@@ -254,26 +202,25 @@ impl TrackPage {
 
             log::info!("Loading track data from the database done ");
             // log::info!("| time since entering the page {}ms", timer.elapsed().as_millis());
-            Message::PageDataRecieved(tracks)
+            Message::TrackDataRecieved(tracks)
         }).map(cosmic::Action::App);
     }
 }
 
 impl AppTrack {
     pub fn display(self) -> Element<'static, Message> {
-
-            cosmic::widget::row::with_children(vec![
-                widget::column![
-                    cosmic::widget::text::caption_heading(self.title),
-                    cosmic::widget::text::caption(self.artist),
-                    cosmic::widget::text::caption(self.album_title),
-
-                ].into(),
-                cosmic::widget::horizontal_space().into(),
-                cosmic::widget::button::text("x ^v >").into(),
-            ])
-                .height(Length::Fixed(64.0))
-                .align_y(Vertical::Center)
-                .into()
+        cosmic::widget::row::with_children(vec![
+            widget::column![
+                cosmic::widget::text::caption_heading(self.title),
+                cosmic::widget::text::caption(self.artist),
+                cosmic::widget::text::caption(self.album_title),
+            ]
+            .into(),
+            cosmic::widget::horizontal_space().into(),
+            cosmic::widget::button::text("x ^v >").into(),
+        ])
+        .height(Length::Fixed(64.0))
+        .align_y(Vertical::Center)
+        .into()
     }
 }
