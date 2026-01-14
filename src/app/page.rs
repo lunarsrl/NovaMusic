@@ -11,13 +11,13 @@ use crate::app::page::artists::ArtistsPage;
 use crate::app::page::genre::GenrePage;
 use crate::app::page::playlists::PlaylistPage;
 use crate::app::Message;
+use crate::config::SortOrder;
 use crate::fl;
+use cosmic::iced::alignment::Vertical;
 use cosmic::iced::{Alignment, Length};
+use cosmic::widget::JustifyContent;
 use cosmic::{iced, Element};
 use std::fmt::Display;
-use cosmic::iced::alignment::Vertical;
-use cosmic::widget::JustifyContent;
-use crate::config::SortOrder;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CoverArt {
@@ -26,7 +26,7 @@ pub enum CoverArt {
     SomeLoaded(cosmic::widget::image::Handle),
 }
 
-enum PageBodies {
+enum BodyStyle {
     Grid,
     List,
     Card,
@@ -35,6 +35,7 @@ enum PageBodies {
 pub trait Page {
     fn title(&self) -> String;
     fn body(&self) -> Element<Message>;
+    fn body_style(&self) -> BodyStyle;
 }
 
 trait PageBuilder {
@@ -44,10 +45,27 @@ trait PageBuilder {
 
 impl<T: Page> PageBuilder for T {
     fn page(&self) -> Element<Message> where {
+        let sticky_elements = match self.body_style() {
+            BodyStyle::Grid => {
+                cosmic::widget::container(cosmic::widget::column::with_children(vec![])).into()
+            }
+            BodyStyle::List => list_sort_header(
+                "Title".to_string(),
+                "Modifiable 1".to_string(),
+                "Modifiable 2".to_string(),
+                SortOrder::Ascending,
+            ),
+            BodyStyle::Card => {
+                cosmic::widget::container(cosmic::widget::column::with_children(vec![])).into()
+            }
+        };
+
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
             self.header(),
-            self.body(),
-
+            sticky_elements,
+            cosmic::widget::scrollable(cosmic::widget::container(self.body()))
+                .on_scroll(|a| Message::ScrollView(a))
+                .into(),
         ]))
         .height(Length::Fill)
         .width(Length::Fill)
@@ -88,6 +106,10 @@ impl Page for ArtistsPage {
     fn body(&self) -> Element<Message> {
         todo!()
     }
+
+    fn body_style(&self) -> BodyStyle {
+        return BodyStyle::Grid;
+    }
 }
 
 impl Page for GenrePage {
@@ -97,6 +119,10 @@ impl Page for GenrePage {
 
     fn body(&self) -> Element<Message> {
         todo!()
+    }
+
+    fn body_style(&self) -> BodyStyle {
+        return BodyStyle::Grid;
     }
 }
 
@@ -108,6 +134,10 @@ impl Page for PlaylistPage {
     fn body(&self) -> Element<Message> {
         todo!()
     }
+
+    fn body_style(&self) -> BodyStyle {
+        return BodyStyle::Grid;
+    }
 }
 impl Page for AlbumPage {
     fn title(&self) -> String {
@@ -117,41 +147,54 @@ impl Page for AlbumPage {
     fn body(&self) -> Element<Message> {
         todo!()
     }
+
+    fn body_style(&self) -> BodyStyle {
+        return BodyStyle::Grid;
+    }
 }
 
-
 // useful stuff for multiple pages
-pub fn list_sort_header<'a>(field1: String, field2: String, field3: String, selection: crate::config::SortOrder) -> Element<'a, Message>{
+pub fn list_sort_header<'a>(
+    field1: String,
+    field2: String,
+    field3: String,
+    selection: crate::config::SortOrder,
+) -> Element<'a, Message> {
     let sort_order_icon = match selection {
-        SortOrder::Ascending => {
-            cosmic::widget::icon::from_name("pan-down-symbolic").into()
-        }
-        SortOrder::Descending => {
-            cosmic::widget::icon::from_name("pan-up-symbolic").into()
-        }
+        SortOrder::Ascending => cosmic::widget::icon::from_name("pan-down-symbolic").into(),
+        SortOrder::Descending => cosmic::widget::icon::from_name("pan-up-symbolic").into(),
     };
 
     return cosmic::widget::flex_row(vec![
         cosmic::widget::button::custom(
             cosmic::widget::row::with_children(vec![
                 cosmic::widget::text::heading(field1).into(),
-                sort_order_icon
-            ]).align_y(Vertical::Center)
-        ).class(cosmic::theme::Button::MenuRoot)
-            .into(),
+                sort_order_icon,
+            ])
+            .align_y(Vertical::Center),
+        )
+        .class(cosmic::theme::Button::MenuRoot)
+        .into(),
         cosmic::widget::button::custom(
-            cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::heading("Modifiable Field 1").into(),
-            ]).align_y(Vertical::Center)
-        ).class(cosmic::theme::Button::MenuRoot)
-            .into(),
+            cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
+                "Modifiable Field 1",
+            )
+            .into()])
+            .align_y(Vertical::Center),
+        )
+        .class(cosmic::theme::Button::MenuRoot)
+        .into(),
         cosmic::widget::button::custom(
-            cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::heading("Modifiable Field 2 ").into(),
-            ]).align_y(Vertical::Center)
-        ).class(cosmic::theme::Button::MenuRoot)
-            .into(),
-    ]).justify_content(JustifyContent::SpaceBetween)
-        .align_items(Alignment::Center)
-        .into();
+            cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
+                "Modifiable Field 2 ",
+            )
+            .into()])
+            .align_y(Vertical::Center),
+        )
+        .class(cosmic::theme::Button::MenuRoot)
+        .into(),
+    ])
+    .justify_content(JustifyContent::SpaceBetween)
+    .align_items(Alignment::Center)
+    .into();
 }

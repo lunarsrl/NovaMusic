@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::app::page::CoverArt::SomeLoaded;
-use crate::app::page::{list_sort_header, CoverArt, Page, PageBuilder};
+use crate::app::page::{list_sort_header, BodyStyle, CoverArt, Page, PageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
 use crate::config::SortOrder;
 use crate::fl;
@@ -34,7 +34,6 @@ pub struct TrackPage {
     pub search_by_artist: bool,
     pub search_by_album: bool,
     pub search_by_title: bool,
-    pub size_opt: Cell<Option<Size>>,
 }
 
 #[derive(Debug, Clone)]
@@ -124,20 +123,14 @@ impl Page for TrackPage {
             }
         }
 
-        return cosmic::widget::container(
-            cosmic::widget::scrollable(cosmic::widget::column::with_children(vec![
-                // sorting header thing
-                list_sort_header(
-                    "Title".to_string(),
-                    "Modifiable 1".to_string(),
-                    "Modifiable 2".to_string(),
-                    SortOrder::Ascending,
-                ),
-                cosmic::widget::column::with_children(tracks).into(),
-            ]))
-            .on_scroll(|a| Message::ScrollView(a)),
-        )
-        .into();
+        cosmic::widget::column::with_children(vec![
+            cosmic::widget::column::with_children(tracks).into()
+        ])
+        .into()
+    }
+
+    fn body_style(&self) -> BodyStyle {
+        return BodyStyle::List;
     }
 }
 
@@ -154,7 +147,6 @@ impl TrackPage {
             search_by_artist: false,
             search_by_album: false,
             search_by_title: false,
-            size_opt: Cell::new(None),
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
@@ -209,18 +201,23 @@ impl TrackPage {
 
 impl AppTrack {
     pub fn display(self) -> Element<'static, Message> {
-        cosmic::widget::row::with_children(vec![
-            widget::column![
-                cosmic::widget::text::caption_heading(self.title),
-                cosmic::widget::text::caption(self.artist),
-                cosmic::widget::text::caption(self.album_title),
-            ]
+        cosmic::widget::column::with_children(vec![
+            cosmic::widget::divider::horizontal::default().into(),
+            cosmic::widget::row::with_children(vec![
+                widget::column![
+                    cosmic::widget::text::caption_heading(self.title),
+                    cosmic::widget::text::caption(self.artist),
+                    cosmic::widget::text::caption(self.album_title),
+                ]
+                .into(),
+                cosmic::widget::horizontal_space().into(),
+                cosmic::widget::button::text("x ^v >").into(),
+            ])
+            .height(Length::Fixed(64.0))
+            .align_y(Vertical::Center)
             .into(),
-            cosmic::widget::horizontal_space().into(),
-            cosmic::widget::button::text("x ^v >").into(),
+            cosmic::widget::divider::horizontal::default().into(),
         ])
-        .height(Length::Fixed(64.0))
-        .align_y(Vertical::Center)
         .into()
     }
 }

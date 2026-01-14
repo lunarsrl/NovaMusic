@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use rayon::prelude::*;
-use std::sync::{Mutex, RwLock};
 use crate::mpris::player::MPRISPlayer;
 use cosmic::dialog::file_chooser::Error;
+use rayon::prelude::*;
 use regex::Regex;
+use std::sync::{Mutex, RwLock};
 
 use rayon::iter::IndexedParallelIterator;
 
@@ -27,6 +27,7 @@ use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::page::CoverArt;
 use crate::app::page::CoverArt::SomeLoaded;
 use crate::app::scan::scan_directory;
+use crate::app::Message::LoadTrackImages;
 use crate::config::{AppTheme, Config, SortOrder};
 use crate::database::{create_database, create_database_entry, find_visual};
 use crate::mpris::MPRISRootInterface;
@@ -43,6 +44,7 @@ use cosmic::iced::{keyboard, Alignment, Color, ContentFit, Event, Length};
 use cosmic::iced_widget::list;
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
+use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::Action::App;
 use cosmic::{action, cosmic_config, cosmic_theme, task, theme};
@@ -64,7 +66,6 @@ use std::{fs, io};
 use symphonia::default::get_probe;
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::{connection, Connection, MatchRule, MessageStream};
-use crate::app::Message::LoadTrackImages;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] =
@@ -295,6 +296,7 @@ pub enum ReEnterNavReason {
     Rescan,
     ArtistEdit,
     PlaylistEdit,
+    SortingChange,
 }
 
 #[derive(Clone, Debug)]
@@ -813,6 +815,23 @@ impl cosmic::Application for AppModel {
                         .set_sort_order(&self.config_handler, val)
                         .expect("Config change failed");
                 }
+
+                match self.nav.active_data::<Page>().unwrap() {
+                    Page::NowPlaying(_) => {}
+                    Page::Artist(_) => {
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                    }
+                    Page::Albums(_) => {
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                    }
+                    Page::Playlists(_) => {
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                    }
+                    Page::Tracks(_) => {
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                    }
+                    Page::Genre(_) => {}
+                }
             }
             Message::UpdateTheme(selection) => {
                 self.config.set_app_theme(&self.config_handler, selection);
@@ -873,7 +892,7 @@ impl cosmic::Application for AppModel {
                     page.viewport = Some(view);
                 }
                 Page::Playlists(page) => page.viewport = Some(view),
-                Page::Tracks(page) => { page.viewport = Some(view) },
+                Page::Tracks(page) => page.viewport = Some(view),
                 Page::Artist(page) => page.viewport = Some(view),
                 Page::Genre(page) => page.viewport = Some(view),
             },
@@ -1337,30 +1356,25 @@ impl cosmic::Application for AppModel {
                         // a playlist was edited
                         // todo: less obtrusive reloading of the page
                     }
+                    ReEnterNavReason::SortingChange => {}
                 }
 
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(_) => {}
                     Page::Albums(val) => {}
-                    Page::Playlists(page) => {
-
-                    }
-                    Page::Tracks(page) => {
-                        match page.track_page_state {
-                            TrackPageState::Loading => {
-                                return page.load_page_data();
-                            }
-                            TrackPageState::Loaded => {
-                                return task::none();
-                            }
-                            TrackPageState::Search => {
-
-                            },
-                            TrackPageState::Waiting => {
-                                return task::none();
-                            }
+                    Page::Playlists(page) => {}
+                    Page::Tracks(page) => match page.track_page_state {
+                        TrackPageState::Loading => {
+                            return page.load_page_data();
                         }
-                    }
+                        TrackPageState::Loaded => {
+                            return task::none();
+                        }
+                        TrackPageState::Search => {}
+                        TrackPageState::Waiting => {
+                            return task::none();
+                        }
+                    },
                     Page::Artist(page) => {}
                     Page::Genre(page) => {}
                 }
@@ -1386,25 +1400,30 @@ impl cosmic::Application for AppModel {
                         }
                     }
 
-
                     data.tracks = Arc::from(RwLock::from(Vec::with_capacity(size)));
 
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
 
                     tracks.into_iter().for_each(|track| {
-                        tx.send(LoadTrackImages(track)).expect("failed to send loadtrackimage");
+                        tx.send(LoadTrackImages(track))
+                            .expect("failed to send loadtrackimage");
                     });
-                    tx.send(Message::ToastError(format!("Finished loading {} tracks in {}ms", size, timer.elapsed().as_millis()))).expect("Unable to send");
+                    tx.send(Message::ToastError(format!(
+                        "Finished loading {} tracks in {}ms",
+                        size,
+                        timer.elapsed().as_millis()
+                    )))
+                    .expect("Unable to send");
 
                     return cosmic::Task::stream(
-                        tokio_stream::wrappers::UnboundedReceiverStream::new(rx)
-                    ).map(cosmic::Action::App);
+                        tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+                    )
+                    .map(cosmic::Action::App);
                 }
             }
 
             Message::LoadTrackImages(track) => {
                 if let Page::Tracks(page) = self.nav.active_data_mut::<Page>().unwrap() {
-
                     let cloned_tracks: Arc<RwLock<Vec<AppTrack>>> = Arc::clone(&page.tracks);
 
                     tokio::task::spawn_blocking(move || {
@@ -1412,7 +1431,6 @@ impl cosmic::Application for AppModel {
                         cloned_tracks.write().unwrap().push(track);
                         log::info!("spawn locking timer: {}", timer.elapsed().as_millis())
                     });
-
                 }
             }
 
