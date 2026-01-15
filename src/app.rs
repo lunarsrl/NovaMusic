@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::app::GenrePageState::Search;
 use crate::mpris::player::MPRISPlayer;
 use cosmic::dialog::file_chooser::Error;
 use rayon::prelude::*;
@@ -27,7 +28,7 @@ use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::page::CoverArt;
 use crate::app::page::CoverArt::SomeLoaded;
 use crate::app::scan::scan_directory;
-use crate::app::Message::LoadTrackImages;
+use crate::app::Message::LoadTrackData;
 use crate::config::{AppTheme, Config, SortOrder};
 use crate::database::{create_database, create_database_entry, find_visual};
 use crate::mpris::MPRISRootInterface;
@@ -200,27 +201,27 @@ pub enum Message {
     ScrollView(Viewport),
 
     // Album Page
-    AlbumProcessed(Vec<Album>), // when an album retrieved from db's data is organized and ready [Supplies AlbumPage with the new Album]
-    AlbumsLoaded, // when albums table retrieved from db is exhausted after OnNavEnter in Album Page [Sets page state to loaded]
-    AlbumPageStateAlbum(AlbumPage), // when album info is retrieved [Replaces AlbumPage with AlbumPage with new info]
+    AlbumsDataRecieved(Vec<Album>),
+    LoadAlbumsData(Album),
     AlbumPageReturn,
 
-    // impl for Artists & Album Page
+    // implemented for Artists & Album Page
     AlbumRequested((String, String)), // when an album icon is clicked [gets title & artist of album]
     AlbumInfoRetrieved(FullAlbum), // when task assigned to retrieving requested albums info is completed [gets full track list of album]
 
     // Home Page
-    //todo move all AddTrackToQueue to AddTrackByID
-    // Advantage: No need to clone strings
-    // Disadvantage: Database access but that happens anyway sometimes
+    //  todo: move all AddTrackToQueue to AddTrackByID
+    //      Advantage: No need to clone strings
+    //      Disadvantage: Database access but that happens anyway sometimes
     AddTrackToQueue(String),
     AddTrackById((TrackType, u32)),
     //todo Make albums in queue fancier kinda like Elisa does it
     AddAlbumToQueue(Vec<(String, u32)>),
 
     // Track Page
-    TracksLoaded,
-    TrackLoaded(Vec<AppTrack>),
+    TrackDataReceived(Vec<AppTrack>),
+    LoadTrackData(AppTrack),
+
     ToggleTitle(bool),
     ToggleAlbum(bool),
     ToggleArtist(bool),
@@ -286,12 +287,10 @@ pub enum Message {
     SearchClear,
     SearchInput(String),
     SearchResults,
-    TrackDataRecieved(Vec<AppTrack>),
-    LoadTrackImages(AppTrack),
 }
 
 #[derive(Clone, Debug)]
-pub enum ReEnterNavReason {
+enum ReEnterNavReason {
     UserInteraction,
     Rescan,
     ArtistEdit,
@@ -1169,7 +1168,7 @@ impl cosmic::Application for AppModel {
                     .expect("Should always be intialized");
 
                 if let Page::Albums(page) = album {
-                    page.albums = Arc::from(vec![]);
+                    page.albums = Arc::from(RwLock::from(vec![]));
                     page.page_state = AlbumPageState::Loading
                 }
 
@@ -1179,7 +1178,7 @@ impl cosmic::Application for AppModel {
                     .data_mut::<Page>(self.tracksid)
                     .expect("Should always be intialized");
                 if let Page::Tracks(page) = tracks {
-                    page.track_page_state = TrackPageState::Loading
+                    page.page_state = TrackPageState::Loading
                 }
 
                 // Playlists: Full reset
@@ -1324,16 +1323,6 @@ impl cosmic::Application for AppModel {
                     .expect("Config Save Failed");
             }
 
-            // PAGE TASK RESPONSES
-            Message::AlbumProcessed(new_album) => {
-                if let Page::Albums(dat) = self
-                    .nav
-                    .data_mut::<Page>(self.albumsid)
-                    .expect("Should always be intialized")
-                {
-                    dat.albums = Arc::from(new_album)
-                }
-            }
             Message::OnNavEnter(reasoning) => {
                 let timer = std::time::Instant::now();
                 //always
@@ -1361,11 +1350,27 @@ impl cosmic::Application for AppModel {
 
                 match self.nav.active_data_mut().unwrap() {
                     Page::NowPlaying(_) => {}
-                    Page::Albums(val) => {}
+                    Page::Albums(albumspage) => match albumspage.page_state {
+                        AlbumPageState::Loading => {
+                            return albumspage.load_page_data();
+                        }
+                        AlbumPageState::Loaded => {
+                            return task::none();
+                        }
+                        AlbumPageState::Search(_) => {
+                            return task::none();
+                        }
+                        AlbumPageState::Waiting => {
+                            return task::none();
+                        }
+                        AlbumPageState::Album(_) => {
+                            return task::none();
+                        }
+                    },
                     Page::Playlists(page) => {}
-                    Page::Tracks(page) => match page.track_page_state {
+                    Page::Tracks(trackspage) => match trackspage.page_state {
                         TrackPageState::Loading => {
-                            return page.load_page_data();
+                            return trackspage.load_page_data();
                         }
                         TrackPageState::Loaded => {
                             return task::none();
@@ -1379,7 +1384,55 @@ impl cosmic::Application for AppModel {
                     Page::Genre(page) => {}
                 }
             }
-            Message::TrackDataRecieved(mut tracks) => {
+            Message::AlbumsDataRecieved(mut albums) => {
+                let timer = std::time::Instant::now();
+                let size = albums.len();
+                if let Page::Albums(albumpage) = self.nav.data_mut::<Page>(self.albumsid).unwrap() {
+                    match self.config.sort_order {
+                        SortOrder::Ascending => {
+                            albums.sort_by(|a, b| {
+                                let achar = a.name.chars().next().unwrap();
+                                let bchar = b.name.chars().next().unwrap();
+                                achar.cmp(&bchar)
+                            });
+                        }
+                        SortOrder::Descending => {
+                            albums.sort_by(|b, a| {
+                                let achar = a.name.chars().next().unwrap();
+                                let bchar = b.name.chars().next().unwrap();
+                                achar.cmp(&bchar)
+                            });
+                        }
+                    }
+
+                    albumpage.albums = Arc::from(RwLock::from(Vec::with_capacity(size)));
+
+                    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+
+                    albums.into_iter().for_each(|album| {
+                        tx.send(Message::LoadAlbumsData(album)).unwrap();
+                        tx.send(Message::ToastError("DONE!".to_string())).unwrap()
+                    });
+
+                    return cosmic::Task::stream(
+                        tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+                    )
+                    .map(cosmic::Action::App);
+                }
+            }
+
+            Message::LoadAlbumsData(album) => {
+                if let Page::Albums(albumspage) = self.nav.active_data_mut::<Page>().unwrap() {
+                    let cloned_albums: Arc<RwLock<Vec<Album>>> = Arc::clone(&albumspage.albums);
+
+                    tokio::task::spawn_blocking(move || {
+                        let timer = std::time::Instant::now();
+                        cloned_albums.write().unwrap().push(album);
+                        log::info!("spawn locking timer: {}", timer.elapsed().as_millis())
+                    });
+                }
+            }
+            Message::TrackDataReceived(mut tracks) => {
                 let timer = std::time::Instant::now();
                 let size = tracks.len();
                 if let Page::Tracks(data) = self.nav.data_mut::<Page>(self.tracksid).unwrap() {
@@ -1405,7 +1458,7 @@ impl cosmic::Application for AppModel {
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
 
                     tracks.into_iter().for_each(|track| {
-                        tx.send(LoadTrackImages(track))
+                        tx.send(LoadTrackData(track))
                             .expect("failed to send loadtrackimage");
                     });
                     tx.send(Message::ToastError(format!(
@@ -1422,7 +1475,7 @@ impl cosmic::Application for AppModel {
                 }
             }
 
-            Message::LoadTrackImages(track) => {
+            Message::LoadTrackData(track) => {
                 if let Page::Tracks(page) = self.nav.active_data_mut::<Page>().unwrap() {
                     let cloned_tracks: Arc<RwLock<Vec<AppTrack>>> = Arc::clone(&page.tracks);
 
@@ -1629,34 +1682,7 @@ where a.name = ?    ",
                     page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
-            Message::TrackLoaded(track) => {
-                if let Page::Tracks(dat) = self
-                    .nav
-                    .data_mut::<Page>(self.tracksid)
-                    .expect("Should always be intialized")
-                {
-                    dat.tracks = Arc::new(RwLock::from(track))
-                }
-            }
-            Message::TracksLoaded => {
-                if let Page::Tracks(dat) = self
-                    .nav
-                    .data_mut::<Page>(self.tracksid)
-                    .expect("Should always be intialized")
-                {
-                    dat.track_page_state = TrackPageState::Loaded;
-                }
-            }
-            Message::AlbumsLoaded => {
-                if let Page::Albums(dat) = self
-                    .nav
-                    .data_mut::<Page>(self.albumsid)
-                    .expect("should always be init")
-                {
-                    dat.page_state = AlbumPageState::Loaded;
-                    dat.has_fully_loaded = true;
-                }
-            }
+
             Message::AlbumPageReturn => {
                 if let Page::Albums(dat) = self
                     .nav
@@ -1681,18 +1707,7 @@ where a.name = ?    ",
                     }
                 }
             }
-            Message::AlbumPageStateAlbum(new_page) => {
-                match self
-                    .nav
-                    .active_data_mut::<Page>()
-                    .expect("Should always be intialized")
-                {
-                    Page::Albums(old_page) => {
-                        *old_page = new_page;
-                    }
-                    _ => {}
-                }
-            }
+
             Message::AlbumInfoRetrieved(fullalbum) => {
                 log::info!("Album info retrieved: {:?}", fullalbum,);
 
@@ -2609,7 +2624,7 @@ impl AppModel {
     fn update_pageinfo(&mut self) {
         match self.nav.active_data::<Page>().unwrap() {
             Page::Tracks(page) => {
-                if let TrackPageState::Search = page.track_page_state {
+                if let TrackPageState::Search = page.page_state {
                     log::error!("NOT YET")
                 } else {
                     log::info!("PROPER")

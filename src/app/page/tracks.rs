@@ -26,7 +26,7 @@ pub struct TrackPage {
     pub tracks: Arc<RwLock<Vec<AppTrack>>>,
     pub search: Vec<SearchResult>,
     pub SearchTerm: String,
-    pub track_page_state: TrackPageState,
+    pub page_state: TrackPageState,
     pub viewport: Option<Viewport>,
     pub load_depth: u32,
     pub scrollbar_id: cosmic::iced_core::widget::Id,
@@ -55,8 +55,8 @@ impl Page for TrackPage {
     fn title(&self) -> String {
         String::from(fl!("TrackLibrary"))
     }
-    fn body(&self) -> Element<Message> {
-        if let TrackPageState::Waiting = self.track_page_state {
+    fn body(&self, model: &AppModel) -> Element<Message> {
+        if let TrackPageState::Waiting = self.page_state {
             return cosmic::widget::text::heading("Loading...").into();
         }
 
@@ -130,7 +130,7 @@ impl Page for TrackPage {
     }
 
     fn body_style(&self) -> BodyStyle {
-        return BodyStyle::List;
+        BodyStyle::List
     }
 }
 
@@ -140,7 +140,7 @@ impl TrackPage {
             tracks: Arc::new(RwLock::from(vec![])),
             search: vec![],
             SearchTerm: String::from(""),
-            track_page_state: TrackPageState::Loading,
+            page_state: TrackPageState::Loading,
             viewport: None,
             load_depth: 0,
             scrollbar_id: cosmic::iced_core::widget::Id::unique(),
@@ -150,7 +150,7 @@ impl TrackPage {
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
-        self.page()
+        self.page(model)
     }
     pub fn load_page_data(&self) -> Task<cosmic::Action<Message>> {
         return cosmic::Task::future( async move {
@@ -194,7 +194,7 @@ impl TrackPage {
 
             log::info!("Loading track data from the database done ");
             // log::info!("| time since entering the page {}ms", timer.elapsed().as_millis());
-            Message::TrackDataRecieved(tracks)
+            Message::TrackDataReceived(tracks)
         }).map(cosmic::Action::App);
     }
 }
@@ -205,9 +205,9 @@ impl AppTrack {
             cosmic::widget::divider::horizontal::default().into(),
             cosmic::widget::row::with_children(vec![
                 widget::column![
-                    cosmic::widget::text::caption_heading(self.title),
-                    cosmic::widget::text::caption(self.artist),
-                    cosmic::widget::text::caption(self.album_title),
+                    cosmic::widget::text::heading(self.title),
+                    cosmic::widget::text::text(self.artist),
+                    cosmic::widget::text::text(self.album_title),
                 ]
                 .into(),
                 cosmic::widget::horizontal_space().into(),
