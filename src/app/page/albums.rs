@@ -4,6 +4,7 @@ use crate::app::page::BodyStyle::Grid;
 use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
 use crate::fl;
+use colored::Colorize;
 use cosmic::iced::{Alignment, Color, Length};
 use cosmic::iced_core::alignment::{Horizontal, Vertical};
 use cosmic::iced_core::image::Handle;
@@ -35,13 +36,12 @@ impl Page for AlbumPage {
 
     fn body(&self, model: &AppModel) -> Element<Message> {
         let icon_size = model.config.grid_item_size;
-        let cloned_albums = Arc::clone(&self.albums);
 
         return cosmic::widget::responsive(move |size| {
-            let width = size.width as u32 - cosmic::theme::spacing().space_m as u32 * 2;
+            let width = size.width as u32 - cosmic::theme::spacing().space_xxs as u32 * 2;
             let spacing;
             let mut items_per_row = 0;
-            let mut index = 0;
+            let mut item_num = 0;
 
             while width > (items_per_row * icon_size * 32) {
                 items_per_row += 1;
@@ -65,13 +65,13 @@ impl Page for AlbumPage {
                 .width(Length::Fill)
                 .height(Length::Shrink);
 
+            log::info!("Items per row {}", items_per_row);
             for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
-                {
-                    if index as u32 % items_per_row == 0 {
-                        grid = grid.push(album.display_grid(icon_size)).insert_row();
-                    } else {
-                        grid = grid.push(album.display_grid(icon_size));
-                    }
+                item_num += 1;
+                if item_num as u32 % items_per_row == 0 {
+                    grid = grid.push(album.display_grid(icon_size)).insert_row();
+                } else {
+                    grid = grid.push(album.display_grid(icon_size));
                 }
             }
 
@@ -134,7 +134,9 @@ impl AlbumPage {
                         track_number: row.get::<&str, u32>("tn").unwrap_or(1),
                         cover_art: match row.get::<&str, Vec<u8>>("ac") {
                             Ok(cover) => {
+                                log::info!("{}", "image!".red());
                                Some(cosmic::widget::image::Handle::from_bytes(cover))
+
                             },
                             Err(_) => {
                                 None
