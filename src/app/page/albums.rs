@@ -38,7 +38,7 @@ impl Page for AlbumPage {
         let icon_size = model.config.grid_item_size;
 
         return cosmic::widget::responsive(move |size| {
-            let width = size.width as u32 - cosmic::theme::spacing().space_xxs as u32 * 2;
+            let width = size.width as u32;
             let spacing;
             let mut items_per_row = 0;
             let mut item_num = 0;
