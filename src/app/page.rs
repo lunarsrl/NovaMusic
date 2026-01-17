@@ -61,16 +61,23 @@ impl<T: Page> PageBuilder for T {
 
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
             self.header(),
-            sticky_elements,
-            cosmic::widget::scrollable(cosmic::widget::container(self.body(model)))
-                .on_scroll(|a| Message::ScrollView(a))
+            cosmic::widget::container(sticky_elements)
+                .padding(iced::core::padding::Padding::from([
+                    0,
+                    cosmic::theme::spacing().space_xxs,
+                ]))
                 .into(),
+            cosmic::widget::scrollable(cosmic::widget::container(self.body(model)).padding(
+                iced::core::padding::Padding::from([0, cosmic::theme::spacing().space_xxs]),
+            ))
+            .on_scroll(|a| Message::ScrollView(a))
+            .into(),
         ]))
         .height(Length::Fill)
         .width(Length::Fill)
         .padding(iced::core::padding::Padding::from([
             0,
-            cosmic::theme::spacing().space_m,
+            cosmic::theme::spacing().space_s,
         ]))
         .into()
     }
