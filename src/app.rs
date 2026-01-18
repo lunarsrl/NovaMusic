@@ -1412,7 +1412,12 @@ impl cosmic::Application for AppModel {
                     albums.into_iter().for_each(|album| {
                         tx.send(Message::LoadAlbumsData(album)).unwrap();
                     });
-                    tx.send(Message::ToastError("DONE!".to_string())).unwrap();
+                    tx.send(Message::ToastError(format!(
+                        "Finished loading {} albums in {}ms",
+                        size,
+                        timer.elapsed().as_millis()
+                    )))
+                    .expect("Unable to send");
 
                     return cosmic::Task::stream(
                         tokio_stream::wrappers::UnboundedReceiverStream::new(rx),

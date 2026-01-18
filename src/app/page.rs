@@ -59,27 +59,62 @@ impl<T: Page> PageBuilder for T {
             }
         };
 
-        cosmic::widget::container(cosmic::widget::column::with_children(vec![
-            self.header(),
-            cosmic::widget::container(sticky_elements)
+        match self.body_style() {
+            BodyStyle::Grid => {
+                cosmic::widget::container(cosmic::widget::column::with_children(vec![
+                    self.header(),
+                    cosmic::widget::container(sticky_elements)
+                        .padding(iced::core::padding::Padding::from([
+                            0,
+                            cosmic::theme::spacing().space_xxs,
+                        ]))
+                        .into(),
+                    cosmic::widget::container(self.body(model))
+                        .padding(iced::core::padding::Padding::from([
+                            0,
+                            cosmic::theme::spacing().space_xxs,
+                        ]))
+                        .into(),
+                ]))
+                .height(Length::Fill)
+                .width(Length::Fill)
                 .padding(iced::core::padding::Padding::from([
                     0,
-                    cosmic::theme::spacing().space_xxs,
+                    cosmic::theme::spacing().space_s,
                 ]))
-                .into(),
-            cosmic::widget::scrollable(cosmic::widget::container(self.body(model)).padding(
-                iced::core::padding::Padding::from([0, cosmic::theme::spacing().space_xxs]),
-            ))
-            .on_scroll(|a| Message::ScrollView(a))
-            .into(),
-        ]))
-        .height(Length::Fill)
-        .width(Length::Fill)
-        .padding(iced::core::padding::Padding::from([
-            0,
-            cosmic::theme::spacing().space_s,
-        ]))
-        .into()
+                .into()
+            }
+            BodyStyle::List => {
+                cosmic::widget::container(cosmic::widget::column::with_children(vec![
+                    self.header(),
+                    cosmic::widget::container(sticky_elements)
+                        .padding(iced::core::padding::Padding::from([
+                            0,
+                            cosmic::theme::spacing().space_xxs,
+                        ]))
+                        .into(),
+                    cosmic::widget::scrollable::vertical(
+                        cosmic::widget::container(self.body(model)).padding(
+                            iced::core::padding::Padding::from([
+                                0,
+                                cosmic::theme::spacing().space_xxs,
+                            ]),
+                        ),
+                    )
+                    .height(Length::Shrink)
+                    .on_scroll(|a| Message::ScrollView(a))
+                    .into(),
+                ]))
+                .height(Length::Fill)
+                .width(Length::Fill)
+                .padding(iced::core::padding::Padding::from([
+                    0,
+                    cosmic::theme::spacing().space_s,
+                ]))
+                .into()
+            }
+            BodyStyle::Card => todo!(),
+        }
     }
 
     fn header(&self) -> Element<Message> {

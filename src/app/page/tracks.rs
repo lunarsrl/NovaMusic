@@ -200,7 +200,7 @@ impl TrackPage {
 }
 
 impl AppTrack {
-    pub fn display(self) -> Element<'static, Message> {
+    pub fn display<'a>(self) -> Element<'a, Message> {
         cosmic::widget::column::with_children(vec![
             cosmic::widget::divider::horizontal::default().into(),
             cosmic::widget::row::with_children(vec![

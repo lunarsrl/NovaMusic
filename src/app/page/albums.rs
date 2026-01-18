@@ -5,14 +5,14 @@ use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
 use crate::fl;
 use colored::Colorize;
-use cosmic::iced::{Alignment, Color, Length};
+use cosmic::iced::{Alignment, Color, ContentFit, Length};
 use cosmic::iced_core::alignment::{Horizontal, Vertical};
 use cosmic::iced_core::image::Handle;
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::iced_widget::text::Wrapping;
 use cosmic::widget::settings::item;
 use cosmic::widget::{icon, JustifyContent};
-use cosmic::{Element, Task};
+use cosmic::{iced_core, Element, Task};
 use rusqlite::ToSql;
 use std::fmt::format;
 use std::hash::Hash;
@@ -28,6 +28,7 @@ pub struct AlbumPage {
     pub scrollbar_id: cosmic::iced_core::widget::Id,
     pub search_term: String,
 }
+const TextArea: f32 = 40.0;
 
 impl Page for AlbumPage {
     fn title(&self) -> String {
@@ -37,7 +38,7 @@ impl Page for AlbumPage {
     fn body(&self, model: &AppModel) -> Element<Message> {
         let icon_size = model.config.grid_item_size;
 
-        return cosmic::widget::responsive(move |size| {
+        return cosmic::widget::container(cosmic::widget::responsive(move |size| {
             let width = size.width as u32;
             let spacing;
             let mut items_per_row = 0;
@@ -57,6 +58,22 @@ impl Page for AlbumPage {
                 spacing = (check_final / (items_per_row - 1)) as u16;
             }
 
+            let visible_rect = iced_core::Rectangle::new(
+                iced_core::Point::new(
+                    f32::from(cosmic::theme::spacing().space_s),
+                    match self.viewport {
+                        None => 0.0,
+                        Some(val) => val.absolute_offset().y,
+                    },
+                ),
+                iced_core::Size::new(3.0, size.height),
+            );
+
+            let mut album_rect = iced_core::Rectangle::new(
+                iced_core::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
+                iced_core::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
+            );
+
             let mut grid = cosmic::widget::grid::<Message>()
                 .column_spacing(spacing)
                 .column_alignment(Alignment::Center)
@@ -65,18 +82,52 @@ impl Page for AlbumPage {
                 .width(Length::Fill)
                 .height(Length::Shrink);
 
-            log::info!("Items per row {}", items_per_row);
             for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
-                item_num += 1;
-                if item_num as u32 % items_per_row == 0 {
-                    grid = grid.push(album.display_grid(icon_size)).insert_row();
+                let insert_element;
+
+                if album_rect.intersects(&visible_rect) {
+                    insert_element = album.display_grid(icon_size);
                 } else {
-                    grid = grid.push(album.display_grid(icon_size));
+                    insert_element = cosmic::widget::column()
+                        .push(cosmic::widget::text(format!("{}", index)))
+                        .width(Length::Fill)
+                        .height(Length::Fixed(icon_size as f32 * 32.0 + TextArea))
+                        .into()
+                }
+
+                item_num += 1;
+
+                if item_num as u32 % items_per_row == 0 {
+                    log::info!(
+                        "{}",
+                        format!("new row {} --------\\", (index as f32 / 3.0).floor())
+                            .to_string()
+                            .red()
+                    );
+                    log::info!(
+                        "visible area: startY: {} endY: {}",
+                        visible_rect.y,
+                        visible_rect.height + visible_rect.y
+                    );
+                    log::info!(
+                        "album rect area: startY: {} endY {}",
+                        album_rect.y,
+                        album_rect.height + album_rect.y
+                    );
+
+                    grid = grid.push(insert_element).insert_row();
+                    album_rect.y += icon_size as f32 * 32.0 + TextArea;
+                } else {
+                    grid = grid.push(insert_element);
                 }
             }
 
-            grid.into()
-        })
+            return cosmic::widget::scrollable::vertical(grid)
+                .height(Length::Shrink)
+                .on_scroll(|a| Message::ScrollView(a))
+                .into();
+        }))
+        .height(Length::Fill)
         .into();
     }
 
@@ -134,9 +185,7 @@ impl AlbumPage {
                         track_number: row.get::<&str, u32>("tn").unwrap_or(1),
                         cover_art: match row.get::<&str, Vec<u8>>("ac") {
                             Ok(cover) => {
-                                log::info!("{}", "image!".red());
                                Some(cosmic::widget::image::Handle::from_bytes(cover))
-
                             },
                             Err(_) => {
                                 None
@@ -173,6 +222,7 @@ impl Album {
                 .size(size as u16 * 24)
                 .into(),
             Some(art) => cosmic::widget::image(art)
+                .content_fit(ContentFit::Contain)
                 .width(Length::Fixed(size as f32 * 32.0))
                 .height(Length::Fixed(size as f32 * 32.0))
                 .into(),
@@ -182,7 +232,7 @@ impl Album {
             cosmic::widget::button::custom(
                 cosmic::widget::column::with_children(vec![
                     art,
-                    cosmic::widget::text::text(self.name.to_string()).into(),
+                    cosmic::widget::text::caption_heading(self.name.to_string()).into(),
                     cosmic::widget::text::caption(self.artist.to_string()).into(),
                 ])
                 .align_x(Horizontal::Center),
@@ -194,6 +244,8 @@ impl Album {
             .class(cosmic::theme::Button::MenuItem)
             .width(Length::Fixed(size as f32 * 32.0)),
         )
+        .height(Length::Fixed(size as f32 * 32.0 + TextArea))
+        .width(Length::Fixed(size as f32 * 32.0))
         .into();
     }
 }

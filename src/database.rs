@@ -247,6 +247,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                         let mut final_val = val;
 
                         if final_val.contains("/") {
+                            log::info!("final val = {}", final_val);
                             final_val = final_val
                                 .split("/")
                                 .next()
