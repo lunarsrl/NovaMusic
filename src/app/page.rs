@@ -28,7 +28,6 @@ pub enum CoverArt {
 enum BodyStyle {
     Grid,
     List,
-    Card,
 }
 
 pub trait Page {
@@ -54,9 +53,6 @@ impl<T: Page> PageBuilder for T {
                 "Modifiable 2".to_string(),
                 SortOrder::Ascending,
             ),
-            BodyStyle::Card => {
-                cosmic::widget::container(cosmic::widget::column::with_children(vec![])).into()
-            }
         };
 
         match self.body_style() {
@@ -113,7 +109,6 @@ impl<T: Page> PageBuilder for T {
                 ]))
                 .into()
             }
-            BodyStyle::Card => todo!(),
         }
     }
 
@@ -202,24 +197,27 @@ pub fn list_sort_header<'a>(
                 ])
                 .align_y(Vertical::Center),
             )
+            .width(Length::Fixed(300.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
             cosmic::widget::button::custom(
                 cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
-                    "Modifiable Field 1",
+                    "Modifiable",
                 )
                 .into()])
                 .align_y(Vertical::Center),
             )
+            .width(Length::Fixed(150.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
             cosmic::widget::button::custom(
                 cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
-                    "Modifiable Field 2 ",
+                    "Modifiable",
                 )
                 .into()])
                 .align_y(Vertical::Center),
             )
+            .width(Length::Fixed(150.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
         ])

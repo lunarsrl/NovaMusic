@@ -36,99 +36,111 @@ impl Page for AlbumPage {
     }
 
     fn body(&self, model: &AppModel) -> Element<Message> {
-        let icon_size = model.config.grid_item_size;
+        match &self.page_state {
+            AlbumPageState::Loading => {
+                let icon_size = model.config.grid_item_size;
 
-        return cosmic::widget::container(cosmic::widget::responsive(move |size| {
-            let width = size.width as u32;
-            let spacing;
-            let mut items_per_row = 0;
-            let mut item_num = 0;
+                return cosmic::widget::container(cosmic::widget::responsive(move |size| {
+                    let width = size.width as u32;
+                    let spacing;
+                    let mut items_per_row = 0;
+                    let mut item_num = 0;
 
-            while width > (items_per_row * icon_size * 32) {
-                items_per_row += 1;
-            }
-            items_per_row -= 1;
+                    while width > (items_per_row * icon_size * 32) {
+                        items_per_row += 1;
+                    }
+                    items_per_row -= 1;
 
-            let check_spacing: u32 = ((items_per_row + 1) * icon_size * 32).saturating_sub(width);
-            let check_final = icon_size * 32 - check_spacing;
+                    let check_spacing: u32 =
+                        ((items_per_row + 1) * icon_size * 32).saturating_sub(width);
+                    let check_final = icon_size * 32 - check_spacing;
 
-            if items_per_row < 3 {
-                spacing = check_final as u16
-            } else {
-                spacing = (check_final / (items_per_row - 1)) as u16;
-            }
+                    if items_per_row < 3 {
+                        spacing = check_final as u16
+                    } else {
+                        spacing = (check_final / (items_per_row - 1)) as u16;
+                    }
 
-            let visible_rect = iced_core::Rectangle::new(
-                iced_core::Point::new(
-                    f32::from(cosmic::theme::spacing().space_s),
-                    match self.viewport {
-                        None => 0.0,
-                        Some(val) => val.absolute_offset().y,
-                    },
-                ),
-                iced_core::Size::new(3.0, size.height),
-            );
+                    let visible_rect = iced_core::Rectangle::new(
+                        iced_core::Point::new(
+                            f32::from(cosmic::theme::spacing().space_s),
+                            match self.viewport {
+                                None => 0.0,
+                                Some(val) => val.absolute_offset().y,
+                            },
+                        ),
+                        iced_core::Size::new(3.0, size.height),
+                    );
 
-            let mut album_rect = iced_core::Rectangle::new(
-                iced_core::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
-                iced_core::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
-            );
+                    let mut album_rect = iced_core::Rectangle::new(
+                        iced_core::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
+                        iced_core::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
+                    );
 
-            let mut grid = cosmic::widget::grid::<Message>()
-                .column_spacing(spacing)
-                .column_alignment(Alignment::Center)
-                .justify_content(JustifyContent::Center)
-                .row_alignment(Alignment::Center)
-                .width(Length::Fill)
-                .height(Length::Shrink);
-
-            for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
-                let insert_element;
-
-                if album_rect.intersects(&visible_rect) {
-                    insert_element = album.display_grid(icon_size);
-                } else {
-                    insert_element = cosmic::widget::column()
-                        .push(cosmic::widget::text(format!("{}", index)))
+                    let mut grid = cosmic::widget::grid::<Message>()
+                        .column_spacing(spacing)
+                        .column_alignment(Alignment::Center)
+                        .justify_content(JustifyContent::Center)
+                        .row_alignment(Alignment::Center)
                         .width(Length::Fill)
-                        .height(Length::Fixed(icon_size as f32 * 32.0 + TextArea))
-                        .into()
-                }
+                        .height(Length::Shrink);
 
-                item_num += 1;
+                    for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
+                        let insert_element;
 
-                if item_num as u32 % items_per_row == 0 {
-                    log::info!(
-                        "{}",
-                        format!("new row {} --------\\", (index as f32 / 3.0).floor())
-                            .to_string()
-                            .red()
-                    );
-                    log::info!(
-                        "visible area: startY: {} endY: {}",
-                        visible_rect.y,
-                        visible_rect.height + visible_rect.y
-                    );
-                    log::info!(
-                        "album rect area: startY: {} endY {}",
-                        album_rect.y,
-                        album_rect.height + album_rect.y
-                    );
+                        if album_rect.intersects(&visible_rect) {
+                            insert_element = album.display_grid(icon_size);
+                        } else {
+                            insert_element = cosmic::widget::column()
+                                .push(cosmic::widget::text(format!("{}", index)))
+                                .width(Length::Fill)
+                                .height(Length::Fixed(icon_size as f32 * 32.0 + TextArea))
+                                .into()
+                        }
 
-                    grid = grid.push(insert_element).insert_row();
-                    album_rect.y += icon_size as f32 * 32.0 + TextArea;
-                } else {
-                    grid = grid.push(insert_element);
-                }
-            }
+                        item_num += 1;
 
-            return cosmic::widget::scrollable::vertical(grid)
-                .height(Length::Shrink)
-                .on_scroll(|a| Message::ScrollView(a))
+                        if item_num as u32 % items_per_row == 0 {
+                            log::info!(
+                                "{}",
+                                format!("new row {} --------\\", (index as f32 / 3.0).floor())
+                                    .to_string()
+                                    .red()
+                            );
+                            log::info!(
+                                "visible area: startY: {} endY: {}",
+                                visible_rect.y,
+                                visible_rect.height + visible_rect.y
+                            );
+                            log::info!(
+                                "album rect area: startY: {} endY {}",
+                                album_rect.y,
+                                album_rect.height + album_rect.y
+                            );
+
+                            grid = grid.push(insert_element).insert_row();
+                            album_rect.y += icon_size as f32 * 32.0 + TextArea;
+                        } else {
+                            grid = grid.push(insert_element);
+                        }
+                    }
+
+                    return cosmic::widget::scrollable::vertical(grid)
+                        .height(Length::Shrink)
+                        .on_scroll(|a| Message::ScrollView(a))
+                        .into();
+                }))
+                .height(Length::Fill)
                 .into();
-        }))
-        .height(Length::Fill)
-        .into();
+            }
+            AlbumPageState::Loaded => cosmic::widget::text("tired").into(),
+            AlbumPageState::Album(a) => {
+                cosmic::widget::text::heading(format!("{} | {}", a.album.name, a.album.artist))
+                    .into()
+            }
+            AlbumPageState::Search(_) => cosmic::widget::text("tired").into(),
+            AlbumPageState::Waiting => cosmic::widget::text("tired").into(),
+        }
     }
 
     fn body_style(&self) -> BodyStyle {
@@ -254,6 +266,117 @@ impl Album {
 pub struct FullAlbum {
     album: Album,
     tracks: Vec<Track>,
+}
+
+impl FullAlbum {
+    pub fn from_db(title: String, artist: String) -> FullAlbum {
+        let conn = rusqlite::Connection::open(
+            dirs::data_local_dir()
+                .unwrap()
+                .join("dev.lunarsrl.NovaMusic")
+                .join("nova_music.db"),
+        )
+        .expect("Nothing");
+
+        log::info!("After DB");
+
+        let row_num;
+        if artist.is_empty() {
+            row_num = conn
+                .query_row(
+                    "
+SELECT * FROM album
+WHERE album.name = ?
+            ",
+                    [title.as_str()],
+                    |row| {
+                        Ok((
+                            row.get::<usize, u32>(0),
+                            row.get::<usize, u32>(3),
+                            row.get::<usize, u32>(4),
+                            row.get::<&str, Vec<u8>>("album_cover"),
+                        ))
+                    },
+                )
+                .unwrap();
+        } else {
+            row_num = conn
+                .query_row(
+                    "
+SELECT * FROM album
+    left join artists art on album.artist_id = art.id
+WHERE album.name = ? and art.name = ?
+            ",
+                    [title.as_str(), artist.as_str()],
+                    |row| {
+                        Ok((
+                            row.get::<usize, u32>(0),
+                            row.get::<usize, u32>(3),
+                            row.get::<usize, u32>(4),
+                            row.get::<&str, Vec<u8>>("album_cover"),
+                        ))
+                    },
+                )
+                .unwrap();
+        }
+
+        let album = Album {
+            name: title,
+            artist,
+            disc_number: row_num.1.unwrap_or(0),
+            track_number: row_num.2.unwrap_or(0),
+            cover_art: match row_num.3 {
+                Ok(bytes) => Some(cosmic::widget::image::Handle::from_bytes(bytes)),
+                Err(_) => None,
+            },
+        };
+
+        let mut track_vector = vec![];
+
+        // Select all tracks with a certain album ID and count them
+
+        let mut value = conn
+            .prepare("select * from album_tracks where album_id = ?")
+            .expect("error preparing sql to fetch album tracks of a certain album id");
+        let mut rows = value
+            .query([row_num.0.expect("No row num, shouldve exited by now")])
+            .expect("error fetching album tracks of a certain album id");
+
+        while let Some(row) = rows.next().unwrap() {
+            let track_num = row.get::<usize, u32>(3).unwrap();
+            let disc_num = row.get::<usize, u32>(4).unwrap();
+
+            let track_dat = match row.get::<usize, u32>(2) {
+                Ok(val) => conn
+                    .query_row("SELECT name, path FROM track WHERE id = ?", [val], |row| {
+                        Ok((
+                            row.get::<usize, String>(0)
+                                .unwrap_or(String::from("NOT FOUND")),
+                            row.get::<usize, String>(1)
+                                .unwrap_or(String::from("NOT FOUND")),
+                        ))
+                    })
+                    .unwrap_or((String::from("ERROR"), String::from("ERROR"))),
+                Err(_) => {
+                    panic!("NO ID")
+                }
+            };
+
+            let track = Track {
+                name: track_dat.0,
+                file_path: track_dat.1,
+                track_number: track_num,
+                disc_number: disc_num,
+            };
+            track_vector.push(track);
+            track_vector.sort_by(|a, b| a.track_number.cmp(&b.track_number))
+        }
+
+        FullAlbum {
+            album,
+            tracks: track_vector,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

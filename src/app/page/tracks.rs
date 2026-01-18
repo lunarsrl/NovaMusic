@@ -205,9 +205,9 @@ impl AppTrack {
             cosmic::widget::divider::horizontal::default().into(),
             cosmic::widget::row::with_children(vec![
                 widget::column![
-                    cosmic::widget::text::heading(self.title),
-                    cosmic::widget::text::text(self.artist),
-                    cosmic::widget::text::text(self.album_title),
+                    cosmic::widget::text::heading(self.title).width(Length::Fixed(300.0)),
+                    cosmic::widget::text::text(self.artist).width(Length::Fixed(300.0)),
+                    cosmic::widget::text::text(self.album_title).width(Length::Fixed(300.0)),
                 ]
                 .into(),
                 cosmic::widget::horizontal_space().into(),

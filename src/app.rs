@@ -1724,9 +1724,18 @@ where a.name = ?    ",
                     _ => log::error!("Accessing page from a strange state"),
                 }
             }
-            Message::AlbumRequested(dat) => {
-                todo!()
-            }
+            Message::AlbumRequested(dat) => match self.nav.active_data_mut::<Page>().unwrap() {
+                Page::Artist(artistpage) => {
+                    artistpage.page_state = ArtistPageState::Album(FullAlbum::from_db(dat.0, dat.1))
+                }
+
+                Page::Albums(albumpage) => {
+                    albumpage.page_state = AlbumPageState::Album(FullAlbum::from_db(dat.0, dat.1))
+                }
+                _ => {
+                    todo!()
+                }
+            },
             app::Message::GridSliderChange(val) => {
                 self.config
                     .set_grid_item_size(&self.config_handler, val)
