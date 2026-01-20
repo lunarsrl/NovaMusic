@@ -57,11 +57,18 @@ A [justfile](./justfile) is included by default for the [casey/just][just] comma
 - Gapless Playback
 - MPRIS support
 - Crossfade support
+- ReplayGain
 
 #### Other:
 - Shuffle options
 - Optional network features (ex: Musicbrainz integration for automatic metadata)
 - Genres
+
+#### Working on Next:
+- Optimization
+- Sorting
+- UI improvements
+- MPRIS (Maybe)
 
 #### Completed:
 - ~~Artist View~~
