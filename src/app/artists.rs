@@ -436,7 +436,7 @@ impl ArtistsPage {
         .into()
     }
 
-    pub fn artist_edit_dialog(&self) -> Dialog<app::Message> {
+    pub fn artist_edit_dialog(&self) -> Dialog<'_, app::Message> {
         if let ArtistPageState::ArtistPage(page) = &self.page_state {
             let icon = match &page.artist.image {
                 Some(handle) => cosmic::widget::container(
@@ -549,13 +549,16 @@ impl ArtistPage {
     fn product_cover_button(
         &self,
         model: &AppModel,
-    ) -> (Vec<Element<app::Message>>, Vec<Element<app::Message>>) {
+    ) -> (
+        Vec<Element<'_, app::Message>>,
+        Vec<Element<'_, app::Message>>,
+    ) {
         let mut singles = vec![];
         let mut albums = vec![];
 
         for single in self.singles.as_slice() {
             singles.push(
-                cosmic::widget::button::custom(cosmic::widget::column::with_children(vec![
+                cosmic::widget::container(cosmic::widget::column::with_children(vec![
                     if let Some(cover_art) = &single.cover_art {
                         cosmic::widget::container::Container::new(
                             cosmic::widget::image(cover_art).content_fit(ContentFit::Cover),
@@ -583,9 +586,39 @@ impl ArtistPage {
                     .align_x(Alignment::Center)
                     .width(cosmic::iced::Length::Fill)
                     .into(),
+                    cosmic::widget::row::with_children(vec![
+                        cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                            "media-playback-start-symbolic",
+                        ))
+                        .on_press(Message::QueueTrackById {
+                            action: app::PlaybackQueueAction::PlayNow,
+                            track_type: TrackType::Single,
+                            id: single.id,
+                        })
+                        .into(),
+                        cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                            "media-skip-forward-symbolic",
+                        ))
+                        .on_press(Message::QueueTrackById {
+                            action: app::PlaybackQueueAction::QueueNext,
+                            track_type: TrackType::Single,
+                            id: single.id,
+                        })
+                        .into(),
+                        cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                            "list-add-symbolic",
+                        ))
+                        .on_press(Message::QueueTrackById {
+                            action: app::PlaybackQueueAction::QueueBack,
+                            track_type: TrackType::Single,
+                            id: single.id,
+                        })
+                        .into(),
+                    ])
+                    .spacing(cosmic::theme::spacing().space_xxs)
+                    .align_y(Alignment::Center)
+                    .into(),
                 ]))
-                .class(cosmic::widget::button::ButtonClass::Icon)
-                .on_press(Message::AddTrackById((TrackType::Single, single.id)))
                 .width((model.config.grid_item_size * 32) as f32)
                 .into(),
             )
@@ -604,7 +637,7 @@ impl ArtistPage {
                     } else {
                         cosmic::widget::container(
                             cosmic::widget::icon::from_name("media-optical-symbolic")
-                            .size((model.config.grid_item_size * 32) as u16),
+                                .size((model.config.grid_item_size * 32) as u16),
                         )
                         .align_x(Alignment::Center)
                         .align_y(Alignment::Center)

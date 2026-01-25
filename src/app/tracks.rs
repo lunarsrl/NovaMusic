@@ -245,9 +245,26 @@ fn track_list_display<'a>(tracks: &Vec<AppTrack>) -> cosmic::Element<'a, app::Me
                             cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                 "media-playback-start-symbolic",
                             ))
-                            .on_press(Message::AddTrackToQueue(
-                                track.path_buf.to_string_lossy().to_string(),
+                            .on_press(Message::QueueTracks {
+                                action: app::PlaybackQueueAction::PlayNow,
+                                paths: vec![track.path_buf.to_string_lossy().to_string()],
+                            })
+                            .into(),
+                            cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                "media-skip-forward-symbolic",
                             ))
+                            .on_press(Message::QueueTracks {
+                                action: app::PlaybackQueueAction::QueueNext,
+                                paths: vec![track.path_buf.to_string_lossy().to_string()],
+                            })
+                            .into(),
+                            cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                "list-add-symbolic",
+                            ))
+                            .on_press(Message::QueueTracks {
+                                action: app::PlaybackQueueAction::QueueBack,
+                                paths: vec![track.path_buf.to_string_lossy().to_string()],
+                            })
                             .into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_xxxs)

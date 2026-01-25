@@ -2,12 +2,9 @@
 
 use colored::Colorize;
 use cosmic::Application;
-use regex::{Match, Regex};
-use rusqlite::fallible_iterator::FallibleIterator;
+use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
-use cosmic::dialog::file_chooser::open::file;
-use rusqlite::Connection;
 use symphonia::core::meta::{StandardTagKey, Tag, Value};
 use symphonia::default::get_probe;
 
@@ -193,7 +190,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     }
                 },
                 StandardTagKey::AlbumArtist => match tag.value {
-                    Value::String(mut name) => {
+                    Value::String(name) => {
                         // let regex = Regex::new("/Feat.|ft.|&/i").unwrap();
                         //
                         // match regex.find(&name) {
@@ -218,7 +215,8 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                                         &[&name],
                                         |row| row.get::<usize, u32>(0),
                                     )
-                                        .unwrap());
+                                    .unwrap(),
+                                );
                                 // log::info!("ARTIST ID:  {}", album.artist_id);
                             }
                         }
@@ -260,7 +258,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     }
                     Value::UnsignedInt(val) => {
                         // log::info!("{}: {}", "DISC NUMBER unsigned int".red(), val);
-                        album_tracks.disc_number = val
+                        album_tracks.disc_number = val;
                     }
                     _ => {
                         // log::error!("DISC NUMBER");
@@ -286,7 +284,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                             [tag.value.to_string()],
                         ) {
                             Ok(_) => {}
-                            Err(err) => {
+                            Err(_err) => {
                                 // log::error!("error: {}", err);
                             }
                         }
@@ -379,7 +377,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
 
                         album_tracks.track_number = final_val
                             .parse::<u64>()
-                            .expect(format!("Invalid track number: {}", final_val).as_str());
+                            .expect(format!("Invalid track number: {final_val}").as_str());
                     }
                     Value::UnsignedInt(val) => album_tracks.track_number = val,
 
@@ -437,10 +435,12 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
         }
     }
 
-
-
-
-    log::info!(" {} BY {} IN {}", &track.name.as_ref().unwrap().on_blue(),  &artist.name.as_ref().unwrap().on_bright_yellow().black(), &album.name.on_bright_blue());
+    log::info!(
+        " {} BY {} IN {}",
+        &track.name.as_ref().unwrap().on_blue(),
+        &artist.name.as_ref().unwrap().on_bright_yellow().black(),
+        &album.name.on_bright_blue()
+    );
 
     match artist.name {
         Some(name) => match conn.execute("INSERT INTO artists (name) VALUES (?)", [&name]) {
@@ -454,7 +454,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     .query_row("SELECT id FROM artists WHERE name = ?", &[&name], |row| {
                         row.get::<usize, u32>(0)
                     })
-                    .unwrap() ;
+                    .unwrap();
             }
         },
         None => {
@@ -485,14 +485,14 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     );
                     match conn.execute(
                         "insert into track_genres (track_id, genre_id) values (?, ?)",
-                        [track.id, row_id as u64],
+                        [track.id, u64::from(row_id)],
                     ) {
                         Ok(v) => {
                             log::info!("TRACKID: {}", track.id);
                             Ok(v)
                         }
                         Err(err) => {
-                            log::error!("error while inserting into genre_tracks: {}", err);
+                            log::error!("error while inserting into genre_tracks: {err}");
                             Ok(3)
                         }
                     }
@@ -500,104 +500,100 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
             ) {
                 Ok(_) => {}
                 Err(err) => {
-                    log::error!("error while finding id from genre_name{}", err)
+                    log::error!("error while finding id from genre_name{err}");
                 }
             }
         }
     }
 
     if album.name.is_empty() {
-        log::warn!("{}", "No album title in file mdat".red())
+        log::warn!("{}", "No album title in file mdat".red());
     } else {
         // Check how many albums exist with this name
         let a_similar: Vec<(u32, Option<u32>)>;
 
         if album.artist_id.is_some() {
-            let mut similar_albums = match conn
-                .prepare(
-                    "
+            let mut similar_albums = match conn.prepare(
+                "
                 select main.album.id as id, art.id as aid from main.album
                     join main.artists art on main.album.artist_id = art.id
                 where main.album.name = ?
             ",
-                ) {
+            ) {
                 Ok(val) => val,
                 Err(err) => {
-                    log::error!("{}", err);
+                    log::error!("{err}");
                     panic!("Faulty sql request")
-                },
+                }
             };
 
             let a_iter = similar_albums
                 .query_map(&[&album.name], |row| {
-                    Ok(
-                        (row.get::<&str, u32>("id").unwrap(),
-                         Some(row.get::<&str, u32>("aid").unwrap())))
+                    Ok((
+                        row.get::<&str, u32>("id").unwrap(),
+                        Some(row.get::<&str, u32>("aid").unwrap()),
+                    ))
                 })
                 .unwrap();
 
-            a_similar = a_iter.into_iter().filter_map(|a| a.ok()).collect::<Vec<(u32, Option<u32>)>>();
+            a_similar = a_iter
+                .into_iter()
+                .filter_map(|a| a.ok())
+                .collect::<Vec<(u32, Option<u32>)>>();
         } else {
-            let mut similar_albums = match conn
-                .prepare(
-                    "
+            let mut similar_albums = match conn.prepare(
+                "
                 select main.album.id as id from main.album
                 where main.album.name = ?
             ",
-                ) {
+            ) {
                 Ok(val) => val,
                 Err(err) => {
-                    log::error!("{}", err);
+                    log::error!("{err}");
                     panic!("Faulty sql request")
-                },
+                }
             };
 
             let a_iter = similar_albums
                 .query_map(&[&album.name], |row| {
-                    Ok(
-                        (row.get::<&str, u32>("id").unwrap(),
-                         None
-                        )
-                    )
+                    Ok((row.get::<&str, u32>("id").unwrap(), None))
                 })
                 .unwrap();
 
-            a_similar = a_iter.into_iter().filter_map(|a| a.ok()).collect::<Vec<(u32, Option<u32>)>>();
+            a_similar = a_iter
+                .into_iter()
+                .filter_map(|a| a.ok())
+                .collect::<Vec<(u32, Option<u32>)>>();
         }
-
 
         log::info!("Similarities: {}", a_similar.len());
 
-        if a_similar.len() > 0 {
+        if !a_similar.is_empty() {
             // if at least one album already exists with the same name, compare artists to verify if it is actually the same album
             let mut insertion = false;
             for artist_id in a_similar {
-                    if artist_id.1.is_none() {
-                        // if there is no artist value associated, but there is an album with the same name, insert anyway it's probably correct
-                        album.id = artist_id.0;
-                        insertion = true;
-
-                    } else {
-                        if artist_id.1.unwrap() == album.artist_id.unwrap() as u32 {
-                            // if album name is the same and artist_id this is probably the correct album
-                            album.id = artist_id.0;
-                            insertion = true;
-                        }
-                    }
+                if artist_id.1.is_none() {
+                    // if there is no artist value associated, but there is an album with the same name, insert anyway it's probably correct
+                    album.id = artist_id.0;
+                    insertion = true;
+                } else if artist_id.1.unwrap() == album.artist_id.unwrap() as u32 {
+                    // if album name is the same and artist_id this is probably the correct album
+                    album.id = artist_id.0;
+                    insertion = true;
+                }
             }
 
-            if insertion == false {
+            if !insertion {
                 // if artist id does not match with any previous album entries, it probably is a different album
                 let image_dat = find_visual(filepath);
                 insert_track_to_grouping(&album, track.id, image_dat, &conn);
-                album.id = conn.last_insert_rowid() as u32
+                album.id = conn.last_insert_rowid() as u32;
             }
-
         } else {
             // if there are no matching albums create a new one, or if there is only one track associated, assume it is a single
             let image_dat = find_visual(filepath);
             insert_track_to_grouping(&album, track.id, image_dat, &conn);
-            album.id = conn.last_insert_rowid() as u32
+            album.id = conn.last_insert_rowid() as u32;
         }
 
         if album.num_of_tracks != 1 {
@@ -616,7 +612,12 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
     }
 }
 
-fn insert_track_to_grouping(album: &Album, track_id: u64, image_dat: Option<Box<[u8]>>, conn: &Connection) {
+fn insert_track_to_grouping(
+    album: &Album,
+    track_id: u64,
+    image_dat: Option<Box<[u8]>>,
+    conn: &Connection,
+) {
     if album.num_of_tracks != 1 {
         //Album
         match conn.execute(
@@ -645,7 +646,6 @@ fn insert_track_to_grouping(album: &Album, track_id: u64, image_dat: Option<Box<
             }
         }
     }
-
 }
 
 pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
@@ -668,7 +668,7 @@ pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
 
     if let Some(mdat_rev) = reader.metadata.get() {
         if let Some(mdat_rev) = mdat_rev.current() {
-            match mdat_rev.visuals().get(0) {
+            match mdat_rev.visuals().first() {
                 Some(visual) => {
                     // log::info!("This album contains visual data!");
                     Some(visual.data.clone())
@@ -681,11 +681,9 @@ pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
         } else {
             None
         }
+    } else if let Some(mdat_rev) = reader.format.metadata().current() {
+        Some(mdat_rev.visuals().first()?.data.clone())
     } else {
-        if let Some(mdat_rev) = reader.format.metadata().current() {
-            Some(mdat_rev.visuals().get(0)?.data.clone())
-        } else {
-            None
-        }
+        None
     }
 }
