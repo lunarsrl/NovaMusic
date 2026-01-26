@@ -136,6 +136,11 @@ impl HomePage {
                                                         "media-playlist-consecutive-symbolic",
                                                     )
                                                 }
+                                                LoopState::RandomShuffle => {
+                                                    cosmic::widget::icon::from_name(
+                                                        "media-playlist-shuffle-symbolic",
+                                                    )
+                                                }
                                             })
                                             .on_press(Message::ChangeLoopState)
                                             .into(),

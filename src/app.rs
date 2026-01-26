@@ -45,6 +45,7 @@ use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{action, cosmic_config, cosmic_theme, theme};
 use futures_util::{SinkExt, StreamExt};
+use rand::Rng;
 use rodio::{Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::collections::HashMap;
@@ -152,6 +153,7 @@ pub enum LoopState {
     LoopingTrack,
     LoopingQueue,
     NotLooping,
+    RandomShuffle,
 }
 
 #[derive(Debug, Clone)]
@@ -588,6 +590,11 @@ impl cosmic::Application for AppModel {
                                         LoopState::NotLooping => cosmic::widget::icon::from_name(
                                             "media-playlist-consecutive-symbolic",
                                         ),
+                                        LoopState::RandomShuffle => {
+                                            cosmic::widget::icon::from_name(
+                                                "media-playlist-shuffle-symbolic",
+                                            )
+                                        }
                                     })
                                     .on_press(Message::ChangeLoopState)
                                     .into(),
@@ -1157,15 +1164,10 @@ impl cosmic::Application for AppModel {
                 });
             }
             Message::ChangeLoopState => match self.loop_state {
-                LoopState::LoopingTrack => {
-                    self.loop_state = LoopState::NotLooping;
-                }
-                LoopState::LoopingQueue => {
-                    self.loop_state = LoopState::LoopingTrack;
-                }
-                LoopState::NotLooping => {
-                    self.loop_state = LoopState::LoopingQueue;
-                }
+                LoopState::LoopingTrack => self.loop_state = LoopState::RandomShuffle,
+                LoopState::LoopingQueue => self.loop_state = LoopState::LoopingTrack,
+                LoopState::NotLooping => self.loop_state = LoopState::LoopingQueue,
+                LoopState::RandomShuffle => self.loop_state = LoopState::NotLooping,
             },
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
@@ -2555,6 +2557,20 @@ where a.name = ?    ",
                                     cosmic::task::future(
                                         async move { Message::AddTrackToSink(file) },
                                     )
+                                }
+                                LoopState::RandomShuffle => {
+                                    let mut rng = rand::rng();
+                                    self.queue_pos = rng.random_range(0..self.queue.len());
+
+                                    let file = self
+                                        .queue
+                                        .get(self.queue_pos)
+                                        .unwrap()
+                                        .path_buf
+                                        .clone()
+                                        .to_string_lossy()
+                                        .to_string();
+                                    self.update(Message::AddTrackToSink(file))
                                 }
                             }
                         }
