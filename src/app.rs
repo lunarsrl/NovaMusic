@@ -1,16 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::app::artists::ArtistInfo;
-use cosmic::dialog::file_chooser::Error;
-use regex::Regex;
-
-use rayon::iter::IndexedParallelIterator;
-
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 mod albums;
 mod artists;
 pub(crate) mod home;
+mod playback;
 mod playlists;
+mod queue;
 mod scan;
 mod settings;
 mod tracks;
@@ -18,47 +13,49 @@ mod tracks;
 use crate::app::albums::{
     get_album_info, get_top_album_info, Album, AlbumPage, AlbumPageState, FullAlbum,
 };
-
-use crate::app::artists::ArtistPageState::ArtistPage;
-use crate::app::artists::{ArtistPageState, ArtistsPage};
+use crate::app::artists::{ArtistInfo, ArtistPageState, ArtistsPage};
 use crate::app::home::HomePage;
 use crate::app::playlists::{
     FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
 };
+use crate::app::queue::ShuffleState;
 use crate::app::scan::scan_directory;
 use crate::app::tracks::{SearchResult, TrackPage, TrackPageState};
-use crate::app::Message::ArtistPageEdit;
+
 use crate::config::{AppTheme, Config};
 use crate::database::{create_database, create_database_entry, find_visual};
-use crate::{app, config, fl};
+use crate::fl;
+
+pub use crate::app::playback::LoopState;
+use crate::app::playback::{AdvanceOutcome, AdvanceReason, PlaybackManager};
+
 use colored::Colorize;
 use cosmic::app::context_drawer;
-use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
+use cosmic::dialog::file_chooser::Error;
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::keyboard::key;
 use cosmic::iced::task::Handle;
 use cosmic::iced::window::Id;
 use cosmic::iced::Alignment::Start;
-use cosmic::iced::{keyboard, Alignment, Color, ContentFit, Event, Length};
+use cosmic::iced::{keyboard, Alignment, ContentFit, Event, Length};
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{action, cosmic_config, cosmic_theme, theme};
+
 use futures_util::{SinkExt, StreamExt};
-use rand::Rng;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rodio::{Sink, Source};
-use rusqlite::fallible_iterator::FallibleIterator;
+use symphonia::default::get_probe;
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufRead, Read, Write as OtherWrite};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{fs, io};
-use symphonia::default::get_probe;
 
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 const APP_ICON: &[u8] =
@@ -87,13 +84,12 @@ pub struct AppModel {
     //Audio
     pub mixer: rodio::stream::OutputStream,
     pub sink: Arc<Sink>,
-    pub loop_state: LoopState,
     pub song_progress: f64,
     pub song_duration: Option<f64>,
-    pub queue: Vec<AppTrack>,
-    pub queue_pos: usize,
+    pub playback_manager: PlaybackManager,
     pub clear: bool,
     pub task_handle: Option<Vec<Handle>>,
+    pub show_history: bool,
 
     // dialogs
     pub playlist_creation_dialog: bool,
@@ -109,7 +105,7 @@ pub struct AppModel {
     playlist_edit_dialog: bool,
 
     // Error Handling
-    toasts: cosmic::widget::toaster::Toasts<Message>,
+    toasts: widget::toaster::Toasts<Message>,
 
     // Navigation
     albumsid: nav_bar::Id,
@@ -134,7 +130,7 @@ pub struct AppTrack {
     pub artist: String,
     pub album_title: String,
     pub path_buf: PathBuf,
-    pub cover_art: Option<cosmic::widget::image::Handle>,
+    pub cover_art: Option<widget::image::Handle>,
 }
 
 /// Minimum amount of info required to display fully expose a Single track
@@ -143,18 +139,10 @@ pub struct DisplaySingle {
     pub id: u32,
     pub title: String,
     pub artist: String,
-    pub cover_art: Option<cosmic::widget::image::Handle>,
+    pub cover_art: Option<widget::image::Handle>,
 }
 
 /// Messages emitted by the application and its widgets.
-
-#[derive(Debug)]
-pub enum LoopState {
-    LoopingTrack,
-    LoopingQueue,
-    NotLooping,
-    RandomShuffle,
-}
 
 #[derive(Debug, Clone)]
 pub enum FileChooserEvents {
@@ -197,20 +185,22 @@ pub enum Message {
     AlbumRequested((String, String)), // when an album icon is clicked [gets title & artist of album]
     AlbumInfoRetrieved(FullAlbum), // when task assigned to retrieving requested albums info is completed [gets full track list of album]
 
-    // Home Page
-    //todo move all AddTrackToQueue to AddTrackByID
-    // Advantage: No need to clone strings
-    // Disadvantage: Database access but that happens anyway sometimes
-    AddTrackToQueue(String),
-    AddTrackById((TrackType, u32)),
-    //todo Make albums in queue fancier kinda like Elisa does it
-    AddAlbumToQueue(Vec<(String, u32)>),
+    // Home Page / Playback queueing
+    QueueTracks {
+        action: PlaybackQueueAction,
+        paths: Vec<String>,
+    },
+    QueueTrackById {
+        action: PlaybackQueueAction,
+        track_type: TrackType,
+        id: u32,
+    },
 
     // Track Page
     TracksLoaded,
     TrackLoaded(Vec<AppTrack>),
     UpdateSearch(String),
-    SearchResults(Vec<crate::app::tracks::SearchResult>),
+    SearchResults(Vec<SearchResult>),
     ToggleTitle(bool),
     ToggleAlbum(bool),
     ToggleArtist(bool),
@@ -236,17 +226,19 @@ pub enum Message {
 
     // Audio Messages
     PlayPause,
-    SongFinished(QueueUpdateReason),
+    SongFinished(PlaybackEvent),
     AddTrackToSink(String),
     SkipTrack,
     ChangeLoopState,
+    ToggleShuffle,
     PreviousTrack,
+    ToggleHistory,
     SeekFinished,
     ClearQueue,
     SinkProgress(f64),
     SeekTrack(f64),
-    ChangeActiveInQueue(usize),
-    RemoveSongInQueue(usize),
+    ChangeActiveTrack(usize),
+    RemoveTrack(usize),
 
     // Settings
     GridSliderChange(u32),
@@ -256,7 +248,7 @@ pub enum Message {
     ToggleFooter(bool),
 
     // Error Reporting
-    Toasts(cosmic::widget::toaster::ToastId),
+    Toasts(widget::toaster::ToastId),
     ToastError(String),
 
     //experimenting
@@ -279,12 +271,19 @@ pub enum ReEnterNavReason {
 }
 
 #[derive(Clone, Debug)]
-pub enum QueueUpdateReason {
+pub enum PlaybackEvent {
     Skipped,
     Previous,
     Removed(usize),
     None,
     ThreadKilled,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlaybackQueueAction {
+    PlayNow,
+    QueueNext,
+    QueueBack,
 }
 
 #[derive(Debug, Clone)]
@@ -323,23 +322,20 @@ impl cosmic::Application for AppModel {
         // store data & first time set up
         match dirs::data_local_dir()
             .unwrap()
-            .join(crate::app::AppModel::APP_ID)
+            .join(AppModel::APP_ID)
             .is_dir()
         {
             true => {}
-            false => fs::create_dir(
-                dirs::data_local_dir()
-                    .unwrap()
-                    .join(crate::app::AppModel::APP_ID),
-            )
-            .unwrap(),
+            false => {
+                fs::create_dir(dirs::data_local_dir().unwrap().join(AppModel::APP_ID)).unwrap()
+            }
         }
 
         // Create a nav bar with three page items.
         let mut nav = nav_bar::Model::default();
         let mixer =
             rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
-        let sink = rodio::Sink::connect_new(mixer.mixer());
+        let sink = Sink::connect_new(mixer.mixer());
 
         let sink = Arc::new(sink);
 
@@ -380,7 +376,7 @@ impl cosmic::Application for AppModel {
             .id();
 
         // INIT CONFIG
-        let config = config::Config::load();
+        let config = Config::load();
         let config_handler = match config.0 {
             None => {
                 panic!("No config exists");
@@ -405,13 +401,12 @@ impl cosmic::Application for AppModel {
             // Audio
             mixer,
             sink,
-            loop_state: LoopState::NotLooping,
             song_progress: 0.0,
             song_duration: None,
-            queue: vec![],
-            queue_pos: 0,
+            playback_manager: PlaybackManager::new(),
             clear: false,
             task_handle: None,
+            show_history: false,
             search_field: "".to_string(),
 
             // dialogs toggles
@@ -431,7 +426,7 @@ impl cosmic::Application for AppModel {
             playlist_cover: None,
 
             // footer
-            toasts: cosmic::widget::toaster::Toasts::new(|a| Message::Toasts(a)),
+            toasts: widget::toaster::Toasts::new(|a| Message::Toasts(a)),
             albumsid,
             tracksid,
             artistsid,
@@ -445,420 +440,8 @@ impl cosmic::Application for AppModel {
         (app, command)
     }
 
-    /// Elements to pack at the start of the header bar.
-    fn header_start(&self) -> Vec<Element<Self::Message>> {
-        let menu_bar = menu::bar(vec![menu::Tree::with_children(
-            menu::root(fl!("view")).apply(Element::from),
-            menu::items(
-                &self.key_binds,
-                vec![
-                    menu::Item::Button(fl!("settings"), None, Action::Settings),
-                    menu::Item::Button(fl!("about"), None, Action::About),
-                ],
-            ),
-        )]);
-
-        vec![menu_bar.into()]
-    }
-
-    fn on_close_requested(&self, _id: Id) -> Option<Self::Message> {
-        self.sink.stop();
-        match &self.task_handle {
-            None => {}
-            Some(handles) => {
-                for handle in handles {
-                    handle.abort()
-                }
-            }
-        }
-        None
-    }
-    fn footer(&self) -> Option<Element<Self::Message>> {
-        if !self.config.footer {
-            return None;
-        }
-
-        let time_elapsed = crate::app::home::format_time(self.song_progress);
-
-        let mut total_duration = "**:**".to_string();
-        match self.song_duration {
-            None => {}
-            Some(val) => {
-                total_duration = crate::app::home::format_time(val);
-            }
-        };
-
-        const FOOTER_IMAGE_SIZE: f32 = 64.0;
-        let data = match self.queue.is_empty() {
-            true => {
-                let cover = cosmic::widget::icon::from_name("applications-audio-symbolic")
-                    .size(FOOTER_IMAGE_SIZE as u16)
-                    .into();
-
-                (None, None, None, cover)
-            }
-            false => {
-                let title = Some(self.queue.get(self.queue_pos).unwrap().title.as_str());
-                let artist = Some(self.queue.get(self.queue_pos).unwrap().artist.as_str());
-                let album = Some(self.queue.get(self.queue_pos).unwrap().album_title.as_str());
-
-                let cover = match &self.queue.get(self.queue_pos).unwrap().cover_art {
-                    None => cosmic::widget::icon::from_name("media-playback-start-symbolic")
-                        .size(FOOTER_IMAGE_SIZE as u16)
-                        .into(),
-                    Some(val) => cosmic::widget::image(val)
-                        .width(Length::Fixed(FOOTER_IMAGE_SIZE))
-                        .height(Length::Fixed(FOOTER_IMAGE_SIZE))
-                        .content_fit(ContentFit::ScaleDown)
-                        .into(),
-                };
-
-                (title, artist, album, cover)
-            }
-        };
-
-        let play_pause_button: cosmic::Element<Message> = match self.queue.is_empty() {
-            true => {
-                self.sink.clear();
-                cosmic::widget::button::icon(match self.sink.is_paused() {
-                    true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
-                    false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
-                })
-                .into()
-            }
-            false => cosmic::widget::button::icon(match self.sink.is_paused() {
-                true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
-                false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
-            })
-            .on_press(Message::PlayPause)
-            .into(),
-        };
-
-        return Some(
-            cosmic::widget::container(
-                cosmic::widget::container(
-                    cosmic::widget::row::with_children(vec![
-                        data.3,
-                        // Media Progress
-                        cosmic::widget::column::with_children(vec![
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading(data.0.unwrap_or("")).into(),
-                                cosmic::widget::text::heading(data.1.unwrap_or("")).into(),
-                                cosmic::widget::text::heading(data.2.unwrap_or("")).into(),
-                                cosmic::widget::horizontal_space().into(), // todo Context menu for mini player options
-                                                                           // cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                                                           //     "go-up-symbolic",
-                                                                           // ))
-                                                                           // .on_press(Message::ToggleFooter)
-                                                                           // .into(),
-                            ])
-                            .spacing(cosmic::theme::spacing().space_s)
-                            .into(),
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading(time_elapsed).into(),
-                                cosmic::widget::slider(
-                                    0.0..=self.song_duration.unwrap_or(1.0),
-                                    self.song_progress,
-                                    |a| Message::SeekTrack(a),
-                                )
-                                .on_release(Message::SeekFinished)
-                                .height(31.0)
-                                .into(),
-                                cosmic::widget::text::heading(format!("{}", total_duration)).into(),
-                                // Media Controls
-                                cosmic::widget::row::with_children(vec![
-                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                        "media-skip-backward-symbolic",
-                                    ))
-                                    .on_press(Message::PreviousTrack)
-                                    .into(),
-                                    // PLAY OR PAUSE
-                                    play_pause_button,
-                                    // PLAY OR PAUSE
-                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                        "media-skip-forward-symbolic",
-                                    ))
-                                    .on_press(Message::SkipTrack)
-                                    .into(),
-                                    cosmic::widget::button::icon(match self.loop_state {
-                                        LoopState::LoopingTrack => cosmic::widget::icon::from_name(
-                                            "media-playlist-repeat-song-symbolic",
-                                        ),
-                                        LoopState::LoopingQueue => cosmic::widget::icon::from_name(
-                                            "media-playlist-no-repeat-symbolic",
-                                        ),
-                                        LoopState::NotLooping => cosmic::widget::icon::from_name(
-                                            "media-playlist-consecutive-symbolic",
-                                        ),
-                                        LoopState::RandomShuffle => {
-                                            cosmic::widget::icon::from_name(
-                                                "media-playlist-shuffle-symbolic",
-                                            )
-                                        }
-                                    })
-                                    .on_press(Message::ChangeLoopState)
-                                    .into(),
-                                ])
-                                .width(Length::Shrink)
-                                .align_y(Vertical::Center)
-                                .spacing(cosmic::theme::spacing().space_xxxs)
-                                .into(),
-                            ])
-                            .width(Length::Fill)
-                            .align_y(Vertical::Center)
-                            .spacing(cosmic::theme::spacing().space_xxs)
-                            .into(),
-                        ])
-                        .into(),
-                    ])
-                    .spacing(cosmic::theme::spacing().space_xs),
-                )
-                .width(Length::Fill)
-                .padding(cosmic::theme::spacing().space_xxs)
-                .class(cosmic::theme::Container::Primary),
-            )
-            .align_y(Start)
-            .width(Length::Fill)
-            .into(),
-        );
-    }
-
-    /// Enables the COSMIC application to create a nav bar with this model.
-    fn nav_model(&self) -> Option<&nav_bar::Model> {
-        Some(&self.nav)
-    }
-
-    fn dialog(&self) -> Option<Element<Self::Message>> {
-        if !dirs::data_local_dir()
-            .unwrap()
-            .join(crate::app::AppModel::APP_ID)
-            .join("nova_music.db")
-            .exists()
-        {
-            match dirs::data_local_dir()
-                .unwrap()
-                .join(crate::app::AppModel::APP_ID)
-                .is_dir()
-            {
-                true => {}
-                false => fs::create_dir(
-                    dirs::data_local_dir()
-                        .unwrap()
-                        .join(crate::app::AppModel::APP_ID),
-                )
-                .unwrap(),
-            }
-
-            return Some(
-                cosmic::widget::dialog::Dialog::new()
-                    .title(fl!("firsttimetitle"))
-                    .body(fl!("firsttimebody"))
-                    .control(cosmic::widget::container(
-                        cosmic::widget::row::with_children(vec![
-                            cosmic::widget::text_input(
-                                fl!("pathtofolder"),
-                                self.config.scan_dir.as_str(),
-                            )
-                            .on_input(|val| Message::ManualScanDirEdit(val))
-                            .into(),
-                            cosmic::widget::horizontal_space().into(),
-                            cosmic::widget::button::text(fl!("folderselect"))
-                                .class(cosmic::theme::style::Button::Standard)
-                                .on_press(Message::ChooseFolder)
-                                .into(),
-                        ]),
-                    ))
-                    .primary_action(
-                        cosmic::widget::button::text(fl!("firsttimeprimary"))
-                            .class(cosmic::theme::Button::Suggested)
-                            .on_press(Message::RescanDir),
-                    )
-                    .into(),
-            );
-        }
-
-        // Dialogs from page user interactions
-        match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(page) => {
-                let icon = match &self.playlist_cover {
-                    None => cosmic::widget::container(
-                        cosmic::widget::button::icon(
-                            cosmic::widget::icon::from_name("view-list-images-symbolic")
-                                .size(6 * 8),
-                        )
-                        .padding(cosmic::theme::spacing().space_s)
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-                        .class(cosmic::theme::Button::Suggested),
-                    )
-                    .class(cosmic::theme::Container::Secondary)
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                    Some(val) => cosmic::widget::container(
-                        cosmic::widget::button::custom_image_button(
-                            cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
-                                .content_fit(ContentFit::Fill),
-                            None,
-                        )
-                        .on_press(Message::CreatePlaylistAddThumbnail),
-                    )
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                };
-
-                if self.playlist_creation_dialog {
-                    return Some(
-                        cosmic::widget::dialog::Dialog::new()
-                            .title(fl!("DialogPlaylistTitle"))
-                            .control(
-                                cosmic::widget::container(
-                                    cosmic::widget::row::with_children(vec![
-                                        icon,
-                                        cosmic::widget::text_input(
-                                            fl!("PlaylistInputPlaceholder"),
-                                            self.playlist_dialog_text.as_str(),
-                                        )
-                                        .on_input(|input| Message::UpdatePlaylistName(input))
-                                        .into(),
-                                    ])
-                                    .align_y(Vertical::Bottom)
-                                    .spacing(cosmic::theme::spacing().space_m),
-                                )
-                                .align_x(Horizontal::Center),
-                            )
-                            .primary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "object-select-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Suggested)
-                                .on_press(Message::CreatePlaylistConfirm),
-                            )
-                            .secondary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "window-close-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Standard)
-                                .on_press(Message::CreatePlaylistCancel),
-                            )
-                            .into(),
-                    );
-                }
-            }
-            Page::Artist(page) => {
-                if self.artistpage_edit_dialog {
-                    return Some(page.artist_edit_dialog().into());
-                }
-            }
-            Page::Albums(_) => {}
-            Page::Playlists(val) => {
-                let icon = match &self.playlist_cover {
-                    None => cosmic::widget::container(
-                        cosmic::widget::button::icon(
-                            cosmic::widget::icon::from_name("view-list-images-symbolic")
-                                .size(6 * 8),
-                        )
-                        .padding(cosmic::theme::spacing().space_s)
-                        .on_press(Message::CreatePlaylistAddThumbnail)
-                        .class(cosmic::theme::Button::Suggested),
-                    )
-                    .class(cosmic::theme::Container::Secondary)
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                    Some(val) => cosmic::widget::container(
-                        cosmic::widget::button::custom_image_button(
-                            cosmic::widget::image(cosmic::widget::image::Handle::from_path(val))
-                                .content_fit(ContentFit::Fill),
-                            None,
-                        )
-                        .on_press(Message::CreatePlaylistAddThumbnail),
-                    )
-                    .width(Length::Fixed(6.0 * 16.0))
-                    .height(Length::Fixed(6.0 * 16.0))
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Center)
-                    .into(),
-                };
-
-                if self.playlist_edit_dialog {
-                    return Some(
-                        cosmic::widget::dialog::Dialog::new()
-                            .title(fl!("DialogPlaylistEdit"))
-                            .control(
-                                cosmic::widget::container(
-                                    cosmic::widget::row::with_children(vec![
-                                        icon,
-                                        cosmic::widget::text_input(
-                                            fl!("PlaylistInputPlaceholder"),
-                                            self.playlist_dialog_text.as_str(),
-                                        )
-                                        .on_input(|input| Message::UpdatePlaylistName(input))
-                                        .into(),
-                                    ])
-                                    .align_y(Vertical::Bottom)
-                                    .spacing(cosmic::theme::spacing().space_m),
-                                )
-                                .align_x(Horizontal::Center),
-                            )
-                            .primary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "object-select-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Suggested)
-                                .on_press(Message::EditPlaylistConfirm),
-                            )
-                            .secondary_action(
-                                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                    "window-close-symbolic",
-                                ))
-                                .class(cosmic::theme::Button::Standard)
-                                .on_press(Message::EditPlaylistCancel),
-                            )
-                            .into(),
-                    );
-                }
-                // Dialog for deleting a playlist
-                if self.playlist_delete_dialog {
-                    if let PlaylistPageState::PlaylistPage(val) = &val.playlist_page_state {
-                        return Some(
-                            cosmic::widget::dialog::Dialog::new()
-                                .title(fl!("DialogPlaylistDelete"))
-                                .body(fl!(
-                                    "DialogPlaylistDeleteClarify",
-                                    path = val.playlist.path.as_str()
-                                ))
-                                .primary_action(
-                                    cosmic::widget::button::text(fl!(
-                                        "DialogPlaylistDeleteConfirm"
-                                    ))
-                                    .class(cosmic::theme::Button::Destructive)
-                                    .on_press(Message::PlaylistDeleteConfirmed),
-                                )
-                                .secondary_action(
-                                    cosmic::widget::button::text(fl!("Cancel"))
-                                        .class(cosmic::theme::Button::Standard)
-                                        .on_press(Message::PlaylistDeleteSafety),
-                                )
-                                .into(),
-                        );
-                    }
-                }
-            }
-            Page::Tracks(_) => {}
-        }
-
-        None
-    }
-
     /// Display a context drawer if the context page is requested.
-    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<Self::Message>> {
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<'_, Self::Message>> {
         if !self.core.window.show_context {
             return None;
         }
@@ -877,25 +460,444 @@ impl cosmic::Application for AppModel {
         })
     }
 
-    /// Describes the interface based on the current state of the application model.
-    ///
-    /// Application events will be processed through the view. Any messages emitted by
-    /// events received by widgets will be passed to the update method.
-    fn view(&self) -> Element<Self::Message> {
-        let body;
-        match self.nav.active_data::<Page>().unwrap() {
-            Page::NowPlaying(home_page) => body = home_page.load_page(self),
-            Page::Tracks(track_page) => body = track_page.load_page(self),
-            Page::Artist(artists_page) => body = artists_page.load_page(self),
-            Page::Albums(album_page) => body = album_page.load_page(self),
-            Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
+    fn dialog(&self) -> Option<Element<'_, Self::Message>> {
+        if !dirs::data_local_dir()
+            .unwrap()
+            .join(AppModel::APP_ID)
+            .join("nova_music.db")
+            .exists()
+        {
+            match dirs::data_local_dir()
+                .unwrap()
+                .join(AppModel::APP_ID)
+                .is_dir()
+            {
+                true => {}
+                false => {
+                    fs::create_dir(dirs::data_local_dir().unwrap().join(AppModel::APP_ID)).unwrap()
+                }
+            }
+
+            return Some(
+                widget::dialog::Dialog::new()
+                    .title(fl!("firsttimetitle"))
+                    .body(fl!("firsttimebody"))
+                    .control(cosmic::widget::container(widget::row::with_children(vec![
+                        cosmic::widget::text_input(
+                            fl!("pathtofolder"),
+                            self.config.scan_dir.as_str(),
+                        )
+                        .on_input(|val| Message::ManualScanDirEdit(val))
+                        .into(),
+                        widget::horizontal_space().into(),
+                        cosmic::widget::button::text(fl!("folderselect"))
+                            .class(theme::style::Button::Standard)
+                            .on_press(Message::ChooseFolder)
+                            .into(),
+                    ])))
+                    .primary_action(
+                        cosmic::widget::button::text(fl!("firsttimeprimary"))
+                            .class(theme::Button::Suggested)
+                            .on_press(Message::RescanDir),
+                    )
+                    .into(),
+            );
         }
 
-        cosmic::widget::container(cosmic::widget::column::with_children(vec![
-            cosmic::widget::toaster(&self.toasts, cosmic::widget::horizontal_space()).into(),
-            body,
-        ]))
-        .into()
+        // Dialogs from page user interactions
+        match self.nav.active_data::<Page>().unwrap() {
+            Page::NowPlaying(page) => {
+                let icon = match &self.playlist_cover {
+                    None => cosmic::widget::container(
+                        cosmic::widget::button::icon(
+                            icon::from_name("view-list-images-symbolic").size(6 * 8),
+                        )
+                        .padding(theme::spacing().space_s)
+                        .on_press(Message::CreatePlaylistAddThumbnail)
+                        .class(theme::Button::Suggested),
+                    )
+                    .class(theme::Container::Secondary)
+                    .width(Length::Fixed(6.0 * 16.0))
+                    .height(Length::Fixed(6.0 * 16.0))
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .into(),
+                    Some(val) => cosmic::widget::container(
+                        widget::button::custom_image_button(
+                            cosmic::widget::image(widget::image::Handle::from_path(val))
+                                .content_fit(ContentFit::Fill),
+                            None,
+                        )
+                        .on_press(Message::CreatePlaylistAddThumbnail),
+                    )
+                    .width(Length::Fixed(6.0 * 16.0))
+                    .height(Length::Fixed(6.0 * 16.0))
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .into(),
+                };
+
+                if self.playlist_creation_dialog {
+                    return Some(
+                        widget::dialog::Dialog::new()
+                            .title(fl!("DialogPlaylistTitle"))
+                            .control(
+                                cosmic::widget::container(
+                                    widget::row::with_children(vec![
+                                        icon,
+                                        cosmic::widget::text_input(
+                                            fl!("PlaylistInputPlaceholder"),
+                                            self.playlist_dialog_text.as_str(),
+                                        )
+                                        .on_input(|input| Message::UpdatePlaylistName(input))
+                                        .into(),
+                                    ])
+                                    .align_y(Vertical::Bottom)
+                                    .spacing(theme::spacing().space_m),
+                                )
+                                .align_x(Horizontal::Center),
+                            )
+                            .primary_action(
+                                cosmic::widget::button::icon(icon::from_name(
+                                    "object-select-symbolic",
+                                ))
+                                .class(theme::Button::Suggested)
+                                .on_press(Message::CreatePlaylistConfirm),
+                            )
+                            .secondary_action(
+                                cosmic::widget::button::icon(icon::from_name(
+                                    "window-close-symbolic",
+                                ))
+                                .class(theme::Button::Standard)
+                                .on_press(Message::CreatePlaylistCancel),
+                            )
+                            .into(),
+                    );
+                }
+            }
+            Page::Artist(page) => {
+                if self.artistpage_edit_dialog {
+                    return Some(page.artist_edit_dialog().into());
+                }
+            }
+            Page::Albums(_) => {}
+            Page::Playlists(val) => {
+                let icon = match &self.playlist_cover {
+                    None => cosmic::widget::container(
+                        cosmic::widget::button::icon(
+                            icon::from_name("view-list-images-symbolic").size(6 * 8),
+                        )
+                        .padding(theme::spacing().space_s)
+                        .on_press(Message::CreatePlaylistAddThumbnail)
+                        .class(theme::Button::Suggested),
+                    )
+                    .class(theme::Container::Secondary)
+                    .width(Length::Fixed(6.0 * 16.0))
+                    .height(Length::Fixed(6.0 * 16.0))
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .into(),
+                    Some(val) => cosmic::widget::container(
+                        widget::button::custom_image_button(
+                            cosmic::widget::image(widget::image::Handle::from_path(val))
+                                .content_fit(ContentFit::Fill),
+                            None,
+                        )
+                        .on_press(Message::CreatePlaylistAddThumbnail),
+                    )
+                    .width(Length::Fixed(6.0 * 16.0))
+                    .height(Length::Fixed(6.0 * 16.0))
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .into(),
+                };
+
+                if self.playlist_edit_dialog {
+                    return Some(
+                        widget::dialog::Dialog::new()
+                            .title(fl!("DialogPlaylistEdit"))
+                            .control(
+                                cosmic::widget::container(
+                                    widget::row::with_children(vec![
+                                        icon,
+                                        cosmic::widget::text_input(
+                                            fl!("PlaylistInputPlaceholder"),
+                                            self.playlist_dialog_text.as_str(),
+                                        )
+                                        .on_input(|input| Message::UpdatePlaylistName(input))
+                                        .into(),
+                                    ])
+                                    .align_y(Vertical::Bottom)
+                                    .spacing(theme::spacing().space_m),
+                                )
+                                .align_x(Horizontal::Center),
+                            )
+                            .primary_action(
+                                cosmic::widget::button::icon(icon::from_name(
+                                    "object-select-symbolic",
+                                ))
+                                .class(theme::Button::Suggested)
+                                .on_press(Message::EditPlaylistConfirm),
+                            )
+                            .secondary_action(
+                                cosmic::widget::button::icon(icon::from_name(
+                                    "window-close-symbolic",
+                                ))
+                                .class(theme::Button::Standard)
+                                .on_press(Message::EditPlaylistCancel),
+                            )
+                            .into(),
+                    );
+                }
+                // Dialog for deleting a playlist
+                if self.playlist_delete_dialog {
+                    if let PlaylistPageState::PlaylistPage(val) = &val.playlist_page_state {
+                        return Some(
+                            widget::dialog::Dialog::new()
+                                .title(fl!("DialogPlaylistDelete"))
+                                .body(fl!(
+                                    "DialogPlaylistDeleteClarify",
+                                    path = val.playlist.path.as_str()
+                                ))
+                                .primary_action(
+                                    cosmic::widget::button::text(fl!(
+                                        "DialogPlaylistDeleteConfirm"
+                                    ))
+                                    .class(theme::Button::Destructive)
+                                    .on_press(Message::PlaylistDeleteConfirmed),
+                                )
+                                .secondary_action(
+                                    cosmic::widget::button::text(fl!("Cancel"))
+                                        .class(theme::Button::Standard)
+                                        .on_press(Message::PlaylistDeleteSafety),
+                                )
+                                .into(),
+                        );
+                    }
+                }
+            }
+            Page::Tracks(_) => {}
+        }
+
+        None
+    }
+    fn footer(&self) -> Option<Element<'_, Self::Message>> {
+        if !self.config.footer {
+            return None;
+        }
+
+        let time_elapsed = home::format_time(self.song_progress);
+
+        let mut total_duration = "**:**".to_string();
+        match self.song_duration {
+            None => {}
+            Some(val) => {
+                total_duration = home::format_time(val);
+            }
+        };
+
+        const FOOTER_IMAGE_SIZE: f32 = 64.0;
+        let data = match self.playback_manager.current_track() {
+            None => {
+                let cover = icon::from_name("applications-audio-symbolic")
+                    .size(FOOTER_IMAGE_SIZE as u16)
+                    .into();
+
+                (None, None, None, cover)
+            }
+            Some(track) => {
+                let title = Some(track.title.as_str());
+                let artist = Some(track.artist.as_str());
+                let album = Some(track.album_title.as_str());
+
+                let cover = match &track.cover_art {
+                    None => icon::from_name("media-playback-start-symbolic")
+                        .size(FOOTER_IMAGE_SIZE as u16)
+                        .into(),
+                    Some(val) => cosmic::widget::image(val)
+                        .width(Length::Fixed(FOOTER_IMAGE_SIZE))
+                        .height(Length::Fixed(FOOTER_IMAGE_SIZE))
+                        .content_fit(ContentFit::ScaleDown)
+                        .into(),
+                };
+
+                (title, artist, album, cover)
+            }
+        };
+
+        let play_pause_button: Element<Message> = match self.playback_manager.is_empty() {
+            true => {
+                self.sink.clear();
+                cosmic::widget::button::icon(match self.sink.is_paused() {
+                    true => icon::from_name("media-playback-start-symbolic"),
+                    false => icon::from_name("media-playback-pause-symbolic"),
+                })
+                .into()
+            }
+            false => cosmic::widget::button::icon(match self.sink.is_paused() {
+                true => icon::from_name("media-playback-start-symbolic"),
+                false => icon::from_name("media-playback-pause-symbolic"),
+            })
+            .on_press(Message::PlayPause)
+            .into(),
+        };
+
+        Some(
+            cosmic::widget::container(
+                cosmic::widget::container(
+                    widget::row::with_children(vec![
+                        data.3,
+                        // Media Progress
+                        widget::column::with_children(vec![
+                            widget::row::with_children(vec![
+                                widget::text::heading(data.0.unwrap_or("")).into(),
+                                widget::text::heading(data.1.unwrap_or("")).into(),
+                                widget::text::heading(data.2.unwrap_or("")).into(),
+                                widget::horizontal_space().into(), // todo Context menu for mini player options
+                                                                   // cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                                                   //     "go-up-symbolic",
+                                                                   // ))
+                                                                   // .on_press(Message::ToggleFooter)
+                                                                   // .into(),
+                            ])
+                            .spacing(theme::spacing().space_s)
+                            .into(),
+                            widget::row::with_children(vec![
+                                widget::text::heading(time_elapsed).into(),
+                                cosmic::widget::slider(
+                                    0.0..=self.song_duration.unwrap_or(1.0),
+                                    self.song_progress,
+                                    |a| Message::SeekTrack(a),
+                                )
+                                .on_release(Message::SeekFinished)
+                                .height(31.0)
+                                .into(),
+                                widget::text::heading(format!("{}", total_duration)).into(),
+                                // Media Controls
+                                widget::row::with_children(vec![
+                                    cosmic::widget::button::icon(icon::from_name(
+                                        "media-skip-backward-symbolic",
+                                    ))
+                                    .on_press(Message::PreviousTrack)
+                                    .into(),
+                                    // PLAY OR PAUSE
+                                    play_pause_button,
+                                    // PLAY OR PAUSE
+                                    cosmic::widget::button::icon(icon::from_name(
+                                        "media-skip-forward-symbolic",
+                                    ))
+                                    .on_press(Message::SkipTrack)
+                                    .into(),
+                                    {
+                                        let loop_state = self.playback_manager.loop_state();
+                                        cosmic::widget::button::icon(match loop_state {
+                                            LoopState::LoopingTrack => icon::from_name(
+                                                "media-playlist-repeat-song-symbolic",
+                                            ),
+                                            LoopState::LoopingQueue => {
+                                                icon::from_name("media-playlist-repeat-symbolic")
+                                            }
+                                            LoopState::NotLooping | LoopState::Unavailable => {
+                                                icon::from_name("media-playlist-no-repeat-symbolic")
+                                            }
+                                        })
+                                        .class(match loop_state {
+                                            LoopState::LoopingTrack | LoopState::LoopingQueue => {
+                                                theme::Button::Suggested
+                                            }
+                                            _ => theme::Button::Icon,
+                                        })
+                                        .on_press_maybe(match loop_state {
+                                            LoopState::Unavailable => None,
+                                            _ => Some(Message::ChangeLoopState),
+                                        })
+                                        .into()
+                                    },
+                                    cosmic::widget::button::icon(icon::from_name(
+                                        "media-playlist-shuffle-symbolic",
+                                    ))
+                                    .class(match self.playback_manager.is_shuffle_enabled() {
+                                        true => theme::Button::Suggested,
+                                        false => theme::Button::Icon,
+                                    })
+                                    .on_press_maybe(match self.playback_manager.shuffle_state() {
+                                        ShuffleState::Unavailable => None,
+                                        _ => Some(Message::ToggleShuffle),
+                                    })
+                                    .into(),
+                                ])
+                                .width(Length::Shrink)
+                                .align_y(Vertical::Center)
+                                .spacing(theme::spacing().space_xxxs)
+                                .into(),
+                            ])
+                            .width(Length::Fill)
+                            .align_y(Vertical::Center)
+                            .spacing(theme::spacing().space_xxs)
+                            .into(),
+                        ])
+                        .into(),
+                    ])
+                    .spacing(theme::spacing().space_xs),
+                )
+                .width(Length::Fill)
+                .padding(theme::spacing().space_xxs)
+                .class(theme::Container::Primary),
+            )
+            .align_y(Start)
+            .width(Length::Fill)
+            .into(),
+        )
+    }
+
+    /// Elements to pack at the start of the header bar.
+    fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
+        let menu_bar = menu::bar(vec![menu::Tree::with_children(
+            menu::root(fl!("view")).apply(Element::from),
+            menu::items(
+                &self.key_binds,
+                vec![
+                    menu::Item::Button(fl!("settings"), None, Action::Settings),
+                    menu::Item::Button(fl!("about"), None, Action::About),
+                ],
+            ),
+        )]);
+
+        vec![menu_bar.into()]
+    }
+
+    /// Enables the COSMIC application to create a nav bar with this model.
+    fn nav_model(&self) -> Option<&nav_bar::Model> {
+        Some(&self.nav)
+    }
+
+    fn on_close_requested(&self, _id: Id) -> Option<Self::Message> {
+        self.sink.stop();
+        match &self.task_handle {
+            None => {}
+            Some(handles) => {
+                for handle in handles {
+                    handle.abort()
+                }
+            }
+        }
+        None
+    }
+
+    /// Called when a nav item is selected.
+    fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<cosmic::Action<Self::Message>> {
+        // Activate the page in the model.
+        self.nav.activate(id);
+        self.update_title()
+    }
+
+    fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
+        struct KeybindSubscription;
+
+        cosmic::iced::Subscription::batch(vec![
+            // Watch for application configuration changes.
+            cosmic::iced::event::listen_with(handle_keybinds),
+        ])
     }
 
     /// Handles messages emitted by the application and its widgets.
@@ -905,7 +907,7 @@ impl cosmic::Application for AppModel {
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
             Message::UpdateTheme(selection) => {
-                self.config.set_app_theme(&self.config_handler, selection);
+                let _ = self.config.set_app_theme(&self.config_handler, selection);
                 return cosmic::command::set_theme(self.config.app_theme.theme());
             }
             Message::EditArtistConfirm => {
@@ -918,8 +920,7 @@ impl cosmic::Application for AppModel {
                             [&page.artist.name],
                             |row| row.get::<_, u32>("id"),
                         ) {
-                            let file =
-                                fs::File::open(PathBuf::from(page.artist.path.clone())).unwrap();
+                            let file = File::open(PathBuf::from(page.artist.path.clone())).unwrap();
                             if let Ok(result) = conn.execute(
                                 "update artists set artistpfp = ? where id = ?",
                                 (
@@ -930,10 +931,8 @@ impl cosmic::Application for AppModel {
                                 ),
                             ) {
                                 log::info!("{} entries changed in artists table!", result);
-                                return cosmic::Task::future(
-                                    async move { Message::ArtistPageEdit },
-                                )
-                                .map(cosmic::action::Action::App);
+                                return Task::future(async move { Message::ArtistPageEdit })
+                                    .map(action::Action::App);
                             } else {
                                 log::warn!("artists table could not be updated")
                             }
@@ -949,7 +948,7 @@ impl cosmic::Application for AppModel {
             Message::ToastError(error) => {
                 return self
                     .toasts
-                    .push(cosmic::widget::toaster::Toast::new(error))
+                    .push(widget::toaster::Toast::new(error))
                     .map(cosmic::Action::App);
             }
             Message::Toasts(id) => self.toasts.remove(id),
@@ -971,7 +970,7 @@ impl cosmic::Application for AppModel {
                     self.nav.data_mut::<Page>(self.playlistsid).unwrap()
                 {
                     if let PlaylistPageState::PlaylistPage(page) = &toppage.playlist_page_state {
-                        match std::fs::remove_file(&page.playlist.path) {
+                        match fs::remove_file(&page.playlist.path) {
                             Ok(_) => {
                                 toppage.playlist_page_state = PlaylistPageState::Loading;
                                 match self.playlist_delete_dialog {
@@ -979,7 +978,7 @@ impl cosmic::Application for AppModel {
                                     false => self.playlist_delete_dialog = true,
                                 }
 
-                                return cosmic::Task::future(async move {
+                                return Task::future(async move {
                                     Message::OnNavEnter(ReEnterNavReason::PlaylistEdit)
                                 })
                                 .map(cosmic::Action::App);
@@ -1035,7 +1034,7 @@ impl cosmic::Application for AppModel {
             },
             Message::UpdatePlaylistName(val) => self.playlist_dialog_text = val,
             Message::ChooseFile(message) => {
-                return cosmic::Task::future(async move {
+                return Task::future(async move {
                     let dialog = cosmic::dialog::file_chooser::open::Dialog::new();
                     let file = dialog.open_file().await;
 
@@ -1059,17 +1058,17 @@ impl cosmic::Application for AppModel {
             Message::ArtistAddPicture(path) => {
                 if let Page::Artist(toppage) = self.nav.active_data_mut::<Page>().unwrap() {
                     if let ArtistPageState::ArtistPage(ref mut page) = toppage.page_state {
-                        if let Ok(file) = fs::File::open(PathBuf::from(path.clone())) {
-                            let handle = cosmic::widget::image::Handle::from_bytes(
+                        if let Ok(file) = File::open(PathBuf::from(path.clone())) {
+                            let handle = widget::image::Handle::from_bytes(
                                 file.bytes().filter_map(|a| a.ok()).collect::<Vec<u8>>(),
                             );
                             page.artist.image = Some(handle);
                             page.artist.path = path;
                         } else {
-                            return cosmic::Task::future(async move {
+                            return Task::future(async move {
                                 Message::ToastError(String::from("Could not load image!"))
                             })
-                            .map(cosmic::action::Action::App);
+                            .map(action::Action::App);
                         }
                     } else {
                         panic!("This event is being used in thr wrong state!")
@@ -1133,7 +1132,7 @@ impl cosmic::Application for AppModel {
                 .map(action::Action::App);
             }
             Message::FolderPickerFail(error) => {
-                if !(error.contains("Cancelled File Picker: Keeping scan directory the same")) {
+                if !error.contains("Cancelled File Picker: Keeping scan directory the same") {
                     let _ = self
                         .config
                         .set_scan_dir(&self.config_handler, "".to_string());
@@ -1142,7 +1141,7 @@ impl cosmic::Application for AppModel {
 
                 return self
                     .toasts
-                    .push(cosmic::widget::toaster::Toast::new(error))
+                    .push(widget::toaster::Toast::new(error))
                     .map(cosmic::Action::App);
             }
             Message::FolderChosen(fp) => {
@@ -1152,23 +1151,27 @@ impl cosmic::Application for AppModel {
             Message::OpenRepositoryUrl => {
                 _ = open::that_detached(REPOSITORY);
             }
-            Message::ChangeActiveInQueue(index) => {
-                self.clear = true;
-                self.sink.clear();
-                self.sink.play();
-                self.queue_pos = index;
+            Message::ChangeActiveTrack(index) => {
+                self.playback_manager.set_current_global_index(index);
+                if self.sink.empty() {
+                    return self.start_current_track_task();
+                }
+                self.interrupt_playback();
             }
-            Message::RemoveSongInQueue(index) => {
+            Message::RemoveTrack(index) => {
                 return cosmic::task::future(async move {
-                    Message::SongFinished(QueueUpdateReason::Removed(index))
+                    Message::SongFinished(PlaybackEvent::Removed(index))
                 });
             }
-            Message::ChangeLoopState => match self.loop_state {
-                LoopState::LoopingTrack => self.loop_state = LoopState::RandomShuffle,
-                LoopState::LoopingQueue => self.loop_state = LoopState::LoopingTrack,
-                LoopState::NotLooping => self.loop_state = LoopState::LoopingQueue,
-                LoopState::RandomShuffle => self.loop_state = LoopState::NotLooping,
-            },
+            Message::ChangeLoopState => {
+                self.playback_manager.toggle_loop_state();
+            }
+            Message::ToggleShuffle => {
+                self.playback_manager.toggle_shuffle();
+            }
+            Message::ToggleHistory => {
+                self.show_history = !self.show_history;
+            }
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -1191,7 +1194,7 @@ impl cosmic::Application for AppModel {
                         log::error!("Update Search Error: {:?}", err);
                         return self
                             .toasts
-                            .push(cosmic::widget::toaster::Toast::new(fl!("SearchFailed")))
+                            .push(widget::toaster::Toast::new(fl!("SearchFailed")))
                             .map(cosmic::Action::App);
                     }
                 };
@@ -1200,7 +1203,7 @@ impl cosmic::Application for AppModel {
                     Page::NowPlaying(_) => {}
                     Page::Albums(page) => {
                         let cloned_albums = page.albums.clone();
-                        return cosmic::Task::stream(
+                        return Task::stream(
                             cosmic::iced_futures::stream::channel(0, |mut tx| async move {
                                 tokio::task::spawn_blocking(move || {
                                     let mut albums = cloned_albums
@@ -1249,7 +1252,7 @@ impl cosmic::Application for AppModel {
                     Page::Playlists(page) => {
                         let cloned_playlists = page.playlists.clone();
 
-                        return cosmic::Task::stream(
+                        return Task::stream(
                             cosmic::iced_futures::stream::channel(0, |mut tx| async move {
                                 tokio::task::spawn_blocking(move || {
                                     let mut playlists = cloned_playlists
@@ -1298,7 +1301,7 @@ impl cosmic::Application for AppModel {
                     Page::Tracks(page) => {
                         let cloned_tracks = page.tracks.clone();
 
-                        return cosmic::Task::stream(
+                        return Task::stream(
                             cosmic::iced_futures::stream::channel(0, |mut tx| async move {
                                 tokio::task::spawn_blocking(move || {
                                     let mut tracks = cloned_tracks
@@ -1402,7 +1405,7 @@ impl cosmic::Application for AppModel {
                     }
                     Page::Artist(page) => {
                         let cloned_artists = page.artists.clone();
-                        return cosmic::Task::stream(
+                        return Task::stream(
                             cosmic::iced_futures::stream::channel(0, |mut tx| async move {
                                 tokio::task::spawn_blocking(move || {
                                     let mut albums = cloned_artists
@@ -1470,17 +1473,16 @@ impl cosmic::Application for AppModel {
                 }
 
                 if fs::exists(self.config.scan_dir.as_str()).is_err() {
-                    return cosmic::Task::future(async move {
+                    return Task::future(async move {
                         Message::ToastError(fl!("ScanFileDoesNotExist"))
                     })
                     .map(cosmic::Action::App);
                 }
 
-                self.queue_pos = 0;
                 self.song_progress = 0.0;
                 self.song_duration = None;
 
-                self.queue.clear();
+                self.playback_manager.clear_all();
 
                 // Settings: No rescan until current rescan finishes
                 self.rescan_available = false;
@@ -1541,7 +1543,7 @@ impl cosmic::Application for AppModel {
                 create_database();
 
                 let path = self.config.scan_dir.clone().parse().unwrap();
-                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                return Task::stream(cosmic::iced_futures::stream::channel(
                     100,
                     |mut tx| async move {
                         scan_directory(path, &mut tx).await;
@@ -1553,10 +1555,10 @@ impl cosmic::Application for AppModel {
                 .map(cosmic::Action::App);
             }
             Message::AddToDatabase(path) => {
-                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                return Task::stream(cosmic::iced_futures::stream::channel(
                     100,
                     move |mut tx| async move {
-                        let file = fs::File::open(&path).unwrap();
+                        let file = File::open(&path).unwrap();
                         let probe = get_probe();
                         let mss = symphonia::core::io::MediaSourceStream::new(
                             Box::new(file),
@@ -1601,25 +1603,25 @@ impl cosmic::Application for AppModel {
 
                                 if dirs::data_local_dir()
                                     .unwrap()
-                                    .join(crate::app::AppModel::APP_ID)
+                                    .join(AppModel::APP_ID)
                                     .join("Playlists")
                                     .exists()
                                 {
                                     dir = dirs::data_local_dir()
                                         .unwrap()
-                                        .join(crate::app::AppModel::APP_ID)
+                                        .join(AppModel::APP_ID)
                                         .join("Playlists");
                                 } else {
-                                    match std::fs::create_dir(
+                                    match fs::create_dir(
                                         dirs::data_local_dir()
                                             .unwrap()
-                                            .join(crate::app::AppModel::APP_ID)
+                                            .join(AppModel::APP_ID)
                                             .join("Playlists"),
                                     ) {
                                         Ok(_) => {
                                             dir = dirs::data_local_dir()
                                                 .unwrap()
-                                                .join(crate::app::AppModel::APP_ID)
+                                                .join(AppModel::APP_ID)
                                                 .join("Playlists");
                                         }
                                         Err(err) => {
@@ -1699,7 +1701,7 @@ impl cosmic::Application for AppModel {
                     Page::NowPlaying(_) => {}
                     Page::Albums(val) => {
                         if let AlbumPageState::Loading = val.page_state {
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                            return Task::stream(cosmic::iced_futures::stream::channel(
                                 5,
                                 |mut tx| async move {
                                     tokio::task::spawn_blocking(move || {
@@ -1768,7 +1770,7 @@ impl cosmic::Application for AppModel {
                             PlaylistPageState::Loading => {
                                 match dirs::data_local_dir()
                                     .unwrap()
-                                    .join(crate::app::AppModel::APP_ID)
+                                    .join(AppModel::APP_ID)
                                     .join("Playlists")
                                     .is_dir()
                                 {
@@ -1776,20 +1778,20 @@ impl cosmic::Application for AppModel {
                                     false => fs::create_dir(
                                         dirs::data_local_dir()
                                             .unwrap()
-                                            .join(crate::app::AppModel::APP_ID)
+                                            .join(AppModel::APP_ID)
                                             .join("Playlists"),
                                     )
                                         .unwrap(),
                                 }
 
-                                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                                return Task::stream(cosmic::iced_futures::stream::channel(
                                     5,
                                     |mut tx| async move {
                                         tokio::task::spawn_blocking(move || {
                                             let dir = fs::read_dir(
                                                 dirs::data_local_dir()
                                                     .unwrap()
-                                                    .join(crate::app::AppModel::APP_ID)
+                                                    .join(AppModel::APP_ID)
                                                     .join("Playlists"),
                                             )
                                                 .expect("yo");
@@ -1798,7 +1800,7 @@ impl cosmic::Application for AppModel {
 
                                             for file in dir.flatten() {
                                                 let files = io::BufReader::new(
-                                                    fs::File::open(file.path()).unwrap(),
+                                                    File::open(file.path()).unwrap(),
                                                 );
                                                 let path = file.path();
                                                 let mut is_m3u = false;
@@ -1819,7 +1821,7 @@ impl cosmic::Application for AppModel {
                                                     }
 
                                                     if line.contains("#EXTALBUMARTURL:") && cover_path.is_none() && is_m3u {
-                                                        cover_path = Some(cosmic::widget::image::Handle::from_path(PathBuf::from(line.replace("#EXTALBUMARTURL:", ""))))
+                                                        cover_path = Some(widget::image::Handle::from_path(PathBuf::from(line.replace("#EXTALBUMARTURL:", ""))))
                                                     }
                                                 }
 
@@ -1847,7 +1849,7 @@ impl cosmic::Application for AppModel {
                     }
                     Page::Tracks(page) => match page.track_page_state {
                         TrackPageState::Loading => {
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                            return Task::stream(cosmic::iced_futures::stream::channel(
                                 100,
                                 |mut tx| async move {
                                     tokio::task::spawn_blocking(move || {
@@ -1914,7 +1916,7 @@ from track
                     },
                     Page::Artist(page) => match &page.page_state {
                         ArtistPageState::Loading => {
-                            return cosmic::Task::stream(
+                            return Task::stream(
                                 cosmic::iced_futures::stream::channel(100, |mut tx| async move {
                                     tokio::task::spawn_blocking(move || {
                                         let mut artists: Vec<ArtistInfo> = vec![];
@@ -1946,13 +1948,13 @@ where exists(select *
 
                                             match regex.is_match(&name) {
                                                 false => {
-                                                    return Ok(
+                                                    Ok(
                                                         ArtistInfo {
-                                                            name: name,
+                                                            name,
                                                             path: String::from(""),
                                                             image: match row.get::<_, Vec<u8>>("artistpfp") {
                                                                 Ok(val) => {
-                                                                    Some(cosmic::widget::image::Handle::from_bytes(val))
+                                                                    Some(widget::image::Handle::from_bytes(val))
                                                                 }
                                                                 Err(e) => {
                                                                     log::warn!("Potential Error @ OnNavEnter Artists: {}", e);
@@ -1963,9 +1965,9 @@ where exists(select *
                                                     )
                                                 }
                                                 true => {
-                                                    return Err(rusqlite::Error::UnwindingPanic)
+                                                    Err(rusqlite::Error::UnwindingPanic)
                                                 }
-                                            };
+                                            }
                                         }).expect("Query map failed");
 
                                         artists = rows.into_iter().filter_map(|a| a.ok()).collect();
@@ -2008,7 +2010,7 @@ where exists(select *
                             name: row.get("name").expect("get name fail"),
                             artist: row.get("artist").expect("get artist fail"),
                             cover_art: match row.get::<_, Vec<u8>>("cover") {
-                                Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
+                                Ok(val) => Some(widget::image::Handle::from_bytes(val)),
                                 Err(_) => None,
                             },
                             disc_number: row.get("dn").expect("get disc number fail"),
@@ -2041,7 +2043,7 @@ where a.name = ?    ",
                             title: row.get("name").expect("get name fail"),
                             artist: row.get("artist").expect("get artist fail"),
                             cover_art: match row.get::<_, Vec<u8>>("cover") {
-                                Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
+                                Ok(val) => Some(widget::image::Handle::from_bytes(val)),
                                 Err(_) => None,
                             },
                         })
@@ -2059,12 +2061,12 @@ where a.name = ?    ",
                     |row| row.get::<_, Vec<u8>>("artistpfp"),
                 );
 
-                let new_page = crate::app::artists::ArtistPage {
+                let new_page = artists::ArtistPage {
                     artist: ArtistInfo {
                         name: artist,
                         path: String::from(""),
                         image: match image {
-                            Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
+                            Ok(val) => Some(widget::image::Handle::from_bytes(val)),
                             Err(err) => {
                                 log::warn!("Possible error: {}", err);
                                 None
@@ -2129,7 +2131,7 @@ where a.name = ?    ",
                 {
                     let mut tracks = vec![];
 
-                    let files = io::BufReader::new(match fs::File::open(&playlist.path) {
+                    let files = io::BufReader::new(match File::open(&playlist.path) {
                         Ok(val) => val,
                         Err(err) => {
                             log::info!("{}", err);
@@ -2222,14 +2224,14 @@ where a.name = ?    ",
                             dat.page_state = AlbumPageState::Loading;
                         }
                     }
-                    if let Some(view) = dat.viewport {
-                        return cosmic::iced_widget::scrollable::scroll_to(
+                    return if let Some(view) = dat.viewport {
+                        cosmic::iced_widget::scrollable::scroll_to(
                             dat.scrollbar_id.clone(),
                             view.absolute_offset(),
-                        );
+                        )
                     } else {
-                        return cosmic::task::none();
-                    }
+                        cosmic::task::none()
+                    };
                 }
             }
             Message::AlbumPageStateAlbum(new_page) => {
@@ -2262,7 +2264,7 @@ where a.name = ?    ",
                     .expect("Should always be intialized")
                 {
                     Page::Albums(page) => {
-                        return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                        return Task::stream(cosmic::iced_futures::stream::channel(
                             0,
                             |mut tx| async move {
                                 let album = get_album_info(dat.0, dat.1).await;
@@ -2276,7 +2278,7 @@ where a.name = ?    ",
                     Page::Artist(toppage) => {
                         if let ArtistPageState::ArtistPage(page) = &toppage.page_state {
                             toppage.artist_page_cache = Some(page.clone());
-                            return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                            return Task::stream(cosmic::iced_futures::stream::channel(
                                 0,
                                 |mut tx| async move {
                                     let album = get_album_info(dat.0, dat.1).await;
@@ -2294,12 +2296,12 @@ where a.name = ?    ",
                     }
                 }
             }
-            app::Message::GridSliderChange(val) => {
+            Message::GridSliderChange(val) => {
                 self.config
                     .set_grid_item_size(&self.config_handler, val)
                     .expect("Failed To Update Config");
             }
-            app::Message::SeekTrack(val) => {
+            Message::SeekTrack(val) => {
                 self.sink.set_volume(0.0);
                 match self.sink.try_seek(Duration::from_secs_f64(val)) {
                     Ok(_) => {}
@@ -2307,309 +2309,97 @@ where a.name = ?    ",
                 }
             }
             Message::SeekFinished => self.sink.set_volume(self.config.volume / 100.0),
-            app::Message::AddTrackToQueue(filepath) => {
-                let pos = self.nav.entity_at(0).expect("REASON");
-                let home_page = self.nav.data_mut::<Page>(pos).unwrap();
-                if let Page::NowPlaying(_) = home_page {
-                    let conn = rusqlite::Connection::open(
-                        dirs::data_local_dir()
-                            .unwrap()
-                            .join(Self::APP_ID)
-                            .join("nova_music.db"),
-                    )
-                    .unwrap();
-                    let mut stmt = conn
-                        .prepare(
-                            "
-                                select track.id as id, track.name as title, art.name as artist, track.path, a.album_cover, a.name as album_title
-                                from track
-                                left join main.album_tracks at on track.id = at.track_id
-                                left join main.artists art on track.artist_id = art.id
-                                left join main.album a on at.album_id = a.id
-                                where track.path=?;
-                            ",
-                        )
-                        .expect("error preparing sql");
-
-                    if let Ok(track) = stmt.query_row([&filepath], |row| {
-                        Ok(AppTrack {
-                            id: row.get("id").unwrap_or(0),
-                            title: row.get("title").unwrap_or("".to_string()),
-                            artist: row.get("artist").unwrap_or("".to_string()),
-                            album_title: row.get("album_title").unwrap_or("".to_string()),
-                            path_buf: PathBuf::from(
-                                row.get::<&str, String>("path")
-                                    .expect("There should always be a file path"),
-                            ),
-                            cover_art: match row.get::<&str, Vec<u8>>("album_cover") {
-                                Ok(val) => Some(cosmic::widget::image::Handle::from_bytes(val)),
-                                Err(_) => None,
-                            },
-                        })
-                    }) {
-                        self.queue.push(track);
-                    } else {
-                        return self
-                            .toasts
-                            .push(cosmic::widget::toaster::Toast::new(format!(
-                                "Track at \"{}\" not found in database",
-                                filepath
-                            )))
-                            .map(cosmic::Action::App);
-                    }
+            Message::QueueTracks { action, paths } => {
+                if paths.is_empty() {
+                    return Task::none();
                 }
 
-                if self.sink.empty() {
-                    let file = match std::fs::File::open(&filepath) {
-                        Ok(file) => file,
-                        Err(err) => {
-                            log::error!("Error: {}", err);
+                let conn = connect_to_db();
+                let mut tracks = Vec::with_capacity(paths.len());
 
-                            return self
-                                .toasts
-                                .push(cosmic::widget::toaster::Toast::new(format!(
-                                    "Track found in database but not at the filepath: {}",
-                                    filepath.to_string()
-                                )))
-                                .map(cosmic::Action::App);
-                        }
-                    };
-
-                    let decoder = rodio::Decoder::builder()
-                        .with_byte_len(file.metadata().unwrap().len())
-                        .with_data(file)
-                        .with_gapless(true)
-                        .with_seekable(true)
-                        .build()
-                        .expect("Failed to build decoder");
-
-                    self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
-                    self.sink.append(decoder);
-                    let sleeping_task_sink = Arc::clone(&self.sink);
-                    let sleeping_thread = cosmic::task::future(async move {
-                        let kill = true;
-                        Message::SongFinished(
-                            tokio::task::spawn_blocking(move || {
-                                if kill {
-                                    sleeping_task_sink.sleep_until_end();
-                                    QueueUpdateReason::None
-                                } else {
-                                    QueueUpdateReason::ThreadKilled
-                                }
-                            })
-                            .await
-                            .expect("nova_music.db"),
-                        )
-                    })
-                    .abortable();
-
-                    match &mut self.task_handle {
+                for path in paths {
+                    match app_track_from_path(&conn, &path) {
+                        Some(track) => tracks.push(track),
                         None => {
-                            self.task_handle = Some(vec![sleeping_thread.1]);
-                        }
-                        Some(handles) => {
-                            handles.push(sleeping_thread.1);
+                            log::warn!("Track at \"{}\" not found in database", path);
                         }
                     }
-
-                    let reporting_task_sink = Arc::clone(&self.sink);
-                    let progress_thread = cosmic::Task::stream(
-                        cosmic::iced_futures::stream::channel(1, |mut tx| async move {
-                            tokio::task::spawn_blocking(move || loop {
-                                sleep(Duration::from_millis(200));
-                                match tx.try_send(Message::SinkProgress(
-                                    reporting_task_sink.get_pos().as_secs_f64(),
-                                )) {
-                                    Ok(_) => {}
-                                    Err(_) => break,
-                                }
-                            });
-                        }),
-                    )
-                    .abortable();
-
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![progress_thread.1]),
-                        Some(handles) => handles.push(progress_thread.1),
-                    }
-                    let (task, handle) =
-                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![handle]),
-                        Some(handles) => handles.push(handle),
-                    }
-                    self.sink.play();
-                    return task;
                 }
+
+                if tracks.is_empty() {
+                    return Task::none();
+                }
+
+                return self.apply_queue_action(action, tracks);
+            }
+            Message::QueueTrackById {
+                action,
+                track_type,
+                id,
+            } => {
+                let conn = connect_to_db();
+
+                if let Some(track) = app_track_from_id(&conn, track_type, id) {
+                    return self.apply_queue_action(action, vec![track]);
+                }
+
+                return self
+                    .toasts
+                    .push(widget::toaster::Toast::new("Track not found in database"))
+                    .map(cosmic::Action::App);
             }
             Message::SinkProgress(number) => {
                 self.song_progress = number;
             }
             Message::SongFinished(val) => {
-                log::info!(
-                    "Song finished: {:?} | {} | {:?}",
-                    val,
-                    self.clear,
-                    self.loop_state
-                );
-                let sink = self.sink.clone();
-
-                if self.queue.is_empty() {
-                    self.queue_pos = 0;
+                log::info!("Song finished: {:?} | {}", val, self.clear,);
+                if self.playback_manager.is_empty() {
                     self.song_progress = 0.0;
                     self.song_duration = None;
                     self.sink.clear();
-                    return cosmic::Task::none();
+                    return Task::none();
                 }
 
                 match val {
-                    QueueUpdateReason::Skipped => {
-                        if self.queue_pos + 1 > self.queue.len() - 1 {
-                            self.queue_pos = 0;
-                        } else {
-                            self.queue_pos += 1;
+                    PlaybackEvent::Skipped => {
+                        match self.playback_manager.advance(AdvanceReason::Skip) {
+                            AdvanceOutcome::Moved => self.interrupt_playback(),
+                            _ => {}
                         }
-
-                        self.clear = true;
-                        sink.clear();
-                        sink.play()
                     }
-                    QueueUpdateReason::Previous => {
-                        if self.queue_pos as i32 - 1 < 0 {
-                            self.queue_pos = self.queue.len() - 1;
-                        } else {
-                            self.queue_pos -= 1;
+                    PlaybackEvent::Previous => {
+                        match self.playback_manager.advance(AdvanceReason::Previous) {
+                            AdvanceOutcome::Moved => self.interrupt_playback(),
+                            _ => {}
                         }
-                        self.clear = true;
-                        sink.clear();
-                        sink.play()
                     }
-                    QueueUpdateReason::None => match self.clear {
-                        true => {
+                    PlaybackEvent::None => {
+                        if self.clear {
                             self.clear = false;
-                            match self.queue.is_empty() {
-                                true => {}
-                                false => {
-                                    let file = self
-                                        .queue
-                                        .get(self.queue_pos)
-                                        .unwrap()
-                                        .path_buf
-                                        .clone()
-                                        .to_string_lossy()
-                                        .to_string();
-                                    return cosmic::task::future(async move {
-                                        Message::AddTrackToSink(file)
-                                    });
-                                }
-                            }
-                        }
-                        false => {
-                            return match self.loop_state {
-                                LoopState::LoopingTrack => {
-                                    let file = self
-                                        .queue
-                                        .get(self.queue_pos)
-                                        .unwrap()
-                                        .path_buf
-                                        .clone()
-                                        .to_string_lossy()
-                                        .to_string();
-                                    cosmic::task::future(
-                                        async move { Message::AddTrackToSink(file) },
-                                    )
-                                }
-                                LoopState::LoopingQueue => {
-                                    if self.queue_pos + 1 > self.queue.len() - 1 {
-                                        self.queue_pos = 0;
-                                    } else {
-                                        self.queue_pos += 1;
-                                    }
-                                    sink.play();
-                                    let file = self
-                                        .queue
-                                        .get(self.queue_pos)
-                                        .unwrap()
-                                        .path_buf
-                                        .clone()
-                                        .to_string_lossy()
-                                        .to_string();
-                                    cosmic::task::future(
-                                        async move { Message::AddTrackToSink(file) },
-                                    )
-                                }
-                                LoopState::NotLooping => {
-                                    if self.queue_pos + 1 > self.queue.len() - 1 {
-                                        self.queue_pos = 0;
-                                        sink.pause()
-                                    } else {
-                                        self.queue_pos += 1;
-                                    }
-
-                                    let file = self
-                                        .queue
-                                        .get(self.queue_pos)
-                                        .unwrap()
-                                        .path_buf
-                                        .clone()
-                                        .to_string_lossy()
-                                        .to_string();
-                                    cosmic::task::future(
-                                        async move { Message::AddTrackToSink(file) },
-                                    )
-                                }
-                                LoopState::RandomShuffle => {
-                                    let mut rng = rand::rng();
-                                    self.queue_pos = rng.random_range(0..self.queue.len());
-
-                                    let file = self
-                                        .queue
-                                        .get(self.queue_pos)
-                                        .unwrap()
-                                        .path_buf
-                                        .clone()
-                                        .to_string_lossy()
-                                        .to_string();
-                                    self.update(Message::AddTrackToSink(file))
-                                }
-                            }
-                        }
-                    },
-                    QueueUpdateReason::Removed(index) => {
-                        if self.queue_pos > index {
-                            self.queue_pos -= 1;
-
-                            self.queue.remove(index);
-
-                            return cosmic::Task::none();
+                            return self.start_current_track_task();
                         }
 
-                        if index as i32 == (self.queue.len() as i32 - 1)
-                            && self.queue_pos as i32 == (self.queue.len() as i32) - 1
-                        {
-                            self.queue_pos = 0;
-                            self.queue.remove(index);
-
-                            self.clear = true;
-                            self.sink.clear();
-                            if let LoopState::LoopingQueue = self.loop_state {
-                                self.sink.play();
+                        match self.playback_manager.advance(AdvanceReason::Natural) {
+                            AdvanceOutcome::RestartCurrent | AdvanceOutcome::Moved => {
+                                return self.start_current_track_task();
                             }
-                            return cosmic::Task::none();
-                        } else {
-                            self.queue.remove(index);
-                            if index == self.queue_pos {
-                                self.clear = true;
-                                self.sink.clear();
-                                self.sink.play();
+                            AdvanceOutcome::Ended => {
+                                self.song_progress = 0.0;
+                                self.song_duration = None;
+                                self.sink.pause();
+                                return Task::none();
                             }
+                            AdvanceOutcome::NoChange => {}
                         }
                     }
-                    QueueUpdateReason::ThreadKilled => {}
+                    PlaybackEvent::Removed(index) => {
+                        self.playback_manager.remove_by_global_index(index);
+                    }
+                    PlaybackEvent::ThreadKilled => {}
                 }
             }
             Message::AddTrackToSink(filepath) => {
-                let file = std::fs::File::open(filepath).expect("Failed to open file");
+                let file = File::open(filepath).expect("Failed to open file");
 
                 let decoder = rodio::Decoder::builder()
                     .with_byte_len(file.metadata().unwrap().len())
@@ -2628,7 +2418,7 @@ where a.name = ?    ",
                     Message::SongFinished(
                         tokio::task::spawn_blocking(move || {
                             task_sink.sleep_until_end();
-                            QueueUpdateReason::None
+                            PlaybackEvent::None
                         })
                         .await
                         .expect("nova_music.db"),
@@ -2637,7 +2427,7 @@ where a.name = ?    ",
             }
             Message::SkipTrack => {
                 return cosmic::task::future(async move {
-                    Message::SongFinished(QueueUpdateReason::Skipped)
+                    Message::SongFinished(PlaybackEvent::Skipped)
                 });
             }
             Message::ClearQueue => {
@@ -2651,41 +2441,26 @@ where a.name = ?    ",
                     }
                 }
 
-                self.queue_pos = 0;
                 self.song_progress = 0.0;
                 self.song_duration = None;
 
-                self.queue.clear();
+                self.playback_manager.clear_all();
             }
             Message::PreviousTrack => {
                 return cosmic::task::future(async move {
-                    Message::SongFinished(QueueUpdateReason::Previous)
+                    Message::SongFinished(PlaybackEvent::Previous)
                 });
             }
-            app::Message::AddAlbumToQueue(mut paths) => {
-                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
-                    0,
-                    |mut tx| async move {
-                        paths.sort_by(|a, b| a.1.cmp(&b.1));
-
-                        for file in paths {
-                            tx.send(Message::AddTrackToQueue(file.0))
-                                .await
-                                .expect("send")
-                        }
-                    },
-                ))
-                .map(cosmic::Action::App)
-            }
-
-            Message::PlayPause => match self.sink.is_paused() {
-                true => {
+            Message::PlayPause => {
+                if self.sink.is_paused() {
+                    if self.sink.empty() && !self.playback_manager.is_empty() {
+                        return self.start_current_track_task();
+                    }
                     self.sink.play();
-                }
-                false => {
+                } else {
                     self.sink.pause();
                 }
-            },
+            }
             Message::AddToPlaylist => self.playlist_creation_dialog = true,
             Message::EditPlaylistCancel => self.playlist_edit_dialog = false,
             Message::EditPlaylistConfirm => {
@@ -2765,7 +2540,7 @@ where a.name = ?    ",
                 } else {
                     return self
                         .toasts
-                        .push(cosmic::widget::toaster::Toast::new(
+                        .push(widget::toaster::Toast::new(
                             "Playlist path no longer exists",
                         ))
                         .map(cosmic::Action::App);
@@ -2847,7 +2622,7 @@ where a.name = ?    ",
             Message::CreatePlaylistConfirm => {
                 match dirs::data_local_dir()
                     .unwrap()
-                    .join(crate::app::AppModel::APP_ID)
+                    .join(AppModel::APP_ID)
                     .join("Playlists")
                     .is_dir()
                 {
@@ -2855,17 +2630,17 @@ where a.name = ?    ",
                     false => fs::create_dir(
                         dirs::data_local_dir()
                             .unwrap()
-                            .join(crate::app::AppModel::APP_ID)
+                            .join(AppModel::APP_ID)
                             .join("Playlists"),
                     )
                     .unwrap(),
                 }
                 let dir_path = dirs::data_local_dir()
                     .unwrap()
-                    .join(crate::app::AppModel::APP_ID)
+                    .join(AppModel::APP_ID)
                     .join("Playlists");
                 let mut new_file =
-                    fs::File::create(&dir_path.join(format!("{}.m3u", &self.playlist_dialog_text)))
+                    File::create(&dir_path.join(format!("{}.m3u", &self.playlist_dialog_text)))
                         .expect("Failed to create Playlist file");
                 new_file
                     .write_all(
@@ -2881,7 +2656,7 @@ where a.name = ?    ",
                         .as_bytes(),
                     )
                     .expect("Failed to write Playlist file");
-                for track in &self.queue {
+                for track in self.playback_manager.tracks_from_current() {
                     new_file
                         .write_all(
                             format!(
@@ -2966,140 +2741,33 @@ where a.name = ?    ",
                     .set_footer(&self.config_handler, val)
                     .expect("Failed to edit config");
             }
-            app::Message::AddTrackById((t_type, id)) => {
-                let conn = connect_to_db();
-
-                let mut stmt =
-                    "
-                                select track.id as id, track.name as title, art.name as artist, track.path as path, a.album_cover, a.name as album_title
-                                from track
-                                left join main.album_tracks at on track.id = at.track_id
-                                left join main.artists art on track.artist_id = art.id
-                                left join main.album a on at.album_id = a.id
-                                where track.id = ?
-                            ";
-
-                if let Ok(result) = conn.query_row(stmt, [&id], |row| {
-                    let filepath = PathBuf::from(row.get::<_, String>("path").unwrap());
-                    let visual = find_visual(&filepath);
-
-                    Ok(AppTrack {
-                        id: row.get("id").unwrap(),
-                        artist: row.get("artist").unwrap(),
-                        path_buf: filepath,
-                        title: row.get("title").unwrap(),
-                        album_title: match t_type {
-                            TrackType::AlbumTrack => {
-                                row.get("album_title").unwrap_or(String::from(""))
-                            }
-                            TrackType::Single => String::from(""),
-                        },
-                        cover_art: match visual {
-                            Some(cover) => Some(cosmic::widget::image::Handle::from_bytes(cover)),
-                            None => None,
-                        },
-                    })
-                }) {
-                    self.queue.push(result)
-                }
-
-                if self.sink.empty() {
-                    let file = std::fs::File::open(self.queue.get(0).unwrap().path_buf.clone())
-                        .expect("Failed to open file");
-
-                    let decoder = rodio::Decoder::builder()
-                        .with_byte_len(file.metadata().unwrap().len())
-                        .with_data(file)
-                        .with_gapless(true)
-                        .with_seekable(true)
-                        .build()
-                        .expect("Failed to build decoder");
-
-                    self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
-                    self.sink.append(decoder);
-                    let sleeping_task_sink = Arc::clone(&self.sink);
-                    let sleeping_thread = cosmic::task::future(async move {
-                        let kill = true;
-                        Message::SongFinished(
-                            tokio::task::spawn_blocking(move || {
-                                if kill {
-                                    sleeping_task_sink.sleep_until_end();
-                                    QueueUpdateReason::None
-                                } else {
-                                    QueueUpdateReason::ThreadKilled
-                                }
-                            })
-                            .await
-                            .expect("nova_music.db"),
-                        )
-                    })
-                    .abortable();
-
-                    match &mut self.task_handle {
-                        None => {
-                            self.task_handle = Some(vec![sleeping_thread.1]);
-                        }
-                        Some(handles) => {
-                            handles.push(sleeping_thread.1);
-                        }
-                    }
-
-                    let reporting_task_sink = Arc::clone(&self.sink);
-                    let progress_thread = cosmic::Task::stream(
-                        cosmic::iced_futures::stream::channel(1, |mut tx| async move {
-                            tokio::task::spawn_blocking(move || loop {
-                                sleep(Duration::from_millis(200));
-                                match tx.try_send(Message::SinkProgress(
-                                    reporting_task_sink.get_pos().as_secs_f64(),
-                                )) {
-                                    Ok(_) => {}
-                                    Err(_) => break,
-                                }
-                            });
-                        }),
-                    )
-                    .abortable();
-
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![progress_thread.1]),
-                        Some(handles) => handles.push(progress_thread.1),
-                    }
-                    let (task, handle) =
-                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![handle]),
-                        Some(handles) => handles.push(handle),
-                    }
-                    self.sink.play();
-                    return task;
-                }
-            }
         };
         Task::none()
     }
 
-    /// Called when a nav item is selected.
-    fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<cosmic::Action<Self::Message>> {
-        // Activate the page in the model.
-        self.nav.activate(id);
-        self.update_title()
-    }
+    /// Describes the interface based on the current state of the application model.
+    ///
+    /// Application events will be processed through the view. Any messages emitted by
+    /// events received by widgets will be passed to the update method.
+    fn view(&self) -> Element<'_, Self::Message> {
+        let body;
+        match self.nav.active_data::<Page>().unwrap() {
+            Page::NowPlaying(home_page) => body = home_page.load_page(self),
+            Page::Tracks(track_page) => body = track_page.load_page(self),
+            Page::Artist(artists_page) => body = artists_page.load_page(self),
+            Page::Albums(album_page) => body = album_page.load_page(self),
+            Page::Playlists(playlist_page) => body = playlist_page.load_page(self),
+        }
 
-    fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
-        struct KeybindSubscription;
-
-        cosmic::iced::Subscription::batch(vec![
-            // Watch for application configuration changes.
-            cosmic::iced::event::listen_with(handle_keybinds),
-        ])
+        cosmic::widget::container(widget::column::with_children(vec![
+            cosmic::widget::toaster(&self.toasts, widget::horizontal_space()).into(),
+            body,
+        ]))
+        .into()
     }
 }
 
-fn handle_keybinds(
-    event: cosmic::iced::event::Event,
-    a: cosmic::iced::event::Status,
-    _: cosmic::iced::window::Id,
-) -> Option<Message> {
+fn handle_keybinds(event: Event, a: cosmic::iced::event::Status, _: Id) -> Option<Message> {
     if let cosmic::iced::event::Status::Captured = a {
         return None;
     }
@@ -3109,21 +2777,19 @@ fn handle_keybinds(
             if let keyboard::Event::KeyPressed { key, .. } = key {
                 log::info!("[{:?}]", key);
                 match key {
-                    cosmic::iced::keyboard::Key::Named(
-                        cosmic::iced::keyboard::key::Named::Space,
-                    ) => return Some(Message::PlayPause),
+                    keyboard::Key::Named(keyboard::key::Named::Space) => Some(Message::PlayPause),
 
-                    cosmic::iced::keyboard::Key::Named(
-                        cosmic::iced::keyboard::key::Named::MediaSkipBackward,
-                    ) => return Some(Message::PreviousTrack),
+                    keyboard::Key::Named(keyboard::key::Named::MediaSkipBackward) => {
+                        Some(Message::PreviousTrack)
+                    }
 
-                    cosmic::iced::keyboard::Key::Named(
-                        cosmic::iced::keyboard::key::Named::MediaSkipForward,
-                    ) => return Some(Message::SkipTrack),
+                    keyboard::Key::Named(keyboard::key::Named::MediaSkipForward) => {
+                        Some(Message::SkipTrack)
+                    }
 
-                    cosmic::iced::keyboard::Key::Named(
-                        cosmic::iced::keyboard::key::Named::MediaPlayPause,
-                    ) => return Some(Message::PlayPause),
+                    keyboard::Key::Named(keyboard::key::Named::MediaPlayPause) => {
+                        Some(Message::PlayPause)
+                    }
 
                     _ => None,
                 }
@@ -3180,15 +2846,170 @@ impl AppModel {
         }
 
         fn do_thing() -> Task<cosmic::Action<Message>> {
-            return cosmic::task::future(async move {
-                Message::OnNavEnter(ReEnterNavReason::UserInteraction)
-            });
+            cosmic::task::future(
+                async move { Message::OnNavEnter(ReEnterNavReason::UserInteraction) },
+            )
         }
 
         if let Some(id) = self.core.main_window_id() {
-            return cosmic::Task::batch(vec![self.set_window_title(window_title, id), do_thing()]);
+            Task::batch(vec![self.set_window_title(window_title, id), do_thing()])
         } else {
             Task::none()
+        }
+    }
+
+    fn current_track_path(&self) -> Option<String> {
+        self.playback_manager
+            .current_track()
+            .map(|track| track.path_buf.to_string_lossy().to_string())
+    }
+
+    fn start_current_track_task(&mut self) -> Task<cosmic::Action<Message>> {
+        if let Some(path) = self.current_track_path() {
+            return cosmic::task::future(async move { Message::AddTrackToSink(path) });
+        }
+        Task::none()
+    }
+
+    fn start_playback_from_path(&mut self, filepath: String) -> Task<cosmic::Action<Message>> {
+        let file = match File::open(&filepath) {
+            Ok(file) => file,
+            Err(err) => {
+                log::error!("Error: {}", err);
+
+                return self
+                    .toasts
+                    .push(widget::toaster::Toast::new(format!(
+                        "Track found in database but not at the filepath: {}",
+                        filepath
+                    )))
+                    .map(cosmic::Action::App);
+            }
+        };
+
+        let decoder = rodio::Decoder::builder()
+            .with_byte_len(file.metadata().unwrap().len())
+            .with_data(file)
+            .with_gapless(true)
+            .with_seekable(true)
+            .build()
+            .expect("Failed to build decoder");
+
+        self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
+        self.sink.append(decoder);
+        let sleeping_task_sink = Arc::clone(&self.sink);
+        let sleeping_thread = cosmic::task::future(async move {
+            let kill = true;
+            Message::SongFinished(
+                tokio::task::spawn_blocking(move || {
+                    if kill {
+                        sleeping_task_sink.sleep_until_end();
+                        PlaybackEvent::None
+                    } else {
+                        PlaybackEvent::ThreadKilled
+                    }
+                })
+                .await
+                .expect("nova_music.db"),
+            )
+        })
+        .abortable();
+
+        match &mut self.task_handle {
+            None => {
+                self.task_handle = Some(vec![sleeping_thread.1]);
+            }
+            Some(handles) => {
+                handles.push(sleeping_thread.1);
+            }
+        }
+
+        let reporting_task_sink = Arc::clone(&self.sink);
+        let progress_thread = Task::stream(cosmic::iced_futures::stream::channel(
+            1,
+            |mut tx| async move {
+                tokio::task::spawn_blocking(move || loop {
+                    sleep(Duration::from_millis(200));
+                    match tx.try_send(Message::SinkProgress(
+                        reporting_task_sink.get_pos().as_secs_f64(),
+                    )) {
+                        Ok(_) => {}
+                        Err(_) => break,
+                    }
+                });
+            },
+        ))
+        .abortable();
+
+        match &mut self.task_handle {
+            None => self.task_handle = Some(vec![progress_thread.1]),
+            Some(handles) => handles.push(progress_thread.1),
+        }
+        let (task, handle) =
+            cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
+        match &mut self.task_handle {
+            None => self.task_handle = Some(vec![handle]),
+            Some(handles) => handles.push(handle),
+        }
+        self.sink.play();
+        task
+    }
+
+    fn interrupt_playback(&mut self) {
+        self.clear = true;
+        self.sink.clear();
+        self.sink.play();
+    }
+
+    fn apply_queue_action(
+        &mut self,
+        action: PlaybackQueueAction,
+        tracks: Vec<AppTrack>,
+    ) -> Task<cosmic::Action<Message>> {
+        if tracks.is_empty() {
+            return Task::none();
+        }
+
+        match action {
+            PlaybackQueueAction::PlayNow => {
+                self.playback_manager.set_context_tracks(tracks);
+
+                if self.sink.empty() {
+                    if let Some(path) = self.current_track_path() {
+                        return self.start_playback_from_path(path);
+                    }
+                    return Task::none();
+                }
+
+                self.interrupt_playback();
+                Task::none()
+            }
+            PlaybackQueueAction::QueueNext => {
+                let was_empty = self.playback_manager.is_empty();
+                self.playback_manager.queue_next_many(tracks);
+
+                if was_empty && self.sink.empty() {
+                    if let Some(path) = self.current_track_path() {
+                        return self.start_playback_from_path(path);
+                    }
+                    return Task::none();
+                }
+
+                Task::none()
+            }
+            PlaybackQueueAction::QueueBack => {
+                let was_empty = self.playback_manager.is_empty();
+                self.playback_manager.queue_last_many(tracks);
+
+                if was_empty && self.sink.empty() {
+                    if let Some(path) = self.current_track_path() {
+                        return self.start_playback_from_path(path);
+                    }
+                    return Task::none();
+                }
+
+                Task::none()
+            }
         }
     }
 }
@@ -3228,6 +3049,7 @@ impl menu::action::MenuAction for Action {
     }
 }
 
+/// Open a connection to the app's SQLite database.
 fn connect_to_db() -> rusqlite::Connection {
     let conn = match rusqlite::Connection::open(
         dirs::data_local_dir()
@@ -3241,4 +3063,75 @@ fn connect_to_db() -> rusqlite::Connection {
         }
     };
     conn
+}
+
+/// Fetch a fully-hydrated `AppTrack` by filesystem path.
+fn app_track_from_path(conn: &rusqlite::Connection, filepath: &str) -> Option<AppTrack> {
+    let mut stmt = conn
+        .prepare(
+            "
+                select track.id as id, track.name as title, art.name as artist, track.path, a.album_cover, a.name as album_title
+                from track
+                left join main.album_tracks at on track.id = at.track_id
+                left join main.artists art on track.artist_id = art.id
+                left join main.album a on at.album_id = a.id
+                where track.path=?;
+            ",
+        )
+        .ok()?;
+
+    stmt.query_row([filepath], |row| {
+        Ok(AppTrack {
+            id: row.get("id").unwrap_or(0),
+            title: row.get("title").unwrap_or("".to_string()),
+            artist: row.get("artist").unwrap_or("".to_string()),
+            album_title: row.get("album_title").unwrap_or("".to_string()),
+            path_buf: PathBuf::from(
+                row.get::<&str, String>("path")
+                    .expect("There should always be a file path"),
+            ),
+            cover_art: match row.get::<&str, Vec<u8>>("album_cover") {
+                Ok(val) => Some(widget::image::Handle::from_bytes(val)),
+                Err(_) => None,
+            },
+        })
+    })
+    .ok()
+}
+
+/// Fetch a fully-hydrated `AppTrack` by track id.
+fn app_track_from_id(
+    conn: &rusqlite::Connection,
+    track_type: TrackType,
+    id: u32,
+) -> Option<AppTrack> {
+    let stmt = "
+        select track.id as id, track.name as title, art.name as artist, track.path as path, a.album_cover, a.name as album_title
+        from track
+        left join main.album_tracks at on track.id = at.track_id
+        left join main.artists art on track.artist_id = art.id
+        left join main.album a on at.album_id = a.id
+        where track.id = ?
+    ";
+
+    conn.query_row(stmt, [&id], |row| {
+        let filepath = PathBuf::from(row.get::<_, String>("path").unwrap());
+        let visual = find_visual(&filepath);
+
+        Ok(AppTrack {
+            id: row.get("id").unwrap(),
+            artist: row.get("artist").unwrap(),
+            path_buf: filepath,
+            title: row.get("title").unwrap(),
+            album_title: match track_type {
+                TrackType::AlbumTrack => row.get("album_title").unwrap_or(String::from("")),
+                TrackType::Single => String::from(""),
+            },
+            cover_art: match visual {
+                Some(cover) => Some(widget::image::Handle::from_bytes(cover)),
+                None => None,
+            },
+        })
+    })
+    .ok()
 }

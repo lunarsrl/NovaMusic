@@ -8,7 +8,6 @@ use cosmic::iced::{Alignment, ContentFit, Length};
 use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::widget::JustifyContent;
 use cosmic::{iced, Application, Element, Theme};
-use std::cmp::{Ordering, PartialEq};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -140,14 +139,17 @@ impl AlbumPage {
                                                 .into()
                                             } else {
                                                 cosmic::widget::container(
-                                                    cosmic::widget::icon::from_name(
-                                                        "media-optical-symbolic",
+                                                        cosmic::widget::icon::from_name(
+                                                            "media-optical-symbolic",
+                                                        )
+                                                        .size(
+                                                            (model.config.grid_item_size * 32)
+                                                                as u16,
+                                                        ),
                                                     )
-                                                        .size((model.config.grid_item_size * 32) as u16),
-                                                )
-                                                .align_x(Alignment::Center)
-                                                .align_y(Alignment::Center)
-                                                .into()
+                                                    .align_x(Alignment::Center)
+                                                    .align_y(Alignment::Center)
+                                                    .into()
                                             },
                                             cosmic::widget::column::with_children(vec![
                                                 cosmic::widget::text::text(album.name.as_str())
@@ -295,7 +297,7 @@ impl AlbumPage {
                                                 cosmic::widget::icon::from_name(
                                                     "media-optical-symbolic",
                                                 )
-                                                .size((model.config.grid_item_size  * 32) as u16),
+                                                .size((model.config.grid_item_size * 32) as u16),
                                             )
                                             .align_x(Alignment::Center)
                                             .align_y(Alignment::Center)
@@ -422,8 +424,25 @@ fn tracks_listify<'a>(tracks: &Vec<Track>, num_of_discs: u32) -> Element<'a, Mes
                 cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                     "media-playback-start-symbolic",
                 ))
-                .on_press(Message::AddTrackToQueue(track.file_path.clone()))
+                .on_press(Message::QueueTracks {
+                    action: app::PlaybackQueueAction::PlayNow,
+                    paths: vec![track.file_path.clone()],
+                })
                 .into(),
+                cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                    "media-skip-forward-symbolic",
+                ))
+                .on_press(Message::QueueTracks {
+                    action: app::PlaybackQueueAction::QueueNext,
+                    paths: vec![track.file_path.clone()],
+                })
+                .into(),
+                cosmic::widget::button::icon(cosmic::widget::icon::from_name("list-add-symbolic"))
+                    .on_press(Message::QueueTracks {
+                        action: app::PlaybackQueueAction::QueueBack,
+                        paths: vec![track.file_path.clone()],
+                    })
+                    .into(),
             ])
             .align_y(Alignment::Center),
         );
@@ -512,8 +531,6 @@ WHERE album.name = ?
                 },
             )
             .unwrap();
-
-
     } else {
         row_num = conn
             .query_row(
@@ -624,7 +641,7 @@ impl FullAlbum {
         app_model: &AppModel,
         origin: Message,
         named_return: String,
-    ) -> Element<app::Message> {
+    ) -> Element<'_, app::Message> {
         let page_margin = cosmic::theme::spacing().space_m;
 
         cosmic::widget::container(
@@ -661,18 +678,48 @@ impl FullAlbum {
                             artist = self.album.artist.as_str()
                         ))
                         .into(),
-                        cosmic::widget::button::text(fl!("AddToQueue"))
-                            .leading_icon(cosmic::widget::icon::from_name(
-                                "media-playback-start-symbolic",
-                            ))
-                            .class(cosmic::theme::Button::Suggested)
-                            .on_press(Message::AddAlbumToQueue(
-                                self.tracks
-                                    .iter()
-                                    .map(|a| (a.file_path.clone(), a.disc_number))
-                                    .collect::<Vec<(String, u32)>>(),
-                            ))
-                            .into(),
+                        {
+                            let track_paths = self
+                                .tracks
+                                .iter()
+                                .map(|a| a.file_path.clone())
+                                .collect::<Vec<String>>();
+
+                            cosmic::widget::row::with_children(vec![
+                                cosmic::widget::button::text("Play")
+                                    .leading_icon(cosmic::widget::icon::from_name(
+                                        "media-playback-start-symbolic",
+                                    ))
+                                    .class(cosmic::theme::Button::Suggested)
+                                    .on_press(Message::QueueTracks {
+                                        action: app::PlaybackQueueAction::PlayNow,
+                                        paths: track_paths.clone(),
+                                    })
+                                    .into(),
+                                cosmic::widget::button::text("Play Next")
+                                    .leading_icon(cosmic::widget::icon::from_name(
+                                        "media-skip-forward-symbolic",
+                                    ))
+                                    .class(cosmic::theme::Button::Standard)
+                                    .on_press(Message::QueueTracks {
+                                        action: app::PlaybackQueueAction::QueueNext,
+                                        paths: track_paths.clone(),
+                                    })
+                                    .into(),
+                                cosmic::widget::button::text(fl!("AddToQueue"))
+                                    .leading_icon(cosmic::widget::icon::from_name(
+                                        "list-add-symbolic",
+                                    ))
+                                    .class(cosmic::theme::Button::Standard)
+                                    .on_press(Message::QueueTracks {
+                                        action: app::PlaybackQueueAction::QueueBack,
+                                        paths: track_paths,
+                                    })
+                                    .into(),
+                            ])
+                            .spacing(cosmic::theme::spacing().space_xxs)
+                            .into()
+                        },
                     ])
                     .spacing(cosmic::theme::spacing().space_xxxs)
                     .into(),

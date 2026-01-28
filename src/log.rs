@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use colored::*;
-use log::{Level, LevelFilter};
+use colored::Colorize;
+use log::Level;
 use std::time::SystemTime;
 
 pub fn setup_logger() -> Result<(), fern::InitError> {
@@ -27,7 +27,7 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
                 },
                 record.target(),
                 message
-            ))
+            ));
         })
         .level_for("wgpu_core::device::resource", log::LevelFilter::Error)
         .level_for("tracing::span", log::LevelFilter::Error)

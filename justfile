@@ -58,6 +58,9 @@ check-json: (check '--message-format=json')
 run *args:
     env RUST_BACKTRACE=full cargo run --release {{args}}
 
+test:
+    cargo test
+
 # Installs files
 install:
     install -Dm0755 {{bin-src}} {{bin-dst}}

@@ -217,19 +217,48 @@ impl PlaylistPage {
                                     .into(),
                                 cosmic::widget::divider::horizontal::default().into(),
                                 cosmic::widget::row::with_children(vec![
-                                    cosmic::widget::button::text(fl!("AddToQueue"))
-                                        .leading_icon(cosmic::widget::icon::from_name(
-                                            "media-playback-start-symbolic",
-                                        ))
-                                        .class(cosmic::theme::Button::Suggested)
-                                        .on_press(Message::AddAlbumToQueue(
-                                            playlist
-                                                .tracks
-                                                .iter()
-                                                .map(|a| (a.path.clone(), 0))
-                                                .collect::<Vec<(String, u32)>>(),
-                                        ))
-                                        .into(),
+                                    {
+                                        let track_paths = playlist
+                                            .tracks
+                                            .iter()
+                                            .map(|a| a.path.clone())
+                                            .collect::<Vec<String>>();
+
+                                        cosmic::widget::row::with_children(vec![
+                                            cosmic::widget::button::text("Play")
+                                                .leading_icon(cosmic::widget::icon::from_name(
+                                                    "media-playback-start-symbolic",
+                                                ))
+                                                .class(cosmic::theme::Button::Suggested)
+                                                .on_press(Message::QueueTracks {
+                                                    action: app::PlaybackQueueAction::PlayNow,
+                                                    paths: track_paths.clone(),
+                                                })
+                                                .into(),
+                                            cosmic::widget::button::text("Play Next")
+                                                .leading_icon(cosmic::widget::icon::from_name(
+                                                    "media-skip-forward-symbolic",
+                                                ))
+                                                .class(cosmic::theme::Button::Standard)
+                                                .on_press(Message::QueueTracks {
+                                                    action: app::PlaybackQueueAction::QueueNext,
+                                                    paths: track_paths.clone(),
+                                                })
+                                                .into(),
+                                            cosmic::widget::button::text(fl!("AddToQueue"))
+                                                .leading_icon(cosmic::widget::icon::from_name(
+                                                    "list-add-symbolic",
+                                                ))
+                                                .class(cosmic::theme::Button::Standard)
+                                                .on_press(Message::QueueTracks {
+                                                    action: app::PlaybackQueueAction::QueueBack,
+                                                    paths: track_paths,
+                                                })
+                                                .into(),
+                                        ])
+                                        .spacing(cosmic::theme::spacing().space_xxs)
+                                        .into()
+                                    },
                                     cosmic::widget::row::with_children(vec![
                                         cosmic::widget::button::icon(
                                             cosmic::widget::icon::from_name("edit-symbolic"),
@@ -435,7 +464,26 @@ fn tracks_listify(tracks: &Vec<PlaylistTrack>) -> Element<'static, Message> {
                             cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                 "media-playback-start-symbolic",
                             ))
-                            .on_press(Message::AddTrackToQueue(track.path.clone()))
+                            .on_press(Message::QueueTracks {
+                                action: app::PlaybackQueueAction::PlayNow,
+                                paths: vec![track.path.clone()],
+                            })
+                            .into(),
+                            cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                "media-skip-forward-symbolic",
+                            ))
+                            .on_press(Message::QueueTracks {
+                                action: app::PlaybackQueueAction::QueueNext,
+                                paths: vec![track.path.clone()],
+                            })
+                            .into(),
+                            cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                "list-add-symbolic",
+                            ))
+                            .on_press(Message::QueueTracks {
+                                action: app::PlaybackQueueAction::QueueBack,
+                                paths: vec![track.path.clone()],
+                            })
                             .into(),
                         ])
                         .align_y(Alignment::Center),
