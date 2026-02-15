@@ -13,6 +13,7 @@ use cosmic::iced_core::text::Shaping;
 use cosmic::iced_core::{Alignment, Size};
 use cosmic::iced_widget::scrollable::AbsoluteOffset;
 use cosmic::iced_widget::text::Wrapping;
+use cosmic::iced_widget::tooltip;
 use cosmic::widget::JustifyContent;
 use cosmic::{iced_core, Element, Task};
 use rayon::iter::IntoParallelIterator;
@@ -247,21 +248,40 @@ impl AppTrack {
                         cosmic::widget::horizontal_space().into(),
                         cosmic::widget::row::with_children(vec![
                             // left
-                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                cosmic::widget::icon::from_name("store-relax-symbolic"),
-                            ))
-                            .class(cosmic::theme::Button::Standard)
+                            cosmic::iced::widget::tooltip(
+                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                    cosmic::widget::icon::from_name("playlist-symbolic"),
+                                ))
+                                .class(cosmic::theme::Button::Standard),
+                                cosmic::widget::container("Add to playlist")
+                                    .padding(cosmic::theme::spacing().space_xxxs)
+                                    .class(cosmic::theme::Container::Tooltip),
+                                tooltip::Position::Top,
+                            )
                             .into(),
-                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                cosmic::widget::icon::from_name("list-add-symbolic"),
-                            ))
-                            .class(cosmic::theme::Button::Standard)
+                            cosmic::iced::widget::tooltip(
+                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                    cosmic::widget::icon::from_name("list-add-symbolic"),
+                                ))
+                                .class(cosmic::theme::Button::Standard),
+                                cosmic::widget::container("Add to queue")
+                                    .padding(cosmic::theme::spacing().space_xxxs)
+                                    .class(cosmic::theme::Container::Tooltip),
+                                tooltip::Position::Top,
+                            )
                             .into(),
-                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                cosmic::widget::icon::from_name("media-playback-start-symbolic"),
-                            ))
-                            .on_press(Message::AddTrackToQueue(self.title))
-                            .class(cosmic::theme::Button::Standard)
+                            cosmic::iced::widget::tooltip(
+                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                    cosmic::widget::icon::from_name(
+                                        "media-playback-start-symbolic",
+                                    ),
+                                ))
+                                .class(cosmic::theme::Button::Standard),
+                                cosmic::widget::container("Play now")
+                                    .padding(cosmic::theme::spacing().space_xxxs)
+                                    .class(cosmic::theme::Container::Tooltip),
+                                tooltip::Position::Top,
+                            )
                             .into(),
                         ])
                         .spacing(cosmic::theme::spacing().space_xxxs)
