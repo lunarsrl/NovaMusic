@@ -14,7 +14,6 @@ use crate::config::SortOrder;
 use crate::fl;
 use cosmic::iced::alignment::Vertical;
 use cosmic::iced::{Alignment, Length};
-use cosmic::widget::JustifyContent;
 use cosmic::{iced, Element};
 use std::fmt::Display;
 
@@ -189,7 +188,7 @@ pub fn list_sort_header<'a>(
     };
 
     return cosmic::widget::column::with_children(vec![
-        cosmic::widget::flex_row(vec![
+        cosmic::widget::row::with_children(vec![
             cosmic::widget::button::custom(
                 cosmic::widget::row::with_children(vec![
                     cosmic::widget::text::heading(field1).into(),
@@ -200,6 +199,7 @@ pub fn list_sort_header<'a>(
             .width(Length::Fixed(300.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
+            cosmic::widget::horizontal_space().into(),
             cosmic::widget::button::custom(
                 cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
                     "Modifiable",
@@ -210,6 +210,7 @@ pub fn list_sort_header<'a>(
             .width(Length::Fixed(150.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
+            cosmic::widget::horizontal_space().into(),
             cosmic::widget::button::custom(
                 cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
                     "Modifiable",
@@ -220,9 +221,9 @@ pub fn list_sort_header<'a>(
             .width(Length::Fixed(150.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
+            cosmic::widget::horizontal_space().into(),
         ])
-        .justify_content(JustifyContent::SpaceBetween)
-        .align_items(Alignment::Center)
+        .align_y(Alignment::Center)
         .into(),
         cosmic::widget::divider::horizontal::default().into(),
     ])

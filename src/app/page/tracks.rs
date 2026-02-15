@@ -9,8 +9,10 @@ use colored::Colorize;
 use cosmic::iced::alignment::Vertical;
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::{widget, ContentFit, Length, Point};
+use cosmic::iced_core::text::Shaping;
 use cosmic::iced_core::{Alignment, Size};
 use cosmic::iced_widget::scrollable::AbsoluteOffset;
+use cosmic::iced_widget::text::Wrapping;
 use cosmic::widget::JustifyContent;
 use cosmic::{iced_core, Element, Task};
 use rayon::iter::IntoParallelIterator;
@@ -203,19 +205,77 @@ impl AppTrack {
     pub fn display<'a>(self) -> Element<'a, Message> {
         cosmic::widget::column::with_children(vec![
             cosmic::widget::divider::horizontal::default().into(),
-            cosmic::widget::row::with_children(vec![
-                widget::column![
-                    cosmic::widget::text::heading(self.title).width(Length::Fixed(300.0)),
-                    cosmic::widget::text::text(self.artist).width(Length::Fixed(300.0)),
-                    cosmic::widget::text::text(self.album_title).width(Length::Fixed(300.0)),
-                ]
-                .into(),
-                cosmic::widget::horizontal_space().into(),
-                cosmic::widget::button::text("x ^v >").into(),
-            ])
-            .height(Length::Fixed(64.0))
-            .align_y(Vertical::Center)
-            .into(),
+            cosmic::iced_widget::hover(
+                // Normal Display
+                cosmic::widget::row::with_children(vec![
+                    widget::column![
+                        cosmic::widget::text::heading(self.title.to_string())
+                            .width(Length::Fixed(300.0)),
+                        cosmic::widget::text::text(self.artist.to_string())
+                            .width(Length::Fixed(300.0)),
+                        cosmic::widget::text::text(self.album_title.to_string())
+                            .width(Length::Fixed(300.0)),
+                    ]
+                    .into(),
+                    cosmic::widget::horizontal_space().into(),
+                    cosmic::widget::button::text("Mod Entry 1")
+                        .width(Length::Fixed(150.0))
+                        .into(),
+                    cosmic::widget::horizontal_space().into(),
+                    cosmic::widget::button::text("Mod Entry 2")
+                        .width(Length::Fixed(150.0))
+                        .into(),
+                    cosmic::widget::horizontal_space().into(),
+                ])
+                .padding(cosmic::iced::core::padding::Padding::from([
+                    0,
+                    cosmic::theme::spacing().space_xxs,
+                ]))
+                .height(Length::Fixed(64.0))
+                .align_y(Vertical::Center),
+                // Display on hover, where the controls should be
+                cosmic::widget::container(
+                    cosmic::widget::row::with_children(vec![
+                        widget::column![
+                            cosmic::widget::text::heading(self.title.to_string())
+                                .width(Length::Fixed(300.0)),
+                            cosmic::widget::text::text(self.artist).width(Length::Fixed(300.0)),
+                            cosmic::widget::text::text(self.album_title)
+                                .width(Length::Fixed(300.0)),
+                        ]
+                        .into(),
+                        cosmic::widget::horizontal_space().into(),
+                        cosmic::widget::row::with_children(vec![
+                            // left
+                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                cosmic::widget::icon::from_name("store-relax-symbolic"),
+                            ))
+                            .class(cosmic::theme::Button::Standard)
+                            .into(),
+                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                cosmic::widget::icon::from_name("list-add-symbolic"),
+                            ))
+                            .class(cosmic::theme::Button::Standard)
+                            .into(),
+                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                cosmic::widget::icon::from_name("media-playback-start-symbolic"),
+                            ))
+                            .on_press(Message::AddTrackToQueue(self.title))
+                            .class(cosmic::theme::Button::Standard)
+                            .into(),
+                        ])
+                        .spacing(cosmic::theme::spacing().space_xxxs)
+                        .into(), //right
+                    ])
+                    .padding(cosmic::iced::core::padding::Padding::from([
+                        0,
+                        cosmic::theme::spacing().space_xxs,
+                    ]))
+                    .height(Length::Fixed(64.0))
+                    .align_y(Vertical::Center),
+                )
+                .class(cosmic::theme::Container::Secondary),
+            ),
             cosmic::widget::divider::horizontal::default().into(),
         ])
         .into()
