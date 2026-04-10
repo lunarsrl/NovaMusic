@@ -7,15 +7,11 @@ use crate::config::SortOrder;
 use crate::fl;
 use colored::Colorize;
 use cosmic::iced::alignment::Vertical;
+use cosmic::iced::core::text::{Ellipsize, EllipsizeHeightLimit};
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::{widget, ContentFit, Length, Point};
-use cosmic::iced_core::text::Shaping;
-use cosmic::iced_core::{Alignment, Size};
-use cosmic::iced_widget::scrollable::AbsoluteOffset;
-use cosmic::iced_widget::text::Wrapping;
-use cosmic::iced_widget::tooltip;
 use cosmic::widget::JustifyContent;
-use cosmic::{iced_core, Element, Task};
+use cosmic::{Element, Task};
 use rayon::iter::IntoParallelIterator;
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::cell::Cell;
@@ -32,7 +28,7 @@ pub struct TrackPage {
     pub page_state: TrackPageState,
     pub viewport: Option<Viewport>,
     pub load_depth: u32,
-    pub scrollbar_id: cosmic::iced_core::widget::Id,
+    pub scrollbar_id: cosmic::iced::widget::Id,
 
     pub search_by_artist: bool,
     pub search_by_album: bool,
@@ -68,28 +64,26 @@ impl Page for TrackPage {
             Some(val) => val.bounds().height,
         };
 
-        let visible_rect = iced_core::Rectangle::new(
-            iced_core::Point::new(
+        let visible_rect = cosmic::iced::Rectangle::new(
+            cosmic::iced::Point::new(
                 f32::from(cosmic::theme::spacing().space_s),
                 match self.viewport {
                     None => 1.0,
                     Some(val) => val.absolute_offset().y,
                 },
             ),
-            iced_core::Size::new(3.0, visible_height),
+            cosmic::iced::Size::new(3.0, visible_height),
         );
 
         let mut tracks: Vec<Element<Message>> = vec![];
 
-        let mut tracks_rect = iced_core::Rectangle::new(
-            iced_core::Point::new(f32::from(cosmic::theme::spacing().space_s), 1.0),
-            iced_core::Size::new(3.0, 64.0),
+        let mut tracks_rect = cosmic::iced::Rectangle::new(
+            cosmic::iced::Point::new(f32::from(cosmic::theme::spacing().space_s), 1.0),
+            cosmic::iced::Size::new(3.0, 64.0),
         );
 
-        if cosmic::iced_core::mouse::Cursor::is_over(
-            cosmic::iced_core::mouse::Cursor::default(),
-            tracks_rect,
-        ) {
+        if cosmic::iced::mouse::Cursor::is_over(cosmic::iced::mouse::Cursor::default(), tracks_rect)
+        {
             log::info!("{}", "this is true somehow".to_string().on_bright_yellow())
         }
 
@@ -146,7 +140,7 @@ impl TrackPage {
             page_state: TrackPageState::Loading,
             viewport: None,
             load_depth: 0,
-            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
+            scrollbar_id: cosmic::iced::widget::Id::unique(),
             search_by_artist: false,
             search_by_album: false,
             search_by_title: false,
@@ -206,27 +200,30 @@ impl AppTrack {
     pub fn display<'a>(self) -> Element<'a, Message> {
         cosmic::widget::column::with_children(vec![
             cosmic::widget::divider::horizontal::default().into(),
-            cosmic::iced_widget::hover(
+            cosmic::iced::widget::hover(
                 // Normal Display
                 cosmic::widget::row::with_children(vec![
                     widget::column![
                         cosmic::widget::text::heading(self.title.to_string())
-                            .width(Length::Fixed(300.0)),
+                            .width(Length::Fixed(300.0))
+                            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
                         cosmic::widget::text::text(self.artist.to_string())
+                            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
                             .width(Length::Fixed(300.0)),
                         cosmic::widget::text::text(self.album_title.to_string())
-                            .width(Length::Fixed(300.0)),
+                            .width(Length::Fixed(300.0))
+                            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
                     ]
                     .into(),
-                    cosmic::widget::horizontal_space().into(),
+                    cosmic::widget::space().width(Length::Fill).into(),
                     cosmic::widget::button::text("Mod Entry 1")
                         .width(Length::Fixed(150.0))
                         .into(),
-                    cosmic::widget::horizontal_space().into(),
+                    cosmic::widget::space().width(Length::Fill).into(),
                     cosmic::widget::button::text("Mod Entry 2")
                         .width(Length::Fixed(150.0))
                         .into(),
-                    cosmic::widget::horizontal_space().into(),
+                    cosmic::widget::space().width(Length::Fill).into(),
                 ])
                 .padding(cosmic::iced::core::padding::Padding::from([
                     0,
@@ -245,7 +242,7 @@ impl AppTrack {
                                 .width(Length::Fixed(300.0)),
                         ]
                         .into(),
-                        cosmic::widget::horizontal_space().into(),
+                        cosmic::widget::space().width(Length::Fill).into(),
                         cosmic::widget::row::with_children(vec![
                             // left
                             cosmic::iced::widget::tooltip(
@@ -256,7 +253,7 @@ impl AppTrack {
                                 cosmic::widget::container("Add to playlist")
                                     .padding(cosmic::theme::spacing().space_xxxs)
                                     .class(cosmic::theme::Container::Tooltip),
-                                tooltip::Position::Top,
+                                cosmic::widget::tooltip::Position::Top,
                             )
                             .into(),
                             cosmic::iced::widget::tooltip(
@@ -267,7 +264,7 @@ impl AppTrack {
                                 cosmic::widget::container("Add to queue")
                                     .padding(cosmic::theme::spacing().space_xxxs)
                                     .class(cosmic::theme::Container::Tooltip),
-                                tooltip::Position::Top,
+                                cosmic::widget::tooltip::Position::Top,
                             )
                             .into(),
                             cosmic::iced::widget::tooltip(
@@ -280,7 +277,7 @@ impl AppTrack {
                                 cosmic::widget::container("Play now")
                                     .padding(cosmic::theme::spacing().space_xxxs)
                                     .class(cosmic::theme::Container::Tooltip),
-                                tooltip::Position::Top,
+                                cosmic::widget::tooltip::Position::Top,
                             )
                             .into(),
                         ])

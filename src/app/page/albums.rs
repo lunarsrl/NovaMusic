@@ -5,14 +5,13 @@ use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
 use crate::fl;
 use colored::Colorize;
+use cosmic::iced::core::text::EllipsizeHeightLimit;
+use cosmic::iced::widget::scrollable::Viewport;
+use cosmic::iced::widget::text::Ellipsize;
 use cosmic::iced::{Alignment, Color, ContentFit, Length};
-use cosmic::iced_core::alignment::{Horizontal, Vertical};
-use cosmic::iced_core::image::Handle;
-use cosmic::iced_widget::scrollable::Viewport;
-use cosmic::iced_widget::text::Wrapping;
 use cosmic::widget::settings::item;
 use cosmic::widget::{icon, JustifyContent};
-use cosmic::{iced_core, Element, Task};
+use cosmic::{theme, Element, Task};
 use rusqlite::ToSql;
 use std::fmt::format;
 use std::hash::Hash;
@@ -25,7 +24,7 @@ pub struct AlbumPage {
     pub page_state: AlbumPageState,
     pub has_fully_loaded: bool,
     pub viewport: Option<Viewport>,
-    pub scrollbar_id: cosmic::iced_core::widget::Id,
+    pub scrollbar_id: cosmic::iced::widget::Id,
     pub search_term: String,
 }
 const TextArea: f32 = 40.0;
@@ -61,20 +60,20 @@ impl Page for AlbumPage {
                         spacing = (check_final / (items_per_row - 1)) as u16;
                     }
 
-                    let visible_rect = iced_core::Rectangle::new(
-                        iced_core::Point::new(
+                    let visible_rect = cosmic::iced::Rectangle::new(
+                        cosmic::iced::Point::new(
                             f32::from(cosmic::theme::spacing().space_s),
                             match self.viewport {
                                 None => 0.0,
                                 Some(val) => val.absolute_offset().y,
                             },
                         ),
-                        iced_core::Size::new(3.0, size.height),
+                        cosmic::iced::Size::new(3.0, size.height),
                     );
 
-                    let mut album_rect = iced_core::Rectangle::new(
-                        iced_core::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
-                        iced_core::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
+                    let mut album_rect = cosmic::iced::Rectangle::new(
+                        cosmic::iced::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
+                        cosmic::iced::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
                     );
 
                     let mut grid = cosmic::widget::grid::<Message>()
@@ -91,7 +90,7 @@ impl Page for AlbumPage {
                         if album_rect.intersects(&visible_rect) {
                             insert_element = album.display_grid(icon_size);
                         } else {
-                            insert_element = cosmic::widget::column()
+                            insert_element = cosmic::widget::Column::new()
                                 .push(cosmic::widget::text(format!("{}", index)))
                                 .width(Length::Fill)
                                 .height(Length::Fixed(icon_size as f32 * 32.0 + TextArea))
@@ -167,12 +166,15 @@ impl AlbumPage {
             page_state: AlbumPageState::Loading,
             has_fully_loaded: false,
             viewport: None,
-            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
+            scrollbar_id: cosmic::iced::widget::Id::unique(),
             search_term: "".to_string(),
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
-        self.page(model)
+        match self.page_state {
+            AlbumPageState::Album(album) => {}
+            _ => self.page(model),
+        }
     }
 
     pub fn load_page_data(&self) -> Task<cosmic::Action<Message>> {
@@ -244,10 +246,14 @@ impl Album {
             cosmic::widget::button::custom(
                 cosmic::widget::column::with_children(vec![
                     art,
-                    cosmic::widget::text::caption_heading(self.name.to_string()).into(),
-                    cosmic::widget::text::caption(self.artist.to_string()).into(),
+                    cosmic::widget::text::caption_heading(self.name.to_string())
+                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(2)))
+                        .into(),
+                    cosmic::widget::text::caption(self.artist.to_string())
+                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(2)))
+                        .into(),
                 ])
-                .align_x(Horizontal::Center),
+                .align_x(cosmic::iced::Alignment::Center),
             )
             .on_press(Message::AlbumRequested((
                 self.name.to_string(),

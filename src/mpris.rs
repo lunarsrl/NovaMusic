@@ -77,3 +77,5 @@ impl MPRISRootInterface {
         }
     }
 }
+
+fn mpris() {}

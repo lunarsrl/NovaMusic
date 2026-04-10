@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::app;
+use crate::app::page::CoverArt;
+use crate::app::page::CoverArt::SomeLoaded;
 use crate::app::{AppModel, AppTrack, LoopState, Message};
 use crate::fl;
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::Alignment::Start;
 use cosmic::iced::{ContentFit, Length, Pixels};
 use cosmic::widget::list_column;
 use cosmic::{iced, Element};
-
-use crate::app::page::CoverArt;
-use crate::app::page::CoverArt::SomeLoaded;
-use cosmic::iced_core::text::Wrapping;
-use cosmic::iced_widget::scrollable::Viewport;
 
 #[derive(Debug)]
 pub(crate) struct HomePage {
@@ -163,7 +161,7 @@ impl HomePage {
                             cosmic::widget::column::with_children(vec![
                                 cosmic::widget::row::with_children(vec![
                                     cosmic::widget::text::heading(fl!("Queue")).center().into(),
-                                    cosmic::widget::horizontal_space().into(),
+                                    cosmic::widget::space().width(Length::Fill).into(),
                                     cosmic::widget::button::text(fl!("CreatePlaylist"))
                                         .class(cosmic::widget::button::ButtonClass::Standard)
                                         .on_press(Message::AddToPlaylist)
@@ -223,7 +221,7 @@ pub fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, M
                         old_list.add(
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::text(name).into(),
-                                cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::space().width(Length::Fill).into(),
                                 cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                     "window-close-symbolic",
                                 ))
@@ -242,7 +240,7 @@ pub fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, M
                         old_list.add(cosmic::widget::dnd_destination(
                             cosmic::widget::row::with_children(vec![
                                 cosmic::widget::text(name).into(),
-                                cosmic::widget::horizontal_space().into(),
+                                cosmic::widget::space().width(Length::Fill).into(),
                                 cosmic::widget::button::icon(cosmic::widget::icon::from_name(
                                     "window-close-symbolic",
                                 ))
@@ -294,9 +292,7 @@ pub(crate) fn format_cover_page<'a>(
         .width(Length::FillPortion(2))
         .into(),
         cosmic::widget::Column::with_children(vec![
-            cosmic::widget::text::title3(format!("{}", title))
-                .wrapping(Wrapping::WordOrGlyph)
-                .into(),
+            cosmic::widget::text::title3(format!("{}", title)).into(),
             cosmic::widget::text::title4(format!("{}", artist)).into(),
             cosmic::widget::text::title4(format!("{}", album.unwrap_or(&String::new()))).into(),
         ])

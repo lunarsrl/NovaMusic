@@ -2,7 +2,7 @@
 
 use crate::app::page::PageBuilder;
 use crate::app::{AppModel, AppTrack, Message};
-use cosmic::iced_widget::scrollable::Viewport;
+use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::Element;
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ pub struct GenrePage {
     pub page_state: GenrePageState,
     pub has_fully_loaded: bool,
     pub viewport: Option<Viewport>,
-    pub scrollbar_id: cosmic::iced_core::widget::Id,
+    pub scrollbar_id: cosmic::iced::widget::Id,
     pub search_term: String,
 }
 
@@ -29,7 +29,7 @@ impl GenrePage {
             page_state: GenrePageState::Loading,
             has_fully_loaded: false,
             viewport: None,
-            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
+            scrollbar_id: cosmic::iced::widget::Id::unique(),
             search_term: "".to_string(),
         }
     }

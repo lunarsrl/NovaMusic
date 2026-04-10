@@ -3,6 +3,7 @@
 use crate::app::{AppModel, Message};
 use crate::config::AppTheme;
 use crate::fl;
+use cosmic::iced::Length;
 use cosmic::widget::settings::Section;
 use cosmic::widget::text;
 use cosmic::{theme, widget, Element};
@@ -20,12 +21,12 @@ impl AppModel {
 
         let contain = widget::Container::new(
             widget::column::Column::with_children([
-                cosmic::widget::toaster(&self.toasts, widget::horizontal_space()).into(),
+                cosmic::widget::toaster(&self.toasts, widget::space()).into(),
                 editable_settings
                     .title(fl!("MusicScanning"))
                     .add(widget::Row::with_children([
                         text::heading(fl!("MusicDirectory")).into(),
-                        widget::horizontal_space().into(),
+                        widget::space().into(),
                         text::text(&self.config.scan_dir).into(),
                     ]))
                     .add(
@@ -52,7 +53,7 @@ impl AppModel {
                         widget::column::Column::with_children([
                             widget::row::Row::with_children([
                                 text::heading(fl!("ScanProgress")).into(),
-                                widget::horizontal_space().into(),
+                                cosmic::widget::space().width(Length::Fill).into(),
                                 text::caption(format!(
                                     "{}%",
                                     (self.config.files_scanned as f32
@@ -63,11 +64,9 @@ impl AppModel {
                                 .into(),
                             ])
                             .into(),
-                            widget::progress_bar(
-                                0.0..=self.config.num_files_found as f32,
-                                self.config.files_scanned as f32,
+                            cosmic::widget::progress_bar::determinate_linear(
+                                self.config.num_files_found as f32,
                             )
-                            .height(space_s)
                             .into(),
                         ])
                         .spacing(space_xxs),
@@ -124,7 +123,7 @@ impl AppModel {
                     .title(fl!("CurrentScanResults"))
                     .add(widget::Row::with_children([
                         text::heading(fl!("FilesScanned")).into(),
-                        widget::horizontal_space().into(),
+                        cosmic::widget::space().width(Length::Fill).into(),
                         text::text(format!(
                             "{}/{}",
                             self.config.num_files_found
@@ -135,17 +134,17 @@ impl AppModel {
                     ]))
                     .add(widget::Row::with_children([
                         text::heading(fl!("albums")).into(),
-                        widget::horizontal_space().into(),
+                        cosmic::widget::space().width(Length::Fill).into(),
                         text::text(self.config.albums_found.to_string()).into(),
                     ]))
                     .add(widget::Row::with_children([
                         text::heading(fl!("tracks")).into(),
-                        widget::horizontal_space().into(),
+                        cosmic::widget::space().width(Length::Fill).into(),
                         text::text(self.config.tracks_found.to_string()).into(),
                     ]))
                     .add(widget::Row::with_children([
                         text::heading(fl!("playlists")).into(),
-                        widget::horizontal_space().into(),
+                        cosmic::widget::space().width(Length::Fill).into(),
                         text::text("None").into(),
                     ]))
                     .into(),

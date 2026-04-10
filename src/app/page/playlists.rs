@@ -3,8 +3,8 @@
 use crate::app::page::tracks::SearchResult;
 use crate::app::page::PageBuilder;
 use crate::app::{AppModel, Message};
-use cosmic::iced_widget::scrollable::Viewport;
-use cosmic::{Application, Element};
+use cosmic::iced::widget::scrollable::Viewport;
+use cosmic::Element;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -12,7 +12,7 @@ pub struct PlaylistPage {
     pub viewport: Option<Viewport>,
     pub playlists: Arc<Vec<Playlist>>,
     pub playlist_page_state: PlaylistPageState,
-    pub scrollbar_id: cosmic::iced_core::widget::Id,
+    pub scrollbar_id: cosmic::iced::widget::Id,
     pub search_term: String,
 }
 
@@ -47,7 +47,7 @@ impl PlaylistPage {
         PlaylistPage {
             playlists: Arc::new(vec![]),
             playlist_page_state: PlaylistPageState::Loading,
-            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
+            scrollbar_id: cosmic::iced::widget::Id::unique(),
             viewport: None,
             search_term: "".to_string(),
         }

@@ -2,10 +2,12 @@
 
 use crate::app::page::albums::{Album, FullAlbum};
 use crate::app::page::tracks::SearchResult;
-use crate::app::page::PageBuilder;
+use crate::app::page::{BodyStyle, Page, PageBuilder};
 use crate::app::AppModel;
 use crate::app::{DisplaySingle, Message};
-use cosmic::iced_widget::scrollable::Viewport;
+use crate::fl;
+use cosmic::iced::widget::scrollable::Viewport;
+use cosmic::iced::{Alignment, Length};
 use cosmic::Element;
 
 #[derive(Clone, Debug)]
@@ -24,7 +26,7 @@ pub struct ArtistsPage {
 
     //Scrollbar
     pub viewport: Option<Viewport>,
-    pub scrollbar_id: cosmic::iced_core::widget::Id,
+    pub scrollbar_id: cosmic::iced::widget::Id,
     pub search_term: String,
 }
 
@@ -52,11 +54,31 @@ impl ArtistsPage {
             artists: vec![],
             artist_page_cache: None,
             viewport: None,
-            scrollbar_id: cosmic::iced_core::widget::Id::unique(),
+            scrollbar_id: cosmic::iced::widget::Id::unique(),
             search_term: String::from(""),
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
-        self.header()
+        self.page(model)
+    }
+}
+
+impl Page for ArtistsPage {
+    fn title(&self) -> String {
+        String::from(fl!("artists"))
+    }
+
+    fn body(&self, model: &AppModel) -> Element<Message> {
+        cosmic::widget::container(cosmic::widget::column::with_children(vec![
+            cosmic::widget::indeterminate_circular().into(),
+            cosmic::widget::indeterminate_linear().into(),
+        ]))
+        .align_y(Alignment::Center)
+        .width(Length::Fill)
+        .into()
+    }
+
+    fn body_style(&self) -> BodyStyle {
+        return BodyStyle::List;
     }
 }

@@ -6,7 +6,6 @@ pub mod genre;
 pub mod playlists;
 pub mod tracks;
 
-use crate::app::page::artists::ArtistsPage;
 use crate::app::page::genre::GenrePage;
 use crate::app::page::playlists::PlaylistPage;
 use crate::app::{AppModel, Message};
@@ -117,9 +116,7 @@ impl<T: Page> PageBuilder for T {
                 cosmic::widget::text::title3(self.title())
                     .width(Length::FillPortion(2))
                     .into(),
-                cosmic::widget::horizontal_space()
-                    .width(Length::Shrink)
-                    .into(),
+                cosmic::widget::space().width(Length::Shrink).into(),
             ])
             .align_y(Alignment::Center)
             .spacing(cosmic::theme::spacing().space_s)
@@ -132,20 +129,6 @@ impl<T: Page> PageBuilder for T {
 }
 
 // --------------------------------------------------- Pages implemented for -----------------------
-
-impl Page for ArtistsPage {
-    fn title(&self) -> String {
-        String::from(fl!("artists"))
-    }
-
-    fn body(&self, model: &AppModel) -> Element<Message> {
-        todo!()
-    }
-
-    fn body_style(&self) -> BodyStyle {
-        return BodyStyle::Grid;
-    }
-}
 
 impl Page for GenrePage {
     fn title(&self) -> String {
@@ -199,7 +182,7 @@ pub fn list_sort_header<'a>(
             .width(Length::Fixed(300.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
-            cosmic::widget::horizontal_space().into(),
+            cosmic::widget::space().width(Length::Fill).into(),
             cosmic::widget::button::custom(
                 cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
                     "Modifiable",
@@ -210,7 +193,7 @@ pub fn list_sort_header<'a>(
             .width(Length::Fixed(150.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
-            cosmic::widget::horizontal_space().into(),
+            cosmic::widget::space().width(Length::Fill).into(),
             cosmic::widget::button::custom(
                 cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
                     "Modifiable",
@@ -221,7 +204,7 @@ pub fn list_sort_header<'a>(
             .width(Length::Fixed(150.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
-            cosmic::widget::horizontal_space().into(),
+            cosmic::widget::space().width(Length::Fill).into(),
         ])
         .align_y(Alignment::Center)
         .into(),

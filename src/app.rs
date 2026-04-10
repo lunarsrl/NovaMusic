@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::app::task::stream;
 use crate::app::GenrePageState::Search;
 use crate::mpris::player::MPRISPlayer;
 use cosmic::dialog::file_chooser::Error;
@@ -16,6 +17,7 @@ mod page;
 
 mod scan;
 mod settings;
+mod subpage;
 
 use crate::app::home::HomePage;
 use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, FullAlbum};
@@ -39,17 +41,18 @@ use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key;
 use cosmic::iced::task::Handle;
+use cosmic::iced::widget::list;
+use cosmic::iced::widget::scrollable::{AbsoluteOffset, Viewport};
 use cosmic::iced::window::Id;
 use cosmic::iced::Alignment::Start;
 use cosmic::iced::{keyboard, Alignment, Color, ContentFit, Event, Length};
-use cosmic::iced_widget::list;
-use cosmic::iced_widget::scrollable::Viewport;
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::Action::App;
 use cosmic::{action, cosmic_config, cosmic_theme, task, theme};
 use event_listener::Listener;
+use futures::channel::mpsc::Sender;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use rodio::{Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
@@ -128,7 +131,7 @@ pub struct AppModel {
     playlistsid: nav_bar::Id,
     homeid: nav_bar::Id,
     genreid: nav_bar::Id,
-    search_id: cosmic::iced_core::id::Id,
+    search_id: cosmic::iced::id::Id,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -471,7 +474,7 @@ impl cosmic::Application for AppModel {
             playlistsid,
             homeid,
             genreid,
-            search_id: cosmic::iced_core::id::Id::unique(),
+            search_id: cosmic::iced::id::Id::unique(),
         };
 
         // Start up commands
@@ -621,12 +624,12 @@ impl cosmic::Application for AppModel {
                                 cosmic::widget::text::heading(data.0.unwrap_or("")).into(),
                                 cosmic::widget::text::heading(data.1.unwrap_or("")).into(),
                                 cosmic::widget::text::heading(data.2.unwrap_or("")).into(),
-                                cosmic::widget::horizontal_space().into(), // todo Context menu for mini player options
-                                                                           // cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                                                           //     "go-up-symbolic",
-                                                                           // ))
-                                                                           // .on_press(Message::ToggleFooter)
-                                                                           // .into(),
+                                cosmic::widget::space().into(), // todo Context menu for mini player options
+                                                                // cosmic::widget::button::icon(cosmic::widget::icon::from_name(
+                                                                //     "go-up-symbolic",
+                                                                // ))
+                                                                // .on_press(Message::ToggleFooter)
+                                                                // .into(),
                             ])
                             .spacing(cosmic::theme::spacing().space_s)
                             .into(),
@@ -732,7 +735,7 @@ impl cosmic::Application for AppModel {
                             )
                             .on_input(|val| Message::ManualScanDirEdit(val))
                             .into(),
-                            cosmic::widget::horizontal_space().into(),
+                            cosmic::widget::space().into(),
                             cosmic::widget::button::text(fl!("folderselect"))
                                 .class(cosmic::theme::style::Button::Standard)
                                 .on_press(Message::ChooseFolder)
@@ -787,7 +790,7 @@ impl cosmic::Application for AppModel {
         }
 
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
-            cosmic::widget::toaster(&self.toasts, cosmic::widget::horizontal_space()).into(),
+            cosmic::widget::toaster(&self.toasts, cosmic::widget::space()).into(),
             body,
         ]))
         .into()
@@ -1202,7 +1205,7 @@ impl cosmic::Application for AppModel {
                 create_database();
 
                 let path = self.config.scan_dir.clone().parse().unwrap();
-                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                return cosmic::Task::stream(cosmic::iced::stream::channel(
                     100,
                     |mut tx| async move {
                         scan_directory(path, &mut tx).await;
@@ -1214,9 +1217,9 @@ impl cosmic::Application for AppModel {
                 .map(cosmic::Action::App);
             }
             Message::AddToDatabase(path) => {
-                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                return cosmic::Task::stream(cosmic::iced::stream::channel(
                     100,
-                    move |mut tx| async move {
+                    move |mut tx: Sender<Message>| async move {
                         let file = fs::File::open(&path).unwrap();
                         let probe = get_probe();
                         let mss = symphonia::core::io::MediaSourceStream::new(
@@ -1703,9 +1706,9 @@ where a.name = ?    ",
                         }
                     }
                     if let Some(view) = dat.viewport {
-                        return cosmic::iced_widget::scrollable::scroll_to(
+                        return cosmic::iced::widget::scrollable::scroll_to(
                             dat.scrollbar_id.clone(),
-                            view.absolute_offset(),
+                            AbsoluteOffset::from(view.absolute_offset()),
                         );
                     } else {
                         return cosmic::task::none();
@@ -1857,8 +1860,9 @@ where a.name = ?    ",
                     }
 
                     let reporting_task_sink = Arc::clone(&self.sink);
-                    let progress_thread = cosmic::Task::stream(
-                        cosmic::iced_futures::stream::channel(1, |mut tx| async move {
+                    let progress_thread = cosmic::Task::stream(cosmic::iced::stream::channel(
+                        1,
+                        |mut tx: Sender<Message>| async move {
                             tokio::task::spawn_blocking(move || loop {
                                 sleep(Duration::from_millis(200));
                                 match tx.try_send(Message::SinkProgress(
@@ -1868,8 +1872,8 @@ where a.name = ?    ",
                                     Err(_) => break,
                                 }
                             });
-                        }),
-                    )
+                        },
+                    ))
                     .abortable();
 
                     match &mut self.task_handle {
@@ -2093,9 +2097,9 @@ where a.name = ?    ",
                 });
             }
             app::Message::AddAlbumToQueue(mut paths) => {
-                return cosmic::Task::stream(cosmic::iced_futures::stream::channel(
+                return cosmic::Task::stream(cosmic::iced::stream::channel(
                     0,
-                    |mut tx| async move {
+                    |mut tx: Sender<Message>| async move {
                         paths.sort_by(|a, b| a.1.cmp(&b.1));
 
                         for file in paths {
@@ -2459,8 +2463,9 @@ where a.name = ?    ",
                     }
 
                     let reporting_task_sink = Arc::clone(&self.sink);
-                    let progress_thread = cosmic::Task::stream(
-                        cosmic::iced_futures::stream::channel(1, |mut tx| async move {
+                    let progress_thread = cosmic::Task::stream(cosmic::iced::stream::channel(
+                        1,
+                        |mut tx: Sender<Message>| async move {
                             tokio::task::spawn_blocking(move || loop {
                                 sleep(Duration::from_millis(200));
                                 match tx.try_send(Message::SinkProgress(
@@ -2470,8 +2475,8 @@ where a.name = ?    ",
                                     Err(_) => break,
                                 }
                             });
-                        }),
-                    )
+                        },
+                    ))
                     .abortable();
 
                     match &mut self.task_handle {
@@ -2502,38 +2507,38 @@ where a.name = ?    ",
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
         struct MPRISSubscription;
 
-        let mpris = cosmic::iced::Subscription::run_with_id(
-            TypeId::of::<MPRISSubscription>(),
-            cosmic::iced_futures::stream::channel(1, |mut output| async move {
-                let rootinterface = MPRISRootInterface::new();
-                let rootlistener = rootinterface.event.listen();
-
-                let playerinterface = MPRISPlayer::new();
-                let playerlistener = playerinterface.event.clone();
-
-                let connection = connection::Builder::session()
-                    .unwrap()
-                    .name("org.mpris.MediaPlayer2.NovaMusic")
-                    .unwrap()
-                    .serve_at("/org/mpris/MediaPlayer2", rootinterface)
-                    .unwrap()
-                    .serve_at("/org/mpris/MediaPlayer2", playerinterface)
-                    .unwrap()
-                    .build()
-                    .await
-                    .unwrap();
-
-                loop {
-                    let listener = playerlistener.listen();
-                    listener.await;
-                    log::info!("Something was requested of player")
-                }
-            }),
-        );
+        // let mpris = cosmic::iced::Subscription::run_with(cosmic::iced_futures::stream::channel(
+        //     1,
+        //     |mut output| async move {
+        //         let rootinterface = MPRISRootInterface::new();
+        //         let rootlistener = rootinterface.event.listen();
+        //
+        //         let playerinterface = MPRISPlayer::new();
+        //         let playerlistener = playerinterface.event.clone();
+        //
+        //         let connection = connection::Builder::session()
+        //             .unwrap()
+        //             .name("org.mpris.MediaPlayer2.NovaMusic")
+        //             .unwrap()
+        //             .serve_at("/org/mpris/MediaPlayer2", rootinterface)
+        //             .unwrap()
+        //             .serve_at("/org/mpris/MediaPlayer2", playerinterface)
+        //             .unwrap()
+        //             .build()
+        //             .await
+        //             .unwrap();
+        //
+        //         loop {
+        //             let listener = playerlistener.listen();
+        //             listener.await;
+        //             log::info!("Something was requested of player")
+        //         }
+        //     },
+        // ));
         cosmic::iced::Subscription::batch(vec![
             // Watch for application configuration changes.
             cosmic::iced::event::listen_with(handle_keybinds),
-            mpris,
+            // mpris,
         ])
     }
 }
@@ -2553,7 +2558,7 @@ fn handle_keybinds(
                 log::info!("[{:?}]", key);
                 match key {
                     cosmic::iced::keyboard::Key::Named(
-                        cosmic::iced::keyboard::key::Named::Space,
+                        cosmic::iced::keyboard::key::Named::Backspace,
                     ) => return Some(Message::PlayPause),
 
                     cosmic::iced::keyboard::Key::Named(
@@ -2595,7 +2600,7 @@ impl AppModel {
             .on_press(Message::OpenRepositoryUrl)
             .padding(0);
 
-        widget::column()
+        widget::Column::new()
             .push(icon)
             .push(title)
             .push(link)
