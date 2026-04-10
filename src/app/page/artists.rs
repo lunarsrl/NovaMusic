@@ -70,8 +70,17 @@ impl Page for ArtistsPage {
 
     fn body(&self, model: &AppModel) -> Element<Message> {
         cosmic::widget::container(cosmic::widget::column::with_children(vec![
-            cosmic::widget::indeterminate_circular().into(),
-            cosmic::widget::indeterminate_linear().into(),
+            cosmic::widget::responsive(|size| {
+                cosmic::widget::text(
+                    format!(
+                        "This container is {}, big due to text {}",
+                        size.height, size.width
+                    )
+                    .to_string(),
+                )
+                .into()
+            })
+            .into(),
         ]))
         .align_y(Alignment::Center)
         .width(Length::Fill)
@@ -79,6 +88,6 @@ impl Page for ArtistsPage {
     }
 
     fn body_style(&self) -> BodyStyle {
-        return BodyStyle::List;
+        return BodyStyle::Grid;
     }
 }

@@ -40,7 +40,7 @@ trait PageBuilder {
 }
 
 impl<T: Page> PageBuilder for T {
-    fn page(&self, model: &AppModel) -> Element<Message> where {
+    fn page(&self, model: &AppModel) -> Element<Message> {
         let sticky_elements = match self.body_style() {
             BodyStyle::Grid => {
                 cosmic::widget::container(cosmic::widget::column::with_children(vec![])).into()

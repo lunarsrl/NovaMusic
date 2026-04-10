@@ -202,6 +202,7 @@ pub enum Message {
     // Page Rendering
     OnNavEnter(ReEnterNavReason),
     ScrollView(Viewport),
+    Return,
 
     // Album Page
     AlbumsDataRecieved(Vec<Album>),
@@ -802,6 +803,17 @@ impl cosmic::Application for AppModel {
     /// on the application's async runtime.
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
+            Message::Return => match self.nav.active_data_mut::<Page>().unwrap() {
+                Page::NowPlaying(_) => {}
+                Page::Artist(_) => {}
+                Page::Albums(albums) => match &mut albums.page_state {
+                    AlbumPageState::Subpage(_) => albums.page_state = AlbumPageState::Loading,
+                    _ => {}
+                },
+                Page::Playlists(_) => {}
+                Page::Tracks(_) => {}
+                Page::Genre(_) => {}
+            },
             Message::SearchInput(val) => self.search_field = val,
             Message::SearchClear => {
                 self.search_active = false;
@@ -1357,16 +1369,10 @@ impl cosmic::Application for AppModel {
                         AlbumPageState::Loading => {
                             return albumspage.load_page_data();
                         }
-                        AlbumPageState::Loaded => {
-                            return task::none();
-                        }
                         AlbumPageState::Search(_) => {
                             return task::none();
                         }
-                        AlbumPageState::Waiting => {
-                            return task::none();
-                        }
-                        AlbumPageState::Album(_) => {
+                        AlbumPageState::Subpage(_) => {
                             return task::none();
                         }
                     },
@@ -1697,14 +1703,6 @@ where a.name = ?    ",
                     .data_mut::<Page>(self.albumsid)
                     .expect("Should always be intialized")
                 {
-                    match dat.has_fully_loaded {
-                        true => {
-                            dat.page_state = AlbumPageState::Loaded;
-                        }
-                        false => {
-                            dat.page_state = AlbumPageState::Loading;
-                        }
-                    }
                     if let Some(view) = dat.viewport {
                         return cosmic::iced::widget::scrollable::scroll_to(
                             dat.scrollbar_id.clone(),
@@ -1722,7 +1720,7 @@ where a.name = ?    ",
                 match self.nav.active_data_mut::<Page>().unwrap() {
                     Page::Artist(page) => page.page_state = ArtistPageState::Album(fullalbum),
                     Page::Albums(page) => {
-                        page.page_state = AlbumPageState::Album(fullalbum);
+                        page.page_state = AlbumPageState::Subpage(fullalbum);
                     }
                     _ => log::error!("Accessing page from a strange state"),
                 }
@@ -1733,7 +1731,7 @@ where a.name = ?    ",
                 }
 
                 Page::Albums(albumpage) => {
-                    albumpage.page_state = AlbumPageState::Album(FullAlbum::from_db(dat.0, dat.1))
+                    albumpage.page_state = AlbumPageState::Subpage(FullAlbum::from_db(dat.0, dat.1))
                 }
                 _ => {
                     todo!()

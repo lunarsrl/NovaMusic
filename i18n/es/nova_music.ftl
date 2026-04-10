@@ -72,6 +72,8 @@ TrackInputPlaceholder = Informacíon sobre alguna pista
 SearchFilter = Busca por
 SearchFilterSpecify = Por {$filter}
 
+# Add Track Interactions
+
 # Settings Page
 MusicDirectory = Directorio de Música
 CurrentScanResults = Resultados del escaneo

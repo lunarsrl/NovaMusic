@@ -50,7 +50,6 @@ PlaylistInputPlaceholder = Enter playlist name
 
 # Common Buttons
 Cancel = Cancel
-AddToQueue = Add To Queue
 folderselect = Select folder
 
 # Home Page
@@ -75,6 +74,12 @@ TrackLibrary = Track Library
 TrackInputPlaceholder = Enter track information
 SearchFilter = Search By
 SearchFilterSpecify = By {$filter}
+
+
+# Add Track Interactions
+ReplaceQueue = Replace Queue
+AddToQueue = Add To Queue
+
 
 # Settings Page
 MusicDirectory = Music Directory

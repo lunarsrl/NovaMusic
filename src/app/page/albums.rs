@@ -1,7 +1,10 @@
+mod fullalbum;
+
 // SPDX-License-Identifier: GPL-2.0-or-later
 use crate::app::page::tracks::SearchResult;
 use crate::app::page::BodyStyle::Grid;
 use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder};
+use crate::app::subpage::{Subpage, SubpageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
 use crate::fl;
 use colored::Colorize;
@@ -132,13 +135,11 @@ impl Page for AlbumPage {
                 .height(Length::Fill)
                 .into();
             }
-            AlbumPageState::Loaded => cosmic::widget::text("tired").into(),
-            AlbumPageState::Album(a) => {
+            AlbumPageState::Subpage(a) => {
                 cosmic::widget::text::heading(format!("{} | {}", a.album.name, a.album.artist))
                     .into()
             }
             AlbumPageState::Search(_) => cosmic::widget::text("tired").into(),
-            AlbumPageState::Waiting => cosmic::widget::text("tired").into(),
         }
     }
 
@@ -149,14 +150,9 @@ impl Page for AlbumPage {
 
 #[derive(Clone, Debug)]
 pub enum AlbumPageState {
-    /// Top level state, view of albums that have been loaded thus far
     Loading,
-    /// Top level state, view once all items have been loaded, todo: for cache purposes eventually probably
-    Loaded,
-    /// State that shows view of all tracks of an album
-    Album(FullAlbum),
+    Subpage(FullAlbum),
     Search(Vec<SearchResult>),
-    Waiting,
 }
 
 impl AlbumPage {
@@ -171,8 +167,8 @@ impl AlbumPage {
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
-        match self.page_state {
-            AlbumPageState::Album(album) => {}
+        match &self.page_state {
+            AlbumPageState::Subpage(album) => album.page(model),
             _ => self.page(model),
         }
     }
@@ -270,8 +266,8 @@ impl Album {
 
 #[derive(Debug, Clone)]
 pub struct FullAlbum {
-    album: Album,
-    tracks: Vec<Track>,
+    pub album: Album,
+    pub tracks: Vec<Track>,
 }
 
 impl FullAlbum {
@@ -309,9 +305,9 @@ WHERE album.name = ?
             row_num = conn
                 .query_row(
                     "
-SELECT * FROM album
-    left join artists art on album.artist_id = art.id
-WHERE album.name = ? and art.name = ?
+                    SELECT * FROM album
+                        left join artists art on album.artist_id = art.id
+                    WHERE album.name = ? and art.name = ?
             ",
                     [title.as_str(), artist.as_str()],
                     |row| {
