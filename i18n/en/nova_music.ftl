@@ -77,6 +77,7 @@ SearchFilterSpecify = By {$filter}
 
 
 # Add Track Interactions
+PlayNow = Play Now
 ReplaceQueue = Replace Queue
 AddToQueue = Add To Queue
 

@@ -243,10 +243,10 @@ impl Album {
                 cosmic::widget::column::with_children(vec![
                     art,
                     cosmic::widget::text::caption_heading(self.name.to_string())
-                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(2)))
+                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
                         .into(),
                     cosmic::widget::text::caption(self.artist.to_string())
-                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(2)))
+                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
                         .into(),
                 ])
                 .align_x(cosmic::iced::Alignment::Center),
@@ -280,8 +280,6 @@ impl FullAlbum {
         )
         .expect("Nothing");
 
-        log::info!("After DB");
-
         let row_num;
         if artist.is_empty() {
             row_num = conn
@@ -294,8 +292,8 @@ WHERE album.name = ?
                     |row| {
                         Ok((
                             row.get::<usize, u32>(0),
-                            row.get::<usize, u32>(3),
-                            row.get::<usize, u32>(4),
+                            row.get::<&str, u32>("disc_number"),
+                            row.get::<&str, u32>("track_number"),
                             row.get::<&str, Vec<u8>>("album_cover"),
                         ))
                     },
@@ -313,8 +311,8 @@ WHERE album.name = ?
                     |row| {
                         Ok((
                             row.get::<usize, u32>(0),
-                            row.get::<usize, u32>(3),
-                            row.get::<usize, u32>(4),
+                            row.get::<&str, u32>("disc_number"),
+                            row.get::<&str, u32>("track_number"),
                             row.get::<&str, Vec<u8>>("album_cover"),
                         ))
                     },
@@ -325,7 +323,7 @@ WHERE album.name = ?
         let album = Album {
             name: title,
             artist,
-            disc_number: row_num.1.unwrap_or(0),
+            disc_number: row_num.1.unwrap_or(1),
             track_number: row_num.2.unwrap_or(0),
             cover_art: match row_num.3 {
                 Ok(bytes) => Some(cosmic::widget::image::Handle::from_bytes(bytes)),
@@ -334,9 +332,7 @@ WHERE album.name = ?
         };
 
         let mut track_vector = vec![];
-
         // Select all tracks with a certain album ID and count them
-
         let mut value = conn
             .prepare("select * from album_tracks where album_id = ?")
             .expect("error preparing sql to fetch album tracks of a certain album id");
@@ -347,7 +343,6 @@ WHERE album.name = ?
         while let Some(row) = rows.next().unwrap() {
             let track_num = row.get::<usize, u32>(3).unwrap();
             let disc_num = row.get::<usize, u32>(4).unwrap();
-
             let track_dat = match row.get::<usize, u32>(2) {
                 Ok(val) => conn
                     .query_row("SELECT name, path FROM track WHERE id = ?", [val], |row| {

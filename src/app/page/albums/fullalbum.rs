@@ -1,8 +1,11 @@
-use crate::app::page::albums::FullAlbum;
+use crate::app::page::albums::{FullAlbum, Track};
 use crate::app::subpage::Subpage;
 use crate::app::{AppModel, Message};
+use crate::fl;
+use cosmic::iced::alignment::Vertical;
 use cosmic::iced::{ContentFit, Length};
 use cosmic::Element;
+use std::collections::BTreeMap;
 
 impl Subpage for FullAlbum {
     fn header_title(&self) -> String {
@@ -31,6 +34,106 @@ impl Subpage for FullAlbum {
     }
 
     fn body(&self, model: &AppModel) -> Element<Message> {
-        cosmic::widget::text("are we vibing with the subpage layouts").into()
+        let mut discs: BTreeMap<u32, Vec<Element<Message>>> = BTreeMap::new();
+        // let mut discs: Vec<Vec<Element<Message>>> =
+        //     Vec::with_capacity(self.album.disc_number as usize);
+
+        for track in &self.tracks {
+            if discs.contains_key(&track.disc_number) {
+                discs
+                    .get_mut(&track.disc_number)
+                    .unwrap()
+                    .push(display_track(track))
+            } else {
+                let new_disc: Vec<Element<Message>> = Vec::new();
+                discs.insert(track.disc_number, new_disc);
+                discs
+                    .get_mut(&track.disc_number)
+                    .unwrap()
+                    .push(display_track(track))
+            }
+        }
+
+        let mut column = cosmic::widget::Column::with_capacity(self.album.track_number as usize);
+
+        for (disc, tracks) in discs.into_iter() {
+            column = column.push(display_disc(disc));
+            for track in tracks {
+                column = column.push(track)
+            }
+        }
+
+        return column.into();
     }
+}
+
+fn display_track(track: &Track) -> Element<Message> {
+    let row = cosmic::widget::row::with_children(vec![
+        cosmic::widget::text::text(format!(
+            "{}. {}",
+            track.track_number,
+            track.name.to_string(),
+        ))
+        .into(),
+        cosmic::widget::space::horizontal().into(),
+        cosmic::widget::row::with_children(vec![
+            cosmic::iced::widget::tooltip(
+                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                    cosmic::widget::icon::from_name("playlist-symbolic"),
+                ))
+                .class(cosmic::theme::Button::Standard),
+                cosmic::widget::container(cosmic::widget::text(fl!("AddToQueue")))
+                    .padding(cosmic::theme::spacing().space_xxxs)
+                    .class(cosmic::theme::Container::Tooltip),
+                cosmic::widget::tooltip::Position::Top,
+            )
+            .into(),
+            cosmic::iced::widget::tooltip(
+                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                    cosmic::widget::icon::from_name("media-playback-start-symbolic"),
+                ))
+                .class(cosmic::theme::Button::Standard),
+                cosmic::widget::container(cosmic::widget::text(fl!("PlayNow")))
+                    .padding(cosmic::theme::spacing().space_xxxs)
+                    .class(cosmic::theme::Container::Tooltip),
+                cosmic::widget::tooltip::Position::Top,
+            )
+            .into(),
+        ])
+        .spacing(cosmic::theme::spacing().space_xxs)
+        .into(),
+    ])
+    .padding(cosmic::iced::padding::vertical(
+        cosmic::theme::spacing().space_xxs,
+    ))
+    .align_y(Vertical::Center)
+    .into();
+
+    return cosmic::widget::column::with_children(vec![
+        row,
+        cosmic::widget::divider::horizontal::light().into(),
+    ])
+    .into();
+}
+
+fn display_disc(index: u32) -> Element<'static, Message> {
+    cosmic::widget::column::with_children(vec![
+        cosmic::widget::divider::horizontal::default().into(),
+        cosmic::widget::row::with_children(vec![
+            cosmic::widget::text::heading(fl!("AlbumDiscNumber", number = index.to_string()))
+                .into(),
+            cosmic::widget::space::horizontal().into(),
+            cosmic::widget::button::text(fl!("AddToQueue"))
+                .class(cosmic::widget::button::ButtonClass::Link)
+                .into(),
+            cosmic::widget::button::text(fl!("ReplaceQueue"))
+                .class(cosmic::widget::button::ButtonClass::Link)
+                .into(),
+        ])
+        .align_y(Vertical::Center)
+        .into(),
+        cosmic::widget::divider::horizontal::default().into(),
+    ])
+    .padding(cosmic::iced::padding::top(cosmic::theme::spacing().space_s))
+    .into()
 }
