@@ -96,6 +96,7 @@ impl<T: Subpage> SubpageBuilder for T {
                     cosmic::theme::spacing().space_s,
                 ])),
         )
+        .height(Length::Fill)
         .into()
     }
 }

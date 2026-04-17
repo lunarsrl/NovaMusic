@@ -100,14 +100,12 @@ impl Page for TrackPage {
                     tracks.push(
                         cosmic::widget::container::Container::new(display_element)
                             .align_y(Vertical::Center)
-                            .class(cosmic::theme::Container::Primary)
                             .into(),
                     )
                 } else {
                     tracks.push(
                         cosmic::widget::container::Container::new(display_element)
                             .align_y(Vertical::Center)
-                            .class(cosmic::theme::Container::List)
                             .into(),
                     )
                 }
@@ -199,7 +197,7 @@ impl TrackPage {
 impl AppTrack {
     pub fn display<'a>(self) -> Element<'a, Message> {
         cosmic::widget::column::with_children(vec![
-            cosmic::widget::divider::horizontal::default().into(),
+            cosmic::widget::divider::horizontal::light().into(),
             cosmic::iced::widget::hover(
                 // Normal Display
                 cosmic::widget::row::with_children(vec![
@@ -232,6 +230,7 @@ impl AppTrack {
                 .height(Length::Fixed(64.0))
                 .align_y(Vertical::Center),
                 // Display on hover, where the controls should be
+                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 cosmic::widget::container(
                     cosmic::widget::row::with_children(vec![
                         widget::column![
@@ -291,9 +290,9 @@ impl AppTrack {
                     .height(Length::Fixed(64.0))
                     .align_y(Vertical::Center),
                 )
-                .class(cosmic::theme::Container::Secondary),
+                .class(cosmic::theme::Container::Card),
             ),
-            cosmic::widget::divider::horizontal::default().into(),
+            cosmic::widget::divider::horizontal::light().into(),
         ])
         .into()
     }

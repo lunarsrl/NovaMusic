@@ -74,6 +74,7 @@ fn display_track(track: &Track) -> Element<Message> {
             track.track_number,
             track.name.to_string(),
         ))
+        .width(Length::FillPortion(1))
         .into(),
         cosmic::widget::space::horizontal().into(),
         cosmic::widget::row::with_children(vec![
