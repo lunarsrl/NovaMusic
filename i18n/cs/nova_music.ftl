@@ -24,7 +24,7 @@ scandir = Skenovat adresář
 pathtofolder = "Cesta ke složce"
 
 # First Time Setup
-currentdir = Současný adresář
+currentdir = Aktuální adresář
 firsttimetitle = Vítejte v Nova Music!
 firsttimebody = Vyberte prosím složku ke skenování pro přípravu Nova Music.
 firsttimeprimary = Skenovat složku a pokračovat
@@ -73,7 +73,7 @@ SearchFilterSpecify = Pomocí {$filter}
 
 # Settings Page
 MusicDirectory = Adresář hudby
-CurrentScanResults = Výsledky současného skenování
+CurrentScanResults = Výsledky aktuálního skenování
 FilesScanned = Naskenované soubory
 MusicScanning = Skenování hudby
 FullRescan = Úplné přeskenování
@@ -84,7 +84,7 @@ GridItemSize = Velikost položky v mřížce
 MusicPlayer = Přehrávač hudby
 AppVolume = Hlasitost aplikace {$volume}
 FooterToggle = Přepnout mini-přehrávač
-Theme = Téma
+Theme = Motiv
 
 # Error
 SearchFailed = Vyhledávání selhalo!
