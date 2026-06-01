@@ -168,6 +168,7 @@ pub enum LoopState {
     LoopingTrack,
     LoopingQueue,
     NotLooping,
+    RandomShuffle,
 }
 
 #[derive(Debug, Clone)]
@@ -670,6 +671,11 @@ impl cosmic::Application for AppModel {
                                         LoopState::NotLooping => cosmic::widget::icon::from_name(
                                             "media-playlist-consecutive-symbolic",
                                         ),
+                                        LoopState::RandomShuffle => {
+                                            cosmic::widget::icon::from_name(
+                                                "media-playlist-shuffle-symbolic",
+                                            )
+                                        }
                                     })
                                     .on_press(Message::ChangeLoopState)
                                     .into(),
@@ -1109,7 +1115,7 @@ impl cosmic::Application for AppModel {
             }
             Message::ChangeLoopState => match self.loop_state {
                 LoopState::LoopingTrack => {
-                    self.loop_state = LoopState::NotLooping;
+                    self.loop_state = LoopState::RandomShuffle;
                 }
                 LoopState::LoopingQueue => {
                     self.loop_state = LoopState::LoopingTrack;
@@ -1117,6 +1123,7 @@ impl cosmic::Application for AppModel {
                 LoopState::NotLooping => {
                     self.loop_state = LoopState::LoopingQueue;
                 }
+                LoopState::RandomShuffle => self.loop_state = LoopState::NotLooping,
             },
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
@@ -2003,6 +2010,9 @@ where a.name = ?    ",
                                     cosmic::task::future(
                                         async move { Message::AddTrackToSink(file) },
                                     )
+                                }
+                                LoopState::RandomShuffle => {
+                                    todo!("Shuffle feature")
                                 }
                             }
                         }

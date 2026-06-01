@@ -83,7 +83,7 @@ impl<T: Subpage> SubpageBuilder for T {
             .into(),
         ])
         .height(Length::Fixed(220.0))
-        .spacing(cosmic::theme::spacing().space_s)
+        .spacing(cosmic::theme::spacing().space_xs)
         .into()
     }
 

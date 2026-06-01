@@ -196,30 +196,30 @@ impl TrackPage {
 
 impl AppTrack {
     pub fn display<'a>(self) -> Element<'a, Message> {
-        cosmic::widget::column::with_children(vec![
-            cosmic::widget::divider::horizontal::light().into(),
-            cosmic::iced::widget::hover(
-                // Normal Display
+        let space_main = 300.0;
+        let space_mod = 150.0;
+        cosmic::widget::column::with_children(vec![cosmic::iced::widget::hover(
+            // Normal Display
+            cosmic::widget::container(cosmic::widget::column![
+                cosmic::widget::divider::horizontal::default(),
                 cosmic::widget::row::with_children(vec![
                     widget::column![
                         cosmic::widget::text::heading(self.title.to_string())
-                            .width(Length::Fixed(300.0))
+                            .width(Length::Fixed(space_main))
                             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
                         cosmic::widget::text::text(self.artist.to_string())
                             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
-                            .width(Length::Fixed(300.0)),
+                            .width(Length::Fixed(space_main)),
                         cosmic::widget::text::text(self.album_title.to_string())
-                            .width(Length::Fixed(300.0))
+                            .width(Length::Fixed(space_main))
                             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
                     ]
                     .into(),
-                    cosmic::widget::space().width(Length::Fill).into(),
                     cosmic::widget::button::text("Mod Entry 1")
-                        .width(Length::Fixed(150.0))
+                        .width(Length::Fixed(space_mod))
                         .into(),
-                    cosmic::widget::space().width(Length::Fill).into(),
                     cosmic::widget::button::text("Mod Entry 2")
-                        .width(Length::Fixed(150.0))
+                        .width(Length::Fixed(space_mod))
                         .into(),
                     cosmic::widget::space().width(Length::Fill).into(),
                 ])
@@ -229,71 +229,74 @@ impl AppTrack {
                 ]))
                 .height(Length::Fixed(64.0))
                 .align_y(Vertical::Center),
-                // Display on hover, where the controls should be
-                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                cosmic::widget::container(
+                cosmic::widget::divider::horizontal::default(),
+            ]),
+            // Display on hover, where the controls should be
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            cosmic::widget::container(cosmic::widget::column![
+                cosmic::widget::divider::horizontal::light(),
+                cosmic::widget::row::with_children(vec![
+                    widget::column![
+                        cosmic::widget::text::heading(self.title.to_string())
+                            .width(Length::FillPortion(1))
+                            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
+                        cosmic::widget::text::text(self.artist.to_string())
+                            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
+                            .width(Length::FillPortion(1)),
+                        cosmic::widget::text::text(self.album_title.to_string())
+                            .width(Length::FillPortion(1))
+                            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
+                    ]
+                    .into(),
                     cosmic::widget::row::with_children(vec![
-                        widget::column![
-                            cosmic::widget::text::heading(self.title.to_string())
-                                .width(Length::Fixed(300.0)),
-                            cosmic::widget::text::text(self.artist).width(Length::Fixed(300.0)),
-                            cosmic::widget::text::text(self.album_title)
-                                .width(Length::Fixed(300.0)),
-                        ]
+                        cosmic::iced::widget::tooltip(
+                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                cosmic::widget::icon::from_name("playlist-symbolic"),
+                            ))
+                            .class(cosmic::theme::Button::Standard),
+                            cosmic::widget::container("Add to playlist")
+                                .padding(cosmic::theme::spacing().space_xxxs)
+                                .class(cosmic::theme::Container::Tooltip),
+                            cosmic::widget::tooltip::Position::Top,
+                        )
                         .into(),
-                        cosmic::widget::space().width(Length::Fill).into(),
-                        cosmic::widget::row::with_children(vec![
-                            // left
-                            cosmic::iced::widget::tooltip(
-                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                    cosmic::widget::icon::from_name("playlist-symbolic"),
-                                ))
-                                .class(cosmic::theme::Button::Standard),
-                                cosmic::widget::container("Add to playlist")
-                                    .padding(cosmic::theme::spacing().space_xxxs)
-                                    .class(cosmic::theme::Container::Tooltip),
-                                cosmic::widget::tooltip::Position::Top,
-                            )
-                            .into(),
-                            cosmic::iced::widget::tooltip(
-                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                    cosmic::widget::icon::from_name("list-add-symbolic"),
-                                ))
-                                .class(cosmic::theme::Button::Standard),
-                                cosmic::widget::container("Add to queue")
-                                    .padding(cosmic::theme::spacing().space_xxxs)
-                                    .class(cosmic::theme::Container::Tooltip),
-                                cosmic::widget::tooltip::Position::Top,
-                            )
-                            .into(),
-                            cosmic::iced::widget::tooltip(
-                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                    cosmic::widget::icon::from_name(
-                                        "media-playback-start-symbolic",
-                                    ),
-                                ))
-                                .class(cosmic::theme::Button::Standard),
-                                cosmic::widget::container("Play now")
-                                    .padding(cosmic::theme::spacing().space_xxxs)
-                                    .class(cosmic::theme::Container::Tooltip),
-                                cosmic::widget::tooltip::Position::Top,
-                            )
-                            .into(),
-                        ])
-                        .spacing(cosmic::theme::spacing().space_xxxs)
-                        .into(), //right
+                        cosmic::iced::widget::tooltip(
+                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                cosmic::widget::icon::from_name("list-add-symbolic"),
+                            ))
+                            .class(cosmic::theme::Button::Standard),
+                            cosmic::widget::container("Add to queue")
+                                .padding(cosmic::theme::spacing().space_xxxs)
+                                .class(cosmic::theme::Container::Tooltip),
+                            cosmic::widget::tooltip::Position::Top,
+                        )
+                        .into(),
+                        cosmic::iced::widget::tooltip(
+                            cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
+                                cosmic::widget::icon::from_name("media-playback-start-symbolic"),
+                            ))
+                            .class(cosmic::theme::Button::Standard),
+                            cosmic::widget::container("Play now")
+                                .padding(cosmic::theme::spacing().space_xxxs)
+                                .class(cosmic::theme::Container::Tooltip),
+                            cosmic::widget::tooltip::Position::Top,
+                        )
+                        .into(),
                     ])
-                    .padding(cosmic::iced::core::padding::Padding::from([
-                        0,
-                        cosmic::theme::spacing().space_xxs,
-                    ]))
-                    .height(Length::Fixed(64.0))
-                    .align_y(Vertical::Center),
-                )
-                .class(cosmic::theme::Container::Card),
-            ),
-            cosmic::widget::divider::horizontal::light().into(),
-        ])
+                    .spacing(cosmic::theme::spacing().space_xxxs)
+                    .into(), //right
+                ])
+                .spacing(cosmic::theme::spacing().space_s)
+                .padding(cosmic::iced::core::padding::Padding::from([
+                    0,
+                    cosmic::theme::spacing().space_xxs,
+                ]))
+                .height(Length::Fixed(64.0))
+                .align_y(Vertical::Center),
+                cosmic::widget::divider::horizontal::light(),
+            ])
+            .class(cosmic::theme::Container::Card),
+        )])
         .into()
     }
 }

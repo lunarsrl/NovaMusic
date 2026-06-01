@@ -54,32 +54,8 @@ impl<T: Page> PageBuilder for T {
         };
 
         match self.body_style() {
-            BodyStyle::Grid => {
-                cosmic::widget::container(cosmic::widget::column::with_children(vec![
-                    self.header(),
-                    cosmic::widget::container(sticky_elements)
-                        .padding(iced::core::padding::Padding::from([
-                            0,
-                            cosmic::theme::spacing().space_xxs,
-                        ]))
-                        .into(),
-                    cosmic::widget::container(self.body(model))
-                        .padding(iced::core::padding::Padding::from([
-                            0,
-                            cosmic::theme::spacing().space_xxs,
-                        ]))
-                        .into(),
-                ]))
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .padding(iced::core::padding::Padding::from([
-                    0,
-                    cosmic::theme::spacing().space_s,
-                ]))
-                .into()
-            }
-            BodyStyle::List => {
-                cosmic::widget::container(cosmic::widget::column::with_children(vec![
+            BodyStyle::Grid => cosmic::widget::container(
+                cosmic::widget::column::with_children(vec![
                     self.header(),
                     cosmic::widget::container(sticky_elements)
                         .padding(iced::core::padding::Padding::from([
@@ -88,42 +64,57 @@ impl<T: Page> PageBuilder for T {
                         ]))
                         .into(),
                     cosmic::widget::scrollable::vertical(
-                        cosmic::widget::container(self.body(model)).padding(
-                            iced::core::padding::Padding::from([
+                        cosmic::widget::container(self.body(model))
+                            .padding(iced::core::padding::Padding::from([
                                 0,
-                                cosmic::theme::spacing().space_xxs,
-                            ]),
-                        ),
+                                cosmic::theme::spacing().space_s,
+                            ]))
+                            .height(Length::Fill)
+                            .width(Length::Fill),
                     )
-                    .height(Length::Shrink)
-                    .on_scroll(|a| Message::ScrollView(a))
                     .into(),
-                ]))
-                .height(Length::Fill)
-                .width(Length::Fill)
+                ])
+                .spacing(cosmic::theme::spacing().space_xs),
+            )
+            .into(),
+            BodyStyle::List => cosmic::widget::column::with_children(vec![
+                cosmic::widget::column::with_children(vec![
+                    self.header(),
+                    cosmic::widget::container(sticky_elements).into(),
+                ])
                 .padding(iced::core::padding::Padding::from([
                     0,
                     cosmic::theme::spacing().space_s,
                 ]))
-                .into()
-            }
+                .into(),
+                cosmic::widget::scrollable::vertical(
+                    cosmic::widget::container(self.body(model))
+                        .padding(iced::core::padding::Padding::from([
+                            0,
+                            cosmic::theme::spacing().space_s,
+                        ]))
+                        .height(Length::Fill)
+                        .width(Length::Fill),
+                )
+                .height(Length::Shrink)
+                .on_scroll(|a| Message::ScrollView(a))
+                .into(),
+            ])
+            .into(),
         }
     }
 
     fn header(&self) -> Element<Message> {
         cosmic::widget::column::with_children(vec![
-            cosmic::widget::row::with_children(vec![
-                cosmic::widget::text::title3(self.title())
-                    .width(Length::FillPortion(2))
-                    .into(),
-                cosmic::widget::space().width(Length::Shrink).into(),
-            ])
+            cosmic::widget::row::with_children(vec![cosmic::widget::text::title3(self.title())
+                .width(Length::FillPortion(2))
+                .into()])
             .align_y(Alignment::Center)
-            .spacing(cosmic::theme::spacing().space_s)
+            .spacing(cosmic::theme::spacing().space_xxs)
             .into(),
-            cosmic::widget::divider::horizontal::heavy().into(),
+            cosmic::widget::divider::horizontal::default().into(),
         ])
-        .spacing(cosmic::theme::spacing().space_s)
+        .spacing(cosmic::theme::spacing().space_xxs)
         .into()
     }
 }

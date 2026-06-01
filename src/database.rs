@@ -5,6 +5,7 @@ use cosmic::dialog::file_chooser::open::file;
 use cosmic::Application;
 use regex::{Match, Regex};
 use rusqlite::fallible_iterator::FallibleIterator;
+use rusqlite::ffi::sqlite_uint64;
 use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
@@ -21,18 +22,18 @@ struct Album {
     name: String,
     artist_id: Option<u32>,
     num_of_discs: u32,
-    num_of_tracks: u64,
+    num_of_tracks: u32,
 }
 
 struct Track {
-    id: u64,
+    id: u32,
     genres: Option<Vec<String>>,
     name: Option<String>,
 }
 
 struct AlbumTracks {
-    track_number: u64,
-    disc_number: u64,
+    track_number: u32,
+    disc_number: u32,
 }
 
 pub fn create_database() {
@@ -256,12 +257,12 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                         }
 
                         album_tracks.disc_number = final_val
-                            .parse::<u64>()
+                            .parse::<u32>()
                             .expect(format!("Invalid track number: {}", final_val).as_str());
                     }
                     Value::UnsignedInt(val) => {
                         // log::info!("{}: {}", "DISC NUMBER unsigned int".red(), val);
-                        album_tracks.disc_number = val
+                        album_tracks.disc_number = val as u32
                     }
                     _ => {
                         // log::error!("DISC NUMBER");
@@ -379,10 +380,10 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                         }
 
                         album_tracks.track_number = final_val
-                            .parse::<u64>()
+                            .parse::<u32>()
                             .expect(format!("Invalid track number: {}", final_val).as_str());
                     }
-                    Value::UnsignedInt(val) => album_tracks.track_number = val,
+                    Value::UnsignedInt(val) => album_tracks.track_number = val as u32,
 
                     Value::Binary(_) => {
                         // log::info!("{}", "TRACK NUMBER binary".red());
@@ -411,7 +412,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                 },
                 StandardTagKey::TrackTotal => match tag.value {
                     Value::String(val) => {
-                        album.num_of_tracks = val.parse::<u64>().unwrap();
+                        album.num_of_tracks = val.parse::<u32>().unwrap();
                     }
                     _ => {
                         // log::error!("Track number is not a number");
@@ -476,7 +477,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
     )
     .unwrap();
 
-    track.id = conn.last_insert_rowid() as u64;
+    track.id = conn.last_insert_rowid() as u32;
 
     if let Some(genres) = track.genres {
         for genre in genres {
@@ -493,7 +494,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
                     );
                     match conn.execute(
                         "insert into track_genres (track_id, genre_id) values (?, ?)",
-                        [track.id, row_id as u64],
+                        [track.id, row_id],
                     ) {
                         Ok(v) => {
                             log::info!("TRACKID: {}", track.id);
@@ -624,7 +625,7 @@ pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) 
 
 fn insert_track_to_grouping(
     album: &Album,
-    track_id: u64,
+    track_id: u32,
     image_dat: Option<Box<[u8]>>,
     conn: &Connection,
 ) {

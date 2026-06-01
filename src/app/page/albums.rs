@@ -8,6 +8,7 @@ use crate::app::subpage::{Subpage, SubpageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
 use crate::fl;
 use colored::Colorize;
+use cosmic::iced::application::IntoBoot;
 use cosmic::iced::core::text::EllipsizeHeightLimit;
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::widget::text::Ellipsize;
@@ -127,10 +128,7 @@ impl Page for AlbumPage {
                         }
                     }
 
-                    return cosmic::widget::scrollable::vertical(grid)
-                        .height(Length::Shrink)
-                        .on_scroll(|a| Message::ScrollView(a))
-                        .into();
+                    return grid.into();
                 }))
                 .height(Length::Fill)
                 .into();
@@ -278,10 +276,11 @@ impl FullAlbum {
                 .join("dev.lunarsrl.NovaMusic")
                 .join("nova_music.db"),
         )
-        .expect("Nothing");
+        .expect("Failed to create database connection");
 
+        log::info!("{}", artist);
         let row_num;
-        if artist.is_empty() {
+        if artist.is_empty() || artist == "N/A" {
             row_num = conn
                 .query_row(
                     "
@@ -310,14 +309,14 @@ WHERE album.name = ?
                     [title.as_str(), artist.as_str()],
                     |row| {
                         Ok((
-                            row.get::<usize, u32>(0),
+                            row.get::<&str, u32>("id"),
                             row.get::<&str, u32>("disc_number"),
                             row.get::<&str, u32>("track_number"),
                             row.get::<&str, Vec<u8>>("album_cover"),
                         ))
                     },
                 )
-                .unwrap();
+                .unwrap()
         }
 
         let album = Album {
