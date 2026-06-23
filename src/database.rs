@@ -148,15 +148,11 @@ pub fn create_database() {
     .unwrap();
 }
 //todo: Theres probably a better way to do this.
-pub async fn create_database_entry(metadata_tags: Vec<Tag>, filepath: &PathBuf) {
-    let conn = rusqlite::Connection::open(
-        dirs::data_local_dir()
-            .unwrap()
-            .join(crate::app::AppModel::APP_ID)
-            .join("nova_music.db"),
-    )
-    .unwrap();
-
+pub fn create_database_entry(
+    metadata_tags: Vec<Tag>,
+    filepath: &PathBuf,
+    conn: &rusqlite::Transaction,
+) {
     let mut track = Track {
         id: 0,
         genres: None,

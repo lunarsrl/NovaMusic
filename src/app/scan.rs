@@ -1,35 +1,108 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::app::Message;
-use cosmic::iced::futures::channel::mpsc::Sender;
-use futures_util::SinkExt;
-use std::path::PathBuf;
+use crate::app::ReEnterNavReason;
+use crate::database::create_database_entry;
+use cosmic::Application;
+use rusqlite::Transaction;
+use std::fs;
+use std::path::{Path, PathBuf};
+use symphonia::default::get_probe;
 
-pub async fn scan_directory(path: PathBuf, tx: &mut Sender<Message>) {
+pub fn scan_directory<'a>(path: PathBuf, tx: &Transaction) {
     let mut index = 0;
-    read_dir(path, tx, &mut index).await
+    read_dir(path, tx, &mut index);
 }
 
-async fn read_dir(path: PathBuf, tx: &mut Sender<Message>, index: &mut u32) {
+fn read_dir<'a>(path: PathBuf, tx: &Transaction, index: &mut u32) {
     if let Ok(dir) = path.read_dir() {
         for entry in dir {
             if let Ok(entry) = entry {
                 let path = entry.path();
                 if let Ok(entry) = entry.metadata() {
                     if entry.is_dir() {
-                        Box::pin(read_dir(path, tx, index)).await;
+                        read_dir(path, tx, index)
                     } else {
-                        tx.send(Message::UpdateScanDirSize).await.unwrap();
-                        tx.send(Message::AddToDatabase(path.clone())).await.unwrap();
+                        handle_file(tx, path)
                     }
                 }
             }
         }
     } else {
-        tx.send(Message::ToastError(String::from(format!(
-            "Error at path: {}",
-            path.to_string_lossy().to_string()
-        ))))
-        .await;
+        println!("Error at path: {}", path.to_string_lossy().to_string())
+    }
+}
+
+fn handle_file(tx: &rusqlite::Transaction, path: PathBuf) {
+    let file = fs::File::open(&path).unwrap();
+    let probe = get_probe();
+    let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());
+
+    if let Ok(mut reader) = probe.format(
+        &Default::default(),
+        mss,
+        &Default::default(),
+        &Default::default(),
+    ) {
+        if let Some(mdat) = reader.metadata.get() {
+            if let Some(tags) = mdat.current() {
+                let tags = tags
+                    .tags()
+                    .iter()
+                    .filter(|a| a.is_known())
+                    .map(|a| a.clone())
+                    .collect();
+                create_database_entry(tags, &path, tx);
+            }
+        } else {
+            let mdat = reader.format.metadata();
+
+            if let Some(tags) = mdat.current() {
+                let tags = tags
+                    .tags()
+                    .iter()
+                    .filter(|a| a.is_known())
+                    .map(|a| a.clone())
+                    .collect();
+                create_database_entry(tags, &path, tx);
+            }
+        }
+    } else {
+        if path.with_extension("m3u") == path || path.with_extension("m3u8") == path {
+            let mut dir = PathBuf::new();
+
+            if dirs::data_local_dir()
+                .unwrap()
+                .join(crate::app::AppModel::APP_ID)
+                .join("Playlists")
+                .exists()
+            {
+                dir = dirs::data_local_dir()
+                    .unwrap()
+                    .join(crate::app::AppModel::APP_ID)
+                    .join("Playlists");
+            } else {
+                match std::fs::create_dir(
+                    dirs::data_local_dir()
+                        .unwrap()
+                        .join(crate::app::AppModel::APP_ID)
+                        .join("Playlists"),
+                ) {
+                    Ok(_) => {
+                        dir = dirs::data_local_dir()
+                            .unwrap()
+                            .join(crate::app::AppModel::APP_ID)
+                            .join("Playlists");
+                    }
+                    Err(err) => {}
+                }
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            fs::copy(path, dir.as_path().join(name)).unwrap();
+        } else {
+            log::info!(
+                "ERROR: Probe failure \nErred Path: {}",
+                path.to_str().unwrap().to_string()
+            );
+        }
     }
 }

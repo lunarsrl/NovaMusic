@@ -2,7 +2,7 @@
 
 use crate::app::page::CoverArt::SomeLoaded;
 use crate::app::page::{list_sort_header, BodyStyle, CoverArt, Page, PageBuilder};
-use crate::app::{connect_to_db, AppModel, AppTrack, Message};
+use crate::app::{connect_to_db, AppModel, AppTrack, Message, TrackType};
 use crate::config::SortOrder;
 use crate::fl;
 use colored::Colorize;
@@ -81,11 +81,6 @@ impl Page for TrackPage {
             cosmic::iced::Point::new(f32::from(cosmic::theme::spacing().space_s), 1.0),
             cosmic::iced::Size::new(3.0, 64.0),
         );
-
-        if cosmic::iced::mouse::Cursor::is_over(cosmic::iced::mouse::Cursor::default(), tracks_rect)
-        {
-            log::info!("{}", "this is true somehow".to_string().on_bright_yellow())
-        }
 
         let mut loaded = 0;
         for (index, track) in self.tracks.clone().read().unwrap().iter().enumerate() {
@@ -215,12 +210,13 @@ impl AppTrack {
                             .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
                     ]
                     .into(),
-                    cosmic::widget::button::text("Mod Entry 1")
-                        .width(Length::Fixed(space_mod))
-                        .into(),
-                    cosmic::widget::button::text("Mod Entry 2")
-                        .width(Length::Fixed(space_mod))
-                        .into(),
+                    // todo: custom extra info sections, with sorting capabilities
+                    // cosmic::widget::button::text("Mod Entry 1")
+                    //     .width(Length::Fixed(space_mod))
+                    //     .into(),
+                    // cosmic::widget::button::text("Mod Entry 2")
+                    //     .width(Length::Fixed(space_mod))
+                    //     .into(),
                     cosmic::widget::space().width(Length::Fill).into(),
                 ])
                 .padding(cosmic::iced::core::padding::Padding::from([
@@ -264,6 +260,7 @@ impl AppTrack {
                             cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
                                 cosmic::widget::icon::from_name("list-add-symbolic"),
                             ))
+                            .on_press(Message::AddTrackById(self.id))
                             .class(cosmic::theme::Button::Standard),
                             cosmic::widget::container("Add to queue")
                                 .padding(cosmic::theme::spacing().space_xxxs)
@@ -275,6 +272,7 @@ impl AppTrack {
                             cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
                                 cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                             ))
+                            .on_press(Message::PlayTrackById(self.id))
                             .class(cosmic::theme::Button::Standard),
                             cosmic::widget::container("Play now")
                                 .padding(cosmic::theme::spacing().space_xxxs)

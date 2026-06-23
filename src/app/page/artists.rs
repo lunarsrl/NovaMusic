@@ -7,7 +7,6 @@ use crate::app::AppModel;
 use crate::app::{DisplaySingle, Message};
 use crate::fl;
 use cosmic::iced::widget::scrollable::Viewport;
-use cosmic::iced::{Alignment, Length};
 use cosmic::Element;
 
 #[derive(Clone, Debug)]
@@ -69,22 +68,23 @@ impl Page for ArtistsPage {
     }
 
     fn body(&self, model: &AppModel) -> Element<Message> {
-        cosmic::widget::container(cosmic::widget::column::with_children(vec![
-            cosmic::widget::responsive(|size| {
-                cosmic::widget::text(
-                    format!(
-                        "This container is {}, big due to text {}",
-                        size.height, size.width
-                    )
-                    .to_string(),
-                )
-                .into()
-            })
-            .into(),
-        ]))
-        .align_y(Alignment::Center)
-        .width(Length::Fill)
-        .into()
+        match self.page_state {
+            ArtistPageState::Loading => {
+                return cosmic::widget::text::text("Hello World ").into();
+            }
+            ArtistPageState::ArtistPage(_) => {
+                return cosmic::widget::text::text("Hello Artist ").into();
+            }
+            ArtistPageState::Album(_) => {
+                return cosmic::widget::text::text("Hello Album ").into();
+            }
+            ArtistPageState::Search(_) => {
+                return cosmic::widget::text::text("Hello Search ").into();
+            }
+            _ => {
+                todo!("Caching States")
+            }
+        }
     }
 
     fn body_style(&self) -> BodyStyle {

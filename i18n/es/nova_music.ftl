@@ -12,7 +12,7 @@ tracks = Pistas
 artists = Artistas
 albums = Álbumes
 playlists = Playlists
-genres = TODO!
+genres = Géneros
 Loading = Cargando...
 
 # Common Terms

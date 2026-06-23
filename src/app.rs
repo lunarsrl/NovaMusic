@@ -30,7 +30,6 @@ use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::page::CoverArt;
 use crate::app::page::CoverArt::SomeLoaded;
 use crate::app::scan::scan_directory;
-use crate::app::Message::LoadTrackData;
 use crate::config::{AppTheme, Config, SortOrder};
 use crate::database::{create_database, create_database_entry, find_visual};
 use crate::mpris::MPRISRootInterface;
@@ -45,7 +44,7 @@ use cosmic::iced::widget::list;
 use cosmic::iced::widget::scrollable::{AbsoluteOffset, Viewport};
 use cosmic::iced::window::Id;
 use cosmic::iced::Alignment::Start;
-use cosmic::iced::{keyboard, Alignment, Color, ContentFit, Event, Length};
+use cosmic::iced::{keyboard, stream, Alignment, Color, ContentFit, Event, Length};
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, icon, menu, nav_bar};
@@ -56,6 +55,7 @@ use futures::channel::mpsc::Sender;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use rodio::{Sink, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
+use rusqlite::TransactionBehavior;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -196,7 +196,6 @@ pub enum Message {
     FolderPickerFail(String),
     UpdateScanProgress,
     UpdateScanDirSize,
-    AddToDatabase(PathBuf),
     ProbeFail,
     ChooseFile(FileChooserEvents),
 
@@ -218,10 +217,10 @@ pub enum Message {
     //  todo: move all AddTrackToQueue to AddTrackByID
     //      Advantage: No need to clone strings
     //      Disadvantage: Database access but that happens anyway sometimes
-    AddTrackToQueue(String),
-    AddTrackById((TrackType, u32)),
+    PlayTrackById(u32),
+    AddTrackById(u32),
     //todo Make albums in queue fancier kinda like Elisa does it
-    AddAlbumToQueue(Vec<(String, u32)>),
+    AddAlbumToQueue(Vec<u32>),
 
     // Track Page
     TrackDataReceived(Vec<AppTrack>),
@@ -1223,112 +1222,28 @@ impl cosmic::Application for AppModel {
 
                 create_database();
 
-                let path = self.config.scan_dir.clone().parse().unwrap();
-                return cosmic::Task::stream(cosmic::iced::stream::channel(
-                    100,
-                    |mut tx| async move {
-                        scan_directory(path, &mut tx).await;
-                        tx.send(Message::OnNavEnter(ReEnterNavReason::Rescan))
-                            .await
-                            .expect("de")
-                    },
-                ))
-                .map(cosmic::Action::App);
+                let path = self.config.scan_dir.clone().parse::<PathBuf>().unwrap();
+
+                return cosmic::task::future(async move {
+                    Message::OnNavEnter(
+                        tokio::task::spawn_blocking(move || {
+                            let mut conn = connect_to_db();
+                            let transaction =
+                                conn.transaction().expect("Start new transaction failed");
+
+                            let timer = std::time::Instant::now();
+                            scan_directory(path, &transaction);
+
+                            transaction.commit().expect("Failed to commit transaciton");
+                            println!("Done, Elspased: {}", timer.elapsed().as_secs_f32());
+                            ReEnterNavReason::Rescan
+                        })
+                        .await
+                        .expect("Scanning sb thread failed"),
+                    )
+                });
             }
-            Message::AddToDatabase(path) => {
-                return cosmic::Task::stream(cosmic::iced::stream::channel(
-                    100,
-                    move |mut tx: Sender<Message>| async move {
-                        let file = fs::File::open(&path).unwrap();
-                        let probe = get_probe();
-                        let mss = symphonia::core::io::MediaSourceStream::new(
-                            Box::new(file),
-                            Default::default(),
-                        );
 
-                        if let Ok(mut reader) = probe.format(
-                            &Default::default(),
-                            mss,
-                            &Default::default(),
-                            &Default::default(),
-                        ) {
-                            if let Some(mdat) = reader.metadata.get() {
-                                let tags = mdat
-                                    .current()
-                                    .unwrap()
-                                    .tags()
-                                    .iter()
-                                    .filter(|a| a.is_known())
-                                    .map(|a| a.clone())
-                                    .collect();
-                                create_database_entry(tags, &path).await;
-                                tx.send(Message::UpdateScanProgress).await.unwrap();
-                            } else {
-                                let mdat = reader.format.metadata();
-                                let tags = mdat
-                                    .current()
-                                    .unwrap()
-                                    .tags()
-                                    .iter()
-                                    .filter(|a| a.is_known())
-                                    .map(|a| a.clone())
-                                    .collect();
-                                create_database_entry(tags, &path).await;
-                                tx.send(Message::UpdateScanProgress).await.unwrap();
-                            }
-                        } else {
-                            if path.with_extension("m3u") == path
-                                || path.with_extension("m3u8") == path
-                            {
-                                let mut dir = PathBuf::new();
-
-                                if dirs::data_local_dir()
-                                    .unwrap()
-                                    .join(crate::app::AppModel::APP_ID)
-                                    .join("Playlists")
-                                    .exists()
-                                {
-                                    dir = dirs::data_local_dir()
-                                        .unwrap()
-                                        .join(crate::app::AppModel::APP_ID)
-                                        .join("Playlists");
-                                } else {
-                                    match std::fs::create_dir(
-                                        dirs::data_local_dir()
-                                            .unwrap()
-                                            .join(crate::app::AppModel::APP_ID)
-                                            .join("Playlists"),
-                                    ) {
-                                        Ok(_) => {
-                                            dir = dirs::data_local_dir()
-                                                .unwrap()
-                                                .join(crate::app::AppModel::APP_ID)
-                                                .join("Playlists");
-                                        }
-                                        Err(err) => {
-                                            tx.send(Message::ToastError(err.to_string()))
-                                                .await
-                                                .unwrap();
-                                        }
-                                    }
-                                }
-
-                                let name = path.file_name().unwrap().to_string_lossy().to_string();
-                                fs::copy(path, dir.as_path().join(name)).unwrap();
-                                tx.send(Message::UpdateScanProgress).await.unwrap();
-                            } else {
-                                tx.send(Message::ProbeFail).await.unwrap();
-
-                                log::info!(
-                                    "ERROR: Probe failure \nErred Path: {}",
-                                    path.to_str().unwrap().to_string()
-                                );
-                            }
-                        }
-                    },
-                ))
-                .map(cosmic::Action::App);
-            }
             Message::UpdateScanProgress => {
                 self.config
                     .set_files_scanned(&self.config_handler, self.config.files_scanned + 1)
@@ -1447,9 +1362,7 @@ impl cosmic::Application for AppModel {
                     let cloned_albums: Arc<RwLock<Vec<Album>>> = Arc::clone(&albumspage.albums);
 
                     tokio::task::spawn_blocking(move || {
-                        let timer = std::time::Instant::now();
                         cloned_albums.write().unwrap().push(album);
-                        log::info!("spawn locking timer: {}", timer.elapsed().as_millis())
                     });
                 }
             }
@@ -1479,7 +1392,7 @@ impl cosmic::Application for AppModel {
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
 
                     tracks.into_iter().for_each(|track| {
-                        tx.send(LoadTrackData(track))
+                        tx.send(Message::LoadTrackData(track))
                             .expect("failed to send loadtrackimage");
                     });
                     tx.send(Message::ToastError(format!(
@@ -1757,144 +1670,6 @@ where a.name = ?    ",
                 }
             }
             Message::SeekFinished => self.sink.set_volume(self.config.volume / 100.0),
-            app::Message::AddTrackToQueue(filepath) => {
-                let pos = self.nav.entity_at(0).expect("REASON");
-                let home_page = self.nav.data_mut::<Page>(pos).unwrap();
-                if let Page::NowPlaying(_) = home_page {
-                    let conn = rusqlite::Connection::open(
-                        dirs::data_local_dir()
-                            .unwrap()
-                            .join(Self::APP_ID)
-                            .join("nova_music.db"),
-                    )
-                    .unwrap();
-                    let mut stmt = conn
-                        .prepare(
-                            "
-                                select track.id as id, track.name as title, art.name as artist, track.path, a.album_cover, a.name as album_title
-                                from track
-                                left join main.album_tracks at on track.id = at.track_id
-                                left join main.artists art on track.artist_id = art.id
-                                left join main.album a on at.album_id = a.id
-                                where track.path=?;
-                            ",
-                        )
-                        .expect("error preparing sql");
-
-                    if let Ok(track) = stmt.query_row([&filepath], |row| {
-                        Ok(AppTrack {
-                            id: row.get("id").unwrap_or(0),
-                            title: row.get("title").unwrap_or("".to_string()),
-                            artist: row.get("artist").unwrap_or("".to_string()),
-                            album_title: row.get("album_title").unwrap_or("".to_string()),
-                            path_buf: PathBuf::from(
-                                row.get::<&str, String>("path")
-                                    .expect("There should always be a file path"),
-                            ),
-                            cover_art: match row.get::<&str, Vec<u8>>("album_cover") {
-                                Ok(val) => {
-                                    SomeLoaded(cosmic::widget::image::Handle::from_bytes(val))
-                                }
-                                Err(_) => CoverArt::None,
-                            },
-                        })
-                    }) {
-                        self.queue.push(track);
-                    } else {
-                        return self
-                            .toasts
-                            .push(cosmic::widget::toaster::Toast::new(format!(
-                                "Track at \"{}\" not found in database",
-                                filepath
-                            )))
-                            .map(cosmic::Action::App);
-                    }
-                }
-
-                if self.sink.empty() {
-                    let file = match std::fs::File::open(&filepath) {
-                        Ok(file) => file,
-                        Err(err) => {
-                            log::error!("Error: {}", err);
-
-                            return self
-                                .toasts
-                                .push(cosmic::widget::toaster::Toast::new(format!(
-                                    "Track found in database but not at the filepath: {}",
-                                    filepath.to_string()
-                                )))
-                                .map(cosmic::Action::App);
-                        }
-                    };
-
-                    let decoder = rodio::Decoder::builder()
-                        .with_byte_len(file.metadata().unwrap().len())
-                        .with_data(file)
-                        .with_gapless(true)
-                        .with_seekable(true)
-                        .build()
-                        .expect("Failed to build decoder");
-
-                    self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
-                    self.sink.append(decoder);
-                    let sleeping_task_sink = Arc::clone(&self.sink);
-                    let sleeping_thread = cosmic::task::future(async move {
-                        let kill = true;
-                        Message::SongFinished(
-                            tokio::task::spawn_blocking(move || {
-                                if kill {
-                                    sleeping_task_sink.sleep_until_end();
-                                    QueueUpdateReason::None
-                                } else {
-                                    QueueUpdateReason::ThreadKilled
-                                }
-                            })
-                            .await
-                            .expect("nova_music.db"),
-                        )
-                    })
-                    .abortable();
-
-                    match &mut self.task_handle {
-                        None => {
-                            self.task_handle = Some(vec![sleeping_thread.1]);
-                        }
-                        Some(handles) => {
-                            handles.push(sleeping_thread.1);
-                        }
-                    }
-
-                    let reporting_task_sink = Arc::clone(&self.sink);
-                    let progress_thread = cosmic::Task::stream(cosmic::iced::stream::channel(
-                        1,
-                        |mut tx: Sender<Message>| async move {
-                            tokio::task::spawn_blocking(move || loop {
-                                sleep(Duration::from_millis(200));
-                                match tx.try_send(Message::SinkProgress(
-                                    reporting_task_sink.get_pos().as_secs_f64(),
-                                )) {
-                                    Ok(_) => {}
-                                    Err(_) => break,
-                                }
-                            });
-                        },
-                    ))
-                    .abortable();
-
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![progress_thread.1]),
-                        Some(handles) => handles.push(progress_thread.1),
-                    }
-                    let (task, handle) =
-                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![handle]),
-                        Some(handles) => handles.push(handle),
-                    }
-                    self.sink.play();
-                    return task;
-                }
-            }
             Message::SinkProgress(number) => {
                 self.song_progress = number;
             }
@@ -2084,19 +1859,9 @@ where a.name = ?    ",
             }
             Message::ClearQueue => {
                 self.sink.stop();
-                match &self.task_handle {
-                    None => {}
-                    Some(handles) => {
-                        for handle in handles {
-                            handle.abort()
-                        }
-                    }
-                }
-
                 self.queue_pos = 0;
                 self.song_progress = 0.0;
                 self.song_duration = None;
-
                 self.queue.clear();
             }
             Message::PreviousTrack => {
@@ -2108,12 +1873,10 @@ where a.name = ?    ",
                 return cosmic::Task::stream(cosmic::iced::stream::channel(
                     0,
                     |mut tx: Sender<Message>| async move {
-                        paths.sort_by(|a, b| a.1.cmp(&b.1));
+                        paths.sort();
 
                         for file in paths {
-                            tx.send(Message::AddTrackToQueue(file.0))
-                                .await
-                                .expect("send")
+                            tx.send(Message::AddTrackById(file)).await.expect("send")
                         }
                     },
                 ))
@@ -2390,7 +2153,12 @@ where a.name = ?    ",
                     .set_footer(&self.config_handler, val)
                     .expect("Failed to edit config");
             }
-            app::Message::AddTrackById((t_type, id)) => {
+
+            Message::PlayTrackById(track) => {
+                self.update(Message::ClearQueue);
+                self.update(Message::AddTrackById(track));
+            }
+            Message::AddTrackById(id) => {
                 let conn = connect_to_db();
 
                 let mut stmt =
@@ -2412,12 +2180,7 @@ where a.name = ?    ",
                         artist: row.get("artist").unwrap(),
                         path_buf: filepath,
                         title: row.get("title").unwrap(),
-                        album_title: match t_type {
-                            TrackType::AlbumTrack => {
-                                row.get("album_title").unwrap_or(String::from(""))
-                            }
-                            TrackType::Single => String::from(""),
-                        },
+                        album_title: row.get("album_title").unwrap_or(String::from("")),
                         cover_art: match visual {
                             Some(cover) => {
                                 SomeLoaded(cosmic::widget::image::Handle::from_bytes(cover))
@@ -2514,6 +2277,18 @@ where a.name = ?    ",
 
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
         struct MPRISSubscription;
+        let mpris = cosmic::iced::Subscription::run_with(TypeId::of::<MPRISSubscription>(), |_| {
+            stream::channel(
+                1,
+                |mut tx: futures::channel::mpsc::Sender<Message>| async move {
+                    log::info!("Clear");
+
+                    log::info!("Not Clear");
+
+                    return std::future::pending().await;
+                },
+            )
+        });
 
         // let mpris = cosmic::iced::Subscription::run_with(cosmic::iced_futures::stream::channel(
         //     1,
@@ -2543,6 +2318,7 @@ where a.name = ?    ",
         //         }
         //     },
         // ));
+
         cosmic::iced::Subscription::batch(vec![
             // Watch for application configuration changes.
             cosmic::iced::event::listen_with(handle_keybinds),

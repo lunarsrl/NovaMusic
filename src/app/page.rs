@@ -49,7 +49,7 @@ impl<T: Page> PageBuilder for T {
                 "Title".to_string(),
                 "Modifiable 1".to_string(),
                 "Modifiable 2".to_string(),
-                SortOrder::Ascending,
+                model.config.sort_order,
             ),
         };
 
@@ -170,31 +170,35 @@ pub fn list_sort_header<'a>(
                 ])
                 .align_y(Vertical::Center),
             )
+            .on_press(match selection {
+                SortOrder::Ascending => Message::Sort(SortOrder::Descending),
+                SortOrder::Descending => Message::Sort(SortOrder::Ascending),
+            })
             .width(Length::Fixed(300.0))
             .class(cosmic::theme::Button::MenuRoot)
             .into(),
             cosmic::widget::space().width(Length::Fill).into(),
-            cosmic::widget::button::custom(
-                cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
-                    "Modifiable",
-                )
-                .into()])
-                .align_y(Vertical::Center),
-            )
-            .width(Length::Fixed(150.0))
-            .class(cosmic::theme::Button::MenuRoot)
-            .into(),
-            cosmic::widget::space().width(Length::Fill).into(),
-            cosmic::widget::button::custom(
-                cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
-                    "Modifiable",
-                )
-                .into()])
-                .align_y(Vertical::Center),
-            )
-            .width(Length::Fixed(150.0))
-            .class(cosmic::theme::Button::MenuRoot)
-            .into(),
+            // cosmic::widget::button::custom(
+            //     cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
+            //         "Modifiable",
+            //     )
+            //     .into()])
+            //     .align_y(Vertical::Center),
+            // )
+            // .width(Length::Fixed(150.0))
+            // .class(cosmic::theme::Button::MenuRoot)
+            // .into(),
+            // cosmic::widget::space().width(Length::Fill).into(),
+            // cosmic::widget::button::custom(
+            //     cosmic::widget::row::with_children(vec![cosmic::widget::text::heading(
+            //         "Modifiable",
+            //     )
+            //     .into()])
+            //     .align_y(Vertical::Center),
+            // )
+            // .width(Length::Fixed(150.0))
+            // .class(cosmic::theme::Button::MenuRoot)
+            // .into(),
             cosmic::widget::space().width(Length::Fill).into(),
         ])
         .align_y(Alignment::Center)

@@ -226,9 +226,17 @@ pub struct Album {
 impl Album {
     fn display_grid<'a>(&self, size: u32) -> Element<'a, Message> {
         let art: Element<Message> = match &self.cover_art {
-            None => cosmic::widget::icon::from_name("audio-x-generic")
-                .size(size as u16 * 24)
-                .into(),
+            None => {
+                cosmic::widget::container(
+                    cosmic::widget::icon::from_name("audio-x-generic")
+                        .icon()
+                        .width(Length::Fixed(size as f32 * 24.0))
+                        .height(Length::Fixed(size as f32 * 24.0)),
+                )
+                .center(Length::Fixed(size as f32 * 24.0))
+            }
+            .align_x(cosmic::iced::Alignment::Center)
+            .into(),
             Some(art) => cosmic::widget::image(art)
                 .content_fit(ContentFit::Contain)
                 .width(Length::Fixed(size as f32 * 32.0))
@@ -253,7 +261,7 @@ impl Album {
                 self.name.to_string(),
                 self.artist.to_string(),
             )))
-            .class(cosmic::theme::Button::MenuItem)
+            .class(cosmic::theme::Button::IconVertical)
             .width(Length::Fixed(size as f32 * 32.0)),
         )
         .height(Length::Fixed(size as f32 * 32.0 + TextArea))
