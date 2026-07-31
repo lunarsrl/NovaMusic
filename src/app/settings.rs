@@ -49,28 +49,16 @@ impl AppModel {
                             },
                         ),
                     )
-                    .add(
-                        widget::column::Column::with_children([
-                            widget::row::Row::with_children([
-                                text::heading(fl!("ScanProgress")).into(),
-                                cosmic::widget::space().width(Length::Fill).into(),
-                                text::caption(format!(
-                                    "{}%",
-                                    (self.config.files_scanned as f32
-                                        / self.config.num_files_found as f32
-                                        * 100.0)
-                                        .round()
-                                ))
+                    .add(widget::row::Row::with_children([
+                        text::text(fl!("ScanProgress")).into(),
+                        cosmic::widget::space().width(Length::Fill).into(),
+                        match self.rescan_available && !self.config.scan_dir.is_empty() {
+                            true => cosmic::widget::icon::from_name("object-select-symbolic")
+                                .prefer_svg(true)
                                 .into(),
-                            ])
-                            .into(),
-                            cosmic::widget::progress_bar::determinate_linear(
-                                self.config.num_files_found as f32,
-                            )
-                            .into(),
-                        ])
-                        .spacing(space_xxs),
-                    )
+                            false => cosmic::widget::indeterminate_circular().size(20.0).into(),
+                        },
+                    ]))
                     .into(),
                 ui_settings
                     .title(fl!("UserInterface"))
