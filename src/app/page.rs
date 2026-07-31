@@ -4,23 +4,17 @@ pub mod albums;
 pub mod artists;
 pub mod genre;
 pub mod playlists;
-mod style;
 pub mod tracks;
 
-use crate::app::page::albums::Album;
-use crate::app::page::artists::ArtistInfo;
 use crate::app::page::genre::GenrePage;
 use crate::app::page::playlists::PlaylistPage;
 use crate::app::{AppModel, Message};
 use crate::config::SortOrder;
 use crate::fl;
 use cosmic::iced::alignment::Vertical;
-use cosmic::iced::widget::shader::Viewport;
-use cosmic::iced::{Alignment, Length, Size};
-use cosmic::widget::Id;
+use cosmic::iced::{Alignment, Length};
 use cosmic::{iced, Element};
 use std::fmt::Display;
-use std::sync::{Arc, RwLock};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CoverArt {
@@ -28,34 +22,10 @@ pub enum CoverArt {
     SomeUnloaded,
     SomeLoaded(cosmic::widget::image::Handle),
 }
-enum ItemType {
-    Album(Arc<RwLock<Vec<Album>>>),
-    Artist(ArtistInfo),
-}
 
 enum BodyStyle {
     Grid,
     List,
-}
-
-pub struct PageType {
-    page_title: String,
-    data_stored: ItemType,
-    body_style: BodyStyle,
-    scrollbar_id: Id,
-    viewport: Viewport,
-    size: Size,
-}
-
-impl PageType {
-    pub fn view(&self) -> Element<'_, Message> {
-        match self.body_style {
-            BodyStyle::Grid => {}
-            BodyStyle::List => {
-                todo!()
-            }
-        }
-    }
 }
 
 pub trait Page {

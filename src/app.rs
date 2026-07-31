@@ -20,15 +20,15 @@ mod settings;
 mod subpage;
 
 use crate::app::home::HomePage;
-use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, AlbumPageTrait, FullAlbum};
+use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, FullAlbum};
 use crate::app::page::artists::{ArtistInfo, ArtistPage, ArtistPageState, ArtistsPage};
 use crate::app::page::genre::{GenrePage, GenrePageState};
 use crate::app::page::playlists::{
     FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
 };
 use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
+use crate::app::page::CoverArt;
 use crate::app::page::CoverArt::SomeLoaded;
-use crate::app::page::{CoverArt, PageType};
 use crate::app::scan::scan_directory;
 use crate::config::{AppTheme, Config, SortOrder};
 use crate::database::{create_database, create_database_entry, find_visual};
@@ -392,7 +392,7 @@ impl cosmic::Application for AppModel {
         let albumsid = nav
             .insert()
             .text(fl!("albums"))
-            .data::<Page>(Page::Albums(PageType::new_album_page()))
+            .data::<Page>(Page::Albums(AlbumPage::new()))
             .icon(icon::from_name("media-optical-symbolic"))
             .id();
 
@@ -1416,6 +1416,7 @@ impl cosmic::Application for AppModel {
                     tokio::task::spawn_blocking(move || {
                         let timer = std::time::Instant::now();
                         cloned_tracks.write().unwrap().push(track);
+                        log::info!("spawn locking timer: {}", timer.elapsed().as_millis())
                     });
                 }
             }
@@ -2275,6 +2276,20 @@ where a.name = ?    ",
     }
 
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
+        struct MPRISSubscription;
+        let mpris = cosmic::iced::Subscription::run_with(TypeId::of::<MPRISSubscription>(), |_| {
+            stream::channel(
+                1,
+                |mut tx: futures::channel::mpsc::Sender<Message>| async move {
+                    log::info!("Clear");
+
+                    log::info!("Not Clear");
+
+                    return std::future::pending().await;
+                },
+            )
+        });
+
         // let mpris = cosmic::iced::Subscription::run_with(cosmic::iced_futures::stream::channel(
         //     1,
         //     |mut output| async move {

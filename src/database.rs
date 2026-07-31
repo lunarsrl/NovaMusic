@@ -677,15 +677,8 @@ pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
         if let Some(mdat_rev) = mdat_rev.current() {
             match mdat_rev.visuals().get(0) {
                 Some(visual) => {
-                    return Some(visual.data.clone());
                     // log::info!("This album contains visual data!");
-                    let image = image::load_from_memory((*visual.data).as_ref());
-                    if let Ok(dynimage) = image {
-                        Some(dynimage.thumbnail(512, 512).into_bytes().into_boxed_slice())
-                    } else {
-                        log::error!("Failed to thumbnail an image");
-                        None
-                    }
+                    Some(visual.data.clone())
                 }
                 None => {
                     // log::info!("This album contains no visual data!");

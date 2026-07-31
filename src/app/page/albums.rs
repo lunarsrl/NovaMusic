@@ -1,10 +1,9 @@
 mod fullalbum;
 
 // SPDX-License-Identifier: GPL-2.0-or-later
-use crate::app::page::style::GridPageStyle;
 use crate::app::page::tracks::SearchResult;
 use crate::app::page::BodyStyle::Grid;
-use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder, PageType};
+use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder};
 use crate::app::subpage::{Subpage, SubpageBuilder};
 use crate::app::{connect_to_db, AppModel, AppTrack, Message};
 use crate::fl;
@@ -13,8 +12,7 @@ use cosmic::iced::application::IntoBoot;
 use cosmic::iced::core::text::EllipsizeHeightLimit;
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::widget::text::Ellipsize;
-use cosmic::iced::{Alignment, Color, ContentFit, Length, Subscription};
-use cosmic::widget::image::Handle;
+use cosmic::iced::{Alignment, Color, ContentFit, Length};
 use cosmic::widget::settings::item;
 use cosmic::widget::{icon, JustifyContent};
 use cosmic::{theme, Element, Task};
@@ -35,43 +33,112 @@ pub struct AlbumPage {
 }
 const TextArea: f32 = 40.0;
 
-pub trait AlbumPageTrait {
-    fn new_album_page();
-    fn view();
-}
-
-impl AlbumPageTrait for PageType {
-    fn new_album_page() {
-        PageType {
-            page_title: "".to_string(),
-            data_stored: (),
-            body_style: BodyStyle::Grid,
-            scrollbar_id: Id(),
-            viewport: ,
-            size: Default::default(),
-        };
-
-    }
-
-    fn view() {
-        let scroll_id = cosmic::iced::widget::Id::unique();
-
-
-        cosmic::widget::responsive(move |size| {
-            cosmic::widget::id_container(, scroll_id).into()
-        })
-            .into();
-
-
-    }
-}
 impl Page for AlbumPage {
     fn title(&self) -> String {
         String::from(fl!("AlbumLibrary"))
     }
 
     fn body(&self, model: &AppModel) -> Element<Message> {
-        cosmic::widget::text::text("Hello!").into()
+        match &self.page_state {
+            AlbumPageState::Loading => {
+                let icon_size = model.config.grid_item_size;
+
+                return cosmic::widget::container(cosmic::widget::responsive(move |size| {
+                    let width = size.width as u32;
+                    let spacing;
+                    let mut items_per_row = 0;
+                    let mut item_num = 0;
+
+                    while width > (items_per_row * icon_size * 32) {
+                        items_per_row += 1;
+                    }
+                    items_per_row -= 1;
+
+                    let check_spacing: u32 =
+                        ((items_per_row + 1) * icon_size * 32).saturating_sub(width);
+                    let check_final = icon_size * 32 - check_spacing;
+
+                    if items_per_row < 3 {
+                        spacing = check_final as u16
+                    } else {
+                        spacing = (check_final / (items_per_row - 1)) as u16;
+                    }
+
+                    let visible_rect = cosmic::iced::Rectangle::new(
+                        cosmic::iced::Point::new(
+                            f32::from(cosmic::theme::spacing().space_s),
+                            match self.viewport {
+                                None => 0.0,
+                                Some(val) => val.absolute_offset().y,
+                            },
+                        ),
+                        cosmic::iced::Size::new(3.0, size.height),
+                    );
+
+                    let mut album_rect = cosmic::iced::Rectangle::new(
+                        cosmic::iced::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
+                        cosmic::iced::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
+                    );
+
+                    let mut grid = cosmic::widget::grid::<Message>()
+                        .column_spacing(spacing)
+                        .column_alignment(Alignment::Center)
+                        .justify_content(JustifyContent::Center)
+                        .row_alignment(Alignment::Center)
+                        .width(Length::Fill)
+                        .height(Length::Shrink);
+
+                    for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
+                        let insert_element;
+
+                        if album_rect.intersects(&visible_rect) {
+                            insert_element = album.display_grid(icon_size);
+                        } else {
+                            insert_element = cosmic::widget::Column::new()
+                                .push(cosmic::widget::text(format!("{}", index)))
+                                .width(Length::Fill)
+                                .height(Length::Fixed(icon_size as f32 * 32.0 + TextArea))
+                                .into()
+                        }
+
+                        item_num += 1;
+
+                        if item_num as u32 % items_per_row == 0 {
+                            log::info!(
+                                "{}",
+                                format!("new row {} --------\\", (index as f32 / 3.0).floor())
+                                    .to_string()
+                                    .red()
+                            );
+                            log::info!(
+                                "visible area: startY: {} endY: {}",
+                                visible_rect.y,
+                                visible_rect.height + visible_rect.y
+                            );
+                            log::info!(
+                                "album rect area: startY: {} endY {}",
+                                album_rect.y,
+                                album_rect.height + album_rect.y
+                            );
+
+                            grid = grid.push(insert_element).insert_row();
+                            album_rect.y += icon_size as f32 * 32.0 + TextArea;
+                        } else {
+                            grid = grid.push(insert_element);
+                        }
+                    }
+
+                    return grid.into();
+                }))
+                .height(Length::Fill)
+                .into();
+            }
+            AlbumPageState::Subpage(a) => {
+                cosmic::widget::text::heading(format!("{} | {}", a.album.name, a.album.artist))
+                    .into()
+            }
+            AlbumPageState::Search(_) => cosmic::widget::text("tired").into(),
+        }
     }
 
     fn body_style(&self) -> BodyStyle {
@@ -97,15 +164,10 @@ impl AlbumPage {
             search_term: "".to_string(),
         }
     }
-
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
         match &self.page_state {
             AlbumPageState::Subpage(album) => album.page(model),
-            _ => cosmic::widget::responsive(move |size| {
-                cosmic::widget::id_container(self.new_item_grid().view(), self.scrollbar_id.clone())
-                    .into()
-            })
-            .into(),
+            _ => self.page(model),
         }
     }
 
@@ -159,6 +221,53 @@ pub struct Album {
     pub disc_number: u32,
     pub track_number: u32,
     pub cover_art: Option<cosmic::widget::image::Handle>,
+}
+
+impl Album {
+    fn display_grid<'a>(&self, size: u32) -> Element<'a, Message> {
+        let art: Element<Message> = match &self.cover_art {
+            None => {
+                cosmic::widget::container(
+                    cosmic::widget::icon::from_name("audio-x-generic")
+                        .icon()
+                        .width(Length::Fixed(size as f32 * 24.0))
+                        .height(Length::Fixed(size as f32 * 24.0)),
+                )
+                .center(Length::Fixed(size as f32 * 24.0))
+            }
+            .align_x(cosmic::iced::Alignment::Center)
+            .into(),
+            Some(art) => cosmic::widget::image(art)
+                .content_fit(ContentFit::Contain)
+                .width(Length::Fixed(size as f32 * 32.0))
+                .height(Length::Fixed(size as f32 * 32.0))
+                .into(),
+        };
+
+        return cosmic::widget::container(
+            cosmic::widget::button::custom(
+                cosmic::widget::column::with_children(vec![
+                    art,
+                    cosmic::widget::text::caption_heading(self.name.to_string())
+                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
+                        .into(),
+                    cosmic::widget::text::caption(self.artist.to_string())
+                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
+                        .into(),
+                ])
+                .align_x(cosmic::iced::Alignment::Center),
+            )
+            .on_press(Message::AlbumRequested((
+                self.name.to_string(),
+                self.artist.to_string(),
+            )))
+            .class(cosmic::theme::Button::IconVertical)
+            .width(Length::Fixed(size as f32 * 32.0)),
+        )
+        .height(Length::Fixed(size as f32 * 32.0 + TextArea))
+        .width(Length::Fixed(size as f32 * 32.0))
+        .into();
+    }
 }
 
 #[derive(Debug, Clone)]
