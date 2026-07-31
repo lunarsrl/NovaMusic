@@ -1322,15 +1322,15 @@ impl cosmic::Application for AppModel {
                     match self.config.sort_order {
                         SortOrder::Ascending => {
                             albums.sort_by(|a, b| {
-                                let achar = a.name.chars().next().unwrap();
-                                let bchar = b.name.chars().next().unwrap();
+                                let achar = a.name.to_lowercase();
+                                let bchar = b.name.to_lowercase();
                                 achar.cmp(&bchar)
                             });
                         }
                         SortOrder::Descending => {
                             albums.sort_by(|b, a| {
-                                let achar = a.name.chars().next().unwrap();
-                                let bchar = b.name.chars().next().unwrap();
+                                let achar = a.name.to_lowercase();
+                                let bchar = b.name.to_lowercase();
                                 achar.cmp(&bchar)
                             });
                         }
