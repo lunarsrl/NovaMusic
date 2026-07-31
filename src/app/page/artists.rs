@@ -69,9 +69,7 @@ impl Page for ArtistsPage {
 
     fn body(&self, model: &AppModel) -> Element<Message> {
         match self.page_state {
-            ArtistPageState::Loading => {
-                return cosmic::widget::text::text("Hello World ").into();
-            }
+            ArtistPageState::Loading => cosmic::widget::text::text("Hello world").into(),
             ArtistPageState::ArtistPage(_) => {
                 return cosmic::widget::text::text("Hello Artist ").into();
             }

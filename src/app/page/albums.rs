@@ -10,13 +10,15 @@ use crate::fl;
 use colored::Colorize;
 use cosmic::iced::application::IntoBoot;
 use cosmic::iced::core::text::EllipsizeHeightLimit;
+use cosmic::iced::runtime::task::widget;
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::widget::text::Ellipsize;
-use cosmic::iced::{Alignment, Color, ContentFit, Length};
+use cosmic::iced::{Alignment, Color, ContentFit, Length, Point, Rectangle, Size, Subscription};
 use cosmic::widget::settings::item;
 use cosmic::widget::{icon, JustifyContent};
 use cosmic::{theme, Element, Task};
 use rusqlite::ToSql;
+use std::cell::Cell;
 use std::fmt::format;
 use std::hash::Hash;
 use std::path::PathBuf;
@@ -28,6 +30,7 @@ pub struct AlbumPage {
     pub page_state: AlbumPageState,
     pub has_fully_loaded: bool,
     pub viewport: Option<Viewport>,
+    pub size: Cell<Option<Size>>,
     pub scrollbar_id: cosmic::iced::widget::Id,
     pub search_term: String,
 }
@@ -39,103 +42,18 @@ impl Page for AlbumPage {
     }
 
     fn body(&self, model: &AppModel) -> Element<Message> {
+        let icon = model.config.grid_item_size;
         match &self.page_state {
-            AlbumPageState::Loading => {
-                let icon_size = model.config.grid_item_size;
-
-                return cosmic::widget::container(cosmic::widget::responsive(move |size| {
-                    let width = size.width as u32;
-                    let spacing;
-                    let mut items_per_row = 0;
-                    let mut item_num = 0;
-
-                    while width > (items_per_row * icon_size * 32) {
-                        items_per_row += 1;
-                    }
-                    items_per_row -= 1;
-
-                    let check_spacing: u32 =
-                        ((items_per_row + 1) * icon_size * 32).saturating_sub(width);
-                    let check_final = icon_size * 32 - check_spacing;
-
-                    if items_per_row < 3 {
-                        spacing = check_final as u16
-                    } else {
-                        spacing = (check_final / (items_per_row - 1)) as u16;
-                    }
-
-                    let visible_rect = cosmic::iced::Rectangle::new(
-                        cosmic::iced::Point::new(
-                            f32::from(cosmic::theme::spacing().space_s),
-                            match self.viewport {
-                                None => 0.0,
-                                Some(val) => val.absolute_offset().y,
-                            },
-                        ),
-                        cosmic::iced::Size::new(3.0, size.height),
-                    );
-
-                    let mut album_rect = cosmic::iced::Rectangle::new(
-                        cosmic::iced::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
-                        cosmic::iced::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
-                    );
-
-                    let mut grid = cosmic::widget::grid::<Message>()
-                        .column_spacing(spacing)
-                        .column_alignment(Alignment::Center)
-                        .justify_content(JustifyContent::Center)
-                        .row_alignment(Alignment::Center)
-                        .width(Length::Fill)
-                        .height(Length::Shrink);
-
-                    for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
-                        let insert_element;
-
-                        if album_rect.intersects(&visible_rect) {
-                            insert_element = album.display_grid(icon_size);
-                        } else {
-                            insert_element = cosmic::widget::Column::new()
-                                .push(cosmic::widget::text(format!("{}", index)))
-                                .width(Length::Fill)
-                                .height(Length::Fixed(icon_size as f32 * 32.0 + TextArea))
-                                .into()
-                        }
-
-                        item_num += 1;
-
-                        if item_num as u32 % items_per_row == 0 {
-                            log::info!(
-                                "{}",
-                                format!("new row {} --------\\", (index as f32 / 3.0).floor())
-                                    .to_string()
-                                    .red()
-                            );
-                            log::info!(
-                                "visible area: startY: {} endY: {}",
-                                visible_rect.y,
-                                visible_rect.height + visible_rect.y
-                            );
-                            log::info!(
-                                "album rect area: startY: {} endY {}",
-                                album_rect.y,
-                                album_rect.height + album_rect.y
-                            );
-
-                            grid = grid.push(insert_element).insert_row();
-                            album_rect.y += icon_size as f32 * 32.0 + TextArea;
-                        } else {
-                            grid = grid.push(insert_element);
-                        }
-                    }
-
-                    return grid.into();
-                }))
-                .height(Length::Fill)
-                .into();
-            }
-            AlbumPageState::Subpage(a) => {
-                cosmic::widget::text::heading(format!("{} | {}", a.album.name, a.album.artist))
-                    .into()
+            AlbumPageState::Loading => cosmic::widget::responsive(move |size| {
+                cosmic::widget::id_container::id_container(
+                    self.view(size, icon),
+                    cosmic::widget::Id::unique(),
+                )
+                .into()
+            })
+            .into(),
+            _ => {
+                todo!("HI!")
             }
             AlbumPageState::Search(_) => cosmic::widget::text("tired").into(),
         }
@@ -160,15 +78,151 @@ impl AlbumPage {
             page_state: AlbumPageState::Loading,
             has_fully_loaded: false,
             viewport: None,
+            size: Cell::new(None),
             scrollbar_id: cosmic::iced::widget::Id::unique(),
             search_term: "".to_string(),
         }
     }
+
+    fn view(&self, size: Size, icon_size: u32) -> Element<Message> {
+        self.size.set(Some(size));
+
+        let width = size.width as u32;
+        let spacing;
+        let mut items_per_row = 0;
+        let mut item_num = 0;
+
+        while width > (items_per_row * icon_size * 32) {
+            items_per_row += 1;
+        }
+        items_per_row -= 1;
+
+        let check_spacing: u32 = ((items_per_row + 1) * icon_size * 32).saturating_sub(width);
+        let check_final = icon_size * 32 - check_spacing;
+
+        if items_per_row < 3 {
+            spacing = check_final as u16
+        } else {
+            spacing = (check_final / (items_per_row - 1)) as u16;
+        }
+
+        log::info!(
+            "OFFSET: {}",
+            match self.viewport {
+                None => {
+                    "NONE".to_string().red()
+                }
+                Some(a) => {
+                    a.absolute_offset().y.to_string().red()
+                }
+            }
+        );
+
+        let visible_rect = cosmic::iced::Rectangle::new(
+            cosmic::iced::Point::new(
+                f32::from(cosmic::theme::spacing().space_s),
+                match self.viewport {
+                    None => 0.0,
+                    Some(val) => val.absolute_offset().y,
+                },
+            ),
+            cosmic::iced::Size::new(3.0, size.height),
+        );
+
+        let mut album_rect = cosmic::iced::Rectangle::new(
+            cosmic::iced::Point::new(f32::from(cosmic::theme::spacing().space_s), 0.0),
+            cosmic::iced::Size::new(3.0, icon_size as f32 * 32.0 + TextArea),
+        );
+
+        let mut grid = cosmic::widget::grid::<Message>()
+            .column_spacing(spacing)
+            .column_alignment(Alignment::Center)
+            .justify_content(JustifyContent::Center)
+            .row_alignment(Alignment::Center)
+            .width(Length::Fill)
+            .height(Length::Shrink);
+
+        for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
+            let insert_element;
+
+            if album_rect.intersects(&visible_rect) {
+                insert_element = album.display_grid(icon_size);
+            } else {
+                insert_element = cosmic::widget::Column::new()
+                    .push(cosmic::widget::text(format!("{}", index)))
+                    .width(Length::Fill)
+                    .height(Length::Fixed(icon_size as f32 * 32.0 + TextArea))
+                    .into()
+            }
+
+            item_num += 1;
+
+            if item_num as u32 % items_per_row == 0 {
+                log::info!(
+                    "{}",
+                    format!("new row {} --------\\", (index as f32 / 3.0).floor())
+                        .to_string()
+                        .red()
+                );
+                log::info!(
+                    "visible area: startY: {} endY: {}",
+                    visible_rect.y,
+                    visible_rect.height + visible_rect.y
+                );
+                log::info!(
+                    "album rect area: startY: {} endY {}",
+                    album_rect.y,
+                    album_rect.height + album_rect.y
+                );
+
+                grid = grid.push(insert_element).insert_row();
+                album_rect.y += icon_size as f32 * 32.0 + TextArea;
+            } else {
+                grid = grid.push(insert_element);
+            }
+        }
+
+        cosmic::widget::scrollable::vertical(grid)
+            .id(self.scrollbar_id.clone())
+            .on_scroll(|view| Message::ScrollView(view))
+            .into()
+    }
+
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
         match &self.page_state {
             AlbumPageState::Subpage(album) => album.page(model),
             _ => self.page(model),
         }
+    }
+
+    pub fn subscription(&self, jobs: u32) -> Subscription<Message> {
+        let mut subscriptions = Vec::with_capacity(jobs as usize);
+
+        // assume items is loaded, probably a bad idea!
+
+        let visible_rect = {
+            let point = match self.viewport {
+                Some(offset) => Point::new(0.0, offset.absolute_offset().y),
+                None => Point::new(0.0, 0.0),
+            };
+            let size = self.size.get().unwrap_or_else(|| Size::new(0.0, 0.0));
+            log::info!(
+                "VIS RECT--- \nHEIGHT: {} \nWIDTH: {}",
+                size.height,
+                size.width
+            );
+            Rectangle::new(point, size)
+        };
+
+        if let Ok(albums) = self.albums.clone().try_read() {
+            for album in albums.iter() {
+                if let Some(art) = album.cover_art.as_ref() {
+                    continue;
+                }
+            }
+        }
+
+        Subscription::batch(subscriptions)
     }
 
     pub fn load_page_data(&self) -> Task<cosmic::Action<Message>> {

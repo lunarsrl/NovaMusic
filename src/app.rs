@@ -44,7 +44,7 @@ use cosmic::iced::widget::list;
 use cosmic::iced::widget::scrollable::{AbsoluteOffset, Viewport};
 use cosmic::iced::window::Id;
 use cosmic::iced::Alignment::Start;
-use cosmic::iced::{keyboard, stream, Alignment, Color, ContentFit, Event, Length};
+use cosmic::iced::{keyboard, stream, Alignment, Color, ContentFit, Event, Length, Subscription};
 use cosmic::prelude::*;
 use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, icon, menu, nav_bar};
@@ -2276,6 +2276,17 @@ where a.name = ?    ",
     }
 
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
+        let mut subscriptions: Vec<Subscription<Message>> = vec![];
+
+        match self.nav.active_data::<Page>().expect("Pages must exist") {
+            Page::NowPlaying(_) => {}
+            Page::Artist(_) => {}
+            Page::Albums(a) => subscriptions.push(a.subscription(self.config.thumbnail_jobs)),
+            Page::Playlists(_) => {}
+            Page::Tracks(_) => {}
+            Page::Genre(_) => {}
+        }
+
         struct MPRISSubscription;
         let mpris = cosmic::iced::Subscription::run_with(TypeId::of::<MPRISSubscription>(), |_| {
             stream::channel(
@@ -2319,11 +2330,7 @@ where a.name = ?    ",
         //     },
         // ));
 
-        cosmic::iced::Subscription::batch(vec![
-            // Watch for application configuration changes.
-            cosmic::iced::event::listen_with(handle_keybinds),
-            // mpris,
-        ])
+        cosmic::iced::Subscription::batch(subscriptions)
     }
 }
 

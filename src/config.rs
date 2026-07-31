@@ -38,6 +38,7 @@ pub enum SortData {
 pub struct Config {
     pub scan_dir: String,
     pub app_theme: AppTheme,
+    pub thumbnail_jobs: u32,
     pub grid_item_size: u32,
     pub num_files_found: u32,
     pub files_scanned: u32,
@@ -78,6 +79,7 @@ impl Default for Config {
             volume: 100.0,
             footer: true,
             sort_order: SortOrder::Ascending,
+            thumbnail_jobs: 4,
         }
     }
 }
