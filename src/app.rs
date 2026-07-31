@@ -1373,16 +1373,16 @@ impl cosmic::Application for AppModel {
                     match self.config.sort_order {
                         SortOrder::Ascending => {
                             tracks.sort_by(|a, b| {
-                                let achar = a.title.chars().next().unwrap();
-                                let bchar = b.title.chars().next().unwrap();
-                                achar.cmp(&bchar)
+                                let a = a.title.to_lowercase();
+                                let b = b.title.to_lowercase();
+                                a.cmp(&b)
                             });
                         }
                         SortOrder::Descending => {
                             tracks.sort_by(|b, a| {
-                                let achar = a.title.chars().next().unwrap();
-                                let bchar = b.title.chars().next().unwrap();
-                                achar.cmp(&bchar)
+                                let a = a.title.to_lowercase();
+                                let b = b.title.to_lowercase();
+                                a.cmp(&b)
                             });
                         }
                     }
@@ -1392,8 +1392,10 @@ impl cosmic::Application for AppModel {
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
 
                     tracks.into_iter().for_each(|track| {
-                        tx.send(Message::LoadTrackData(track))
-                            .expect("failed to send loadtrackimage");
+                        let cloned_tracks: Arc<RwLock<Vec<AppTrack>>> = Arc::clone(&data.tracks);
+                        tokio::task::spawn_blocking(move || {
+                            cloned_tracks.write().unwrap().push(track);
+                        });
                     });
                     tx.send(Message::ToastError(format!(
                         "Finished loading {} tracks in {}ms",
@@ -1414,9 +1416,7 @@ impl cosmic::Application for AppModel {
                     let cloned_tracks: Arc<RwLock<Vec<AppTrack>>> = Arc::clone(&page.tracks);
 
                     tokio::task::spawn_blocking(move || {
-                        let timer = std::time::Instant::now();
                         cloned_tracks.write().unwrap().push(track);
-                        log::info!("spawn locking timer: {}", timer.elapsed().as_millis())
                     });
                 }
             }
