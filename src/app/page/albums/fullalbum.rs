@@ -82,6 +82,7 @@ fn display_track(track: &Track) -> Element<Message> {
                 cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
                     cosmic::widget::icon::from_name("playlist-symbolic"),
                 ))
+                .on_press(Message::AddTrackById(track.id))
                 .class(cosmic::theme::Button::Standard),
                 cosmic::widget::container(cosmic::widget::text(fl!("AddToQueue")))
                     .padding(cosmic::theme::spacing().space_xxxs)
@@ -93,7 +94,8 @@ fn display_track(track: &Track) -> Element<Message> {
                 cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
                     cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                 ))
-                .class(cosmic::theme::Button::Standard),
+                .class(cosmic::theme::Button::Standard)
+                .on_press(Message::PlayTrackById(track.id)),
                 cosmic::widget::container(cosmic::widget::text(fl!("PlayNow")))
                     .padding(cosmic::theme::spacing().space_xxxs)
                     .class(cosmic::theme::Container::Tooltip),

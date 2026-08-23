@@ -53,14 +53,14 @@ impl HomePage {
 
         let play_pause_button: cosmic::Element<Message> = match model.queue.is_empty() {
             true => {
-                model.sink.clear();
-                cosmic::widget::button::icon(match model.sink.is_paused() {
+                model.audio_properties.sink.clear();
+                cosmic::widget::button::icon(match model.audio_properties.sink.is_paused() {
                     true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                     false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
                 })
                 .into()
             }
-            false => cosmic::widget::button::icon(match model.sink.is_paused() {
+            false => cosmic::widget::button::icon(match model.audio_properties.sink.is_paused() {
                 true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                 false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
             })
@@ -85,7 +85,7 @@ impl HomePage {
                                             cosmic::widget::text::heading(time_elapsed).into(),
                                             cosmic::widget::slider(
                                                 0.0..=model.song_duration.unwrap_or(1.0),
-                                                model.song_progress,
+                                                model.audio_properties.sink.get_pos().as_secs_f64(),
                                                 |a| Message::SeekTrack(a),
                                             )
                                             .on_release(Message::SeekFinished)
@@ -120,28 +120,30 @@ impl HomePage {
                                             )
                                             .on_press(Message::SkipTrack)
                                             .into(),
-                                            cosmic::widget::button::icon(match model.loop_state {
-                                                LoopState::LoopingTrack => {
-                                                    cosmic::widget::icon::from_name(
-                                                        "media-playlist-repeat-song-symbolic",
-                                                    )
-                                                }
-                                                LoopState::LoopingQueue => {
-                                                    cosmic::widget::icon::from_name(
-                                                        "media-playlist-no-repeat-symbolic",
-                                                    )
-                                                }
-                                                LoopState::NotLooping => {
-                                                    cosmic::widget::icon::from_name(
-                                                        "media-playlist-consecutive-symbolic",
-                                                    )
-                                                }
-                                                LoopState::RandomShuffle => {
-                                                    cosmic::widget::icon::from_name(
-                                                        "media-playlist-shuffle-symbolic",
-                                                    )
-                                                }
-                                            })
+                                            cosmic::widget::button::icon(
+                                                match model.audio_properties.loop_state {
+                                                    LoopState::LoopingTrack => {
+                                                        cosmic::widget::icon::from_name(
+                                                            "media-playlist-repeat-song-symbolic",
+                                                        )
+                                                    }
+                                                    LoopState::LoopingQueue => {
+                                                        cosmic::widget::icon::from_name(
+                                                            "media-playlist-no-repeat-symbolic",
+                                                        )
+                                                    }
+                                                    LoopState::NotLooping => {
+                                                        cosmic::widget::icon::from_name(
+                                                            "media-playlist-consecutive-symbolic",
+                                                        )
+                                                    }
+                                                    LoopState::RandomShuffle => {
+                                                        cosmic::widget::icon::from_name(
+                                                            "media-playlist-shuffle-symbolic",
+                                                        )
+                                                    }
+                                                },
+                                            )
                                             .on_press(Message::ChangeLoopState)
                                             .into(),
                                         ])

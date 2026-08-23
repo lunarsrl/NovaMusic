@@ -402,8 +402,9 @@ WHERE album.name = ?
             .expect("error fetching album tracks of a certain album id");
 
         while let Some(row) = rows.next().unwrap() {
-            let track_num = row.get::<usize, u32>(3).unwrap();
-            let disc_num = row.get::<usize, u32>(4).unwrap();
+            let track_num = row.get::<&str, u32>("track_number").unwrap();
+            let disc_num = row.get::<&str, u32>("disc_number").unwrap();
+            let track_id = row.get::<&str, u32>("track_id").unwrap();
             let track_dat = match row.get::<usize, u32>(2) {
                 Ok(val) => conn
                     .query_row("SELECT name, path FROM track WHERE id = ?", [val], |row| {
@@ -425,6 +426,7 @@ WHERE album.name = ?
                 file_path: track_dat.1,
                 track_number: track_num,
                 disc_number: disc_num,
+                id: track_id,
             };
             track_vector.push(track);
             track_vector.sort_by(|a, b| a.track_number.cmp(&b.track_number))
@@ -442,5 +444,6 @@ struct Track {
     pub name: String,
     file_path: String,
     pub track_number: u32,
+    pub id: u32,
     disc_number: u32,
 }

@@ -15,10 +15,12 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 pub(crate) mod home;
 mod page;
 
+mod audio;
 mod scan;
 mod settings;
 mod subpage;
 
+use crate::app::audio::{AudioOutput, LoopState};
 use crate::app::home::HomePage;
 use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, FullAlbum};
 use crate::app::page::artists::{ArtistInfo, ArtistPage, ArtistPageState, ArtistsPage};
@@ -97,9 +99,7 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
-    pub mixer: rodio::stream::OutputStream,
-    pub sink: Arc<Sink>,
-    pub loop_state: LoopState,
+    pub audio_properties: AudioOutput,
     pub song_progress: f64,
     pub song_duration: Option<f64>,
     pub queue: Vec<AppTrack>,
@@ -162,14 +162,6 @@ pub struct DisplaySingle {
 }
 
 /// Messages emitted by the application and its widgets.
-
-#[derive(Debug)]
-pub enum LoopState {
-    LoopingTrack,
-    LoopingQueue,
-    NotLooping,
-    RandomShuffle,
-}
 
 #[derive(Debug, Clone)]
 pub enum FileChooserEvents {
@@ -361,11 +353,6 @@ impl cosmic::Application for AppModel {
 
         // Create a nav bar with three page items.
         let mut nav = nav_bar::Model::default();
-        let mixer =
-            rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
-        let sink = rodio::Sink::connect_new(mixer.mixer());
-
-        let sink = Arc::new(sink);
 
         let homeid = nav
             .insert()
@@ -420,7 +407,7 @@ impl cosmic::Application for AppModel {
         };
 
         // init toasts
-        sink.set_volume(config.1.volume / 100.0);
+
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
@@ -431,21 +418,19 @@ impl cosmic::Application for AppModel {
             nav,
             key_binds: HashMap::new(),
 
-            // Optional configuration file for an application.
-            config: config.1,
-            config_handler,
-            rescan_available: true,
-
             // Audio
-            mixer,
-            sink,
-            loop_state: LoopState::NotLooping,
+            audio_properties: AudioOutput::new(config.1.volume),
             song_progress: 0.0,
             song_duration: None,
             queue: vec![],
             queue_pos: 0,
             clear: false,
             task_handle: None,
+
+            // Optional configuration file for an application.
+            config: config.1,
+            config_handler,
+            rescan_available: true,
 
             // Search related
             search_field: "".to_string(),
@@ -542,7 +527,7 @@ impl cosmic::Application for AppModel {
     }
 
     fn on_close_requested(&self, _id: Id) -> Option<Self::Message> {
-        self.sink.stop();
+        self.audio_properties.sink.stop();
         match &self.task_handle {
             None => {}
             Some(handles) => {
@@ -558,7 +543,8 @@ impl cosmic::Application for AppModel {
             return None;
         }
 
-        let time_elapsed = crate::app::home::format_time(self.song_progress);
+        let time_elapsed =
+            crate::app::home::format_time(self.audio_properties.sink.get_pos().as_secs_f64());
 
         let mut total_duration = "**:**".to_string();
         match self.song_duration {
@@ -599,14 +585,14 @@ impl cosmic::Application for AppModel {
 
         let play_pause_button: cosmic::Element<Message> = match self.queue.is_empty() {
             true => {
-                self.sink.clear();
-                cosmic::widget::button::icon(match self.sink.is_paused() {
+                self.audio_properties.sink.clear();
+                cosmic::widget::button::icon(match self.audio_properties.sink.is_paused() {
                     true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                     false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
                 })
                 .into()
             }
-            false => cosmic::widget::button::icon(match self.sink.is_paused() {
+            false => cosmic::widget::button::icon(match self.audio_properties.sink.is_paused() {
                 true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                 false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
             })
@@ -638,7 +624,7 @@ impl cosmic::Application for AppModel {
                                 cosmic::widget::text::heading(time_elapsed).into(),
                                 cosmic::widget::slider(
                                     0.0..=self.song_duration.unwrap_or(1.0),
-                                    self.song_progress,
+                                    self.audio_properties.sink.get_pos().as_secs_f64(),
                                     |a| Message::SeekTrack(a),
                                 )
                                 .on_release(Message::SeekFinished)
@@ -660,22 +646,30 @@ impl cosmic::Application for AppModel {
                                     ))
                                     .on_press(Message::SkipTrack)
                                     .into(),
-                                    cosmic::widget::button::icon(match self.loop_state {
-                                        LoopState::LoopingTrack => cosmic::widget::icon::from_name(
-                                            "media-playlist-repeat-song-symbolic",
-                                        ),
-                                        LoopState::LoopingQueue => cosmic::widget::icon::from_name(
-                                            "media-playlist-no-repeat-symbolic",
-                                        ),
-                                        LoopState::NotLooping => cosmic::widget::icon::from_name(
-                                            "media-playlist-consecutive-symbolic",
-                                        ),
-                                        LoopState::RandomShuffle => {
-                                            cosmic::widget::icon::from_name(
-                                                "media-playlist-shuffle-symbolic",
-                                            )
-                                        }
-                                    })
+                                    cosmic::widget::button::icon(
+                                        match self.audio_properties.loop_state {
+                                            LoopState::LoopingTrack => {
+                                                cosmic::widget::icon::from_name(
+                                                    "media-playlist-repeat-song-symbolic",
+                                                )
+                                            }
+                                            LoopState::LoopingQueue => {
+                                                cosmic::widget::icon::from_name(
+                                                    "media-playlist-no-repeat-symbolic",
+                                                )
+                                            }
+                                            LoopState::NotLooping => {
+                                                cosmic::widget::icon::from_name(
+                                                    "media-playlist-consecutive-symbolic",
+                                                )
+                                            }
+                                            LoopState::RandomShuffle => {
+                                                cosmic::widget::icon::from_name(
+                                                    "media-playlist-shuffle-symbolic",
+                                                )
+                                            }
+                                        },
+                                    )
                                     .on_press(Message::ChangeLoopState)
                                     .into(),
                                 ])
@@ -1103,8 +1097,8 @@ impl cosmic::Application for AppModel {
             }
             Message::ChangeActiveInQueue(index) => {
                 self.clear = true;
-                self.sink.clear();
-                self.sink.play();
+                self.audio_properties.sink.clear();
+                self.audio_properties.sink.play();
                 self.queue_pos = index;
             }
             Message::RemoveSongInQueue(index) => {
@@ -1112,17 +1106,19 @@ impl cosmic::Application for AppModel {
                     Message::SongFinished(QueueUpdateReason::Removed(index))
                 });
             }
-            Message::ChangeLoopState => match self.loop_state {
+            Message::ChangeLoopState => match self.audio_properties.loop_state {
                 LoopState::LoopingTrack => {
-                    self.loop_state = LoopState::RandomShuffle;
+                    self.audio_properties.loop_state = LoopState::RandomShuffle;
                 }
                 LoopState::LoopingQueue => {
-                    self.loop_state = LoopState::LoopingTrack;
+                    self.audio_properties.loop_state = LoopState::LoopingTrack;
                 }
                 LoopState::NotLooping => {
-                    self.loop_state = LoopState::LoopingQueue;
+                    self.audio_properties.loop_state = LoopState::LoopingQueue;
                 }
-                LoopState::RandomShuffle => self.loop_state = LoopState::NotLooping,
+                LoopState::RandomShuffle => {
+                    self.audio_properties.loop_state = LoopState::NotLooping
+                }
             },
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
@@ -1142,7 +1138,7 @@ impl cosmic::Application for AppModel {
             },
             Message::RescanDir => {
                 self.clear = true;
-                self.sink.stop();
+                self.audio_properties.sink.stop();
                 match &self.task_handle {
                     None => {}
                     Some(handles) => {
@@ -1663,30 +1659,38 @@ where a.name = ?    ",
                     .expect("Failed To Update Config");
             }
             app::Message::SeekTrack(val) => {
-                self.sink.set_volume(0.0);
-                match self.sink.try_seek(Duration::from_secs_f64(val)) {
+                self.audio_properties.sink.set_volume(0.0);
+                match self
+                    .audio_properties
+                    .sink
+                    .try_seek(Duration::from_secs_f64(val))
+                {
                     Ok(_) => {}
                     Err(_) => {}
                 }
             }
-            Message::SeekFinished => self.sink.set_volume(self.config.volume / 100.0),
+            Message::SeekFinished => self
+                .audio_properties
+                .sink
+                .set_volume(self.config.volume / 100.0),
             Message::SinkProgress(number) => {
-                self.song_progress = number;
+                log::info!("progress: {}", number);
+                self.song_progress = self.audio_properties.sink.get_pos().as_secs_f64()
             }
             Message::SongFinished(val) => {
                 log::info!(
                     "Song finished: {:?} | {} | {:?}",
                     val,
                     self.clear,
-                    self.loop_state
+                    self.audio_properties.loop_state
                 );
-                let sink = self.sink.clone();
+                let sink = self.audio_properties.sink.clone();
 
                 if self.queue.is_empty() {
                     self.queue_pos = 0;
                     self.song_progress = 0.0;
                     self.song_duration = None;
-                    self.sink.clear();
+                    self.audio_properties.sink.clear();
                     return cosmic::Task::none();
                 }
 
@@ -1733,7 +1737,7 @@ where a.name = ?    ",
                             }
                         }
                         false => {
-                            return match self.loop_state {
+                            return match self.audio_properties.loop_state {
                                 LoopState::LoopingTrack => {
                                     let file = self
                                         .queue
@@ -1808,17 +1812,17 @@ where a.name = ?    ",
                             self.queue.remove(index);
 
                             self.clear = true;
-                            self.sink.clear();
-                            if let LoopState::LoopingQueue = self.loop_state {
-                                self.sink.play();
+                            self.audio_properties.sink.clear();
+                            if let LoopState::LoopingQueue = self.audio_properties.loop_state {
+                                self.audio_properties.sink.play();
                             }
                             return cosmic::Task::none();
                         } else {
                             self.queue.remove(index);
                             if index == self.queue_pos {
                                 self.clear = true;
-                                self.sink.clear();
-                                self.sink.play();
+                                self.audio_properties.sink.clear();
+                                self.audio_properties.sink.play();
                             }
                         }
                     }
@@ -1837,9 +1841,9 @@ where a.name = ?    ",
                     .expect("Failed to build decoder");
 
                 self.song_duration = Some(decoder.total_duration().unwrap().as_secs_f64());
-                self.sink.append(decoder);
+                self.audio_properties.sink.append(decoder);
 
-                let task_sink = Arc::clone(&self.sink);
+                let task_sink = Arc::clone(&self.audio_properties.sink);
 
                 return cosmic::task::future(async move {
                     Message::SongFinished(
@@ -1858,11 +1862,11 @@ where a.name = ?    ",
                 });
             }
             Message::ClearQueue => {
-                self.sink.stop();
                 self.queue_pos = 0;
                 self.song_progress = 0.0;
                 self.song_duration = None;
                 self.queue.clear();
+                self.audio_properties.sink.clear();
             }
             Message::PreviousTrack => {
                 return cosmic::task::future(async move {
@@ -1883,12 +1887,12 @@ where a.name = ?    ",
                 .map(cosmic::Action::App)
             }
 
-            Message::PlayPause => match self.sink.is_paused() {
+            Message::PlayPause => match self.audio_properties.sink.is_paused() {
                 true => {
-                    self.sink.play();
+                    self.audio_properties.sink.play();
                 }
                 false => {
-                    self.sink.pause();
+                    self.audio_properties.sink.pause();
                 }
             },
             Message::AddToPlaylist => self.playlist_creation_dialog = true,
@@ -2143,7 +2147,7 @@ where a.name = ?    ",
             }
             Message::VolumeSliderChange(val) => {
                 log::info!("volume: {}", val);
-                self.sink.set_volume(val / 100.0);
+                self.audio_properties.sink.set_volume(val / 100.0);
                 self.config
                     .set_volume(&self.config_handler, val)
                     .expect("Failed to set volume");
@@ -2192,7 +2196,7 @@ where a.name = ?    ",
                     self.queue.push(result)
                 }
 
-                if self.sink.empty() {
+                if self.audio_properties.sink.empty() {
                     let file = std::fs::File::open(self.queue.get(0).unwrap().path_buf.clone())
                         .expect("Failed to open file");
 
@@ -2205,9 +2209,10 @@ where a.name = ?    ",
                         .expect("Failed to build decoder");
 
                     self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
-                    self.sink.append(decoder);
-                    let sleeping_task_sink = Arc::clone(&self.sink);
-                    let sleeping_thread = cosmic::task::future(async move {
+                    self.audio_properties.sink.append(decoder);
+
+                    let sleeping_task_sink = Arc::clone(&self.audio_properties.sink);
+                    let _: cosmic::Task<Message> = cosmic::task::future(async move {
                         let kill = true;
                         Message::SongFinished(
                             tokio::task::spawn_blocking(move || {
@@ -2221,47 +2226,9 @@ where a.name = ?    ",
                             .await
                             .expect("nova_music.db"),
                         )
-                    })
-                    .abortable();
+                    });
 
-                    match &mut self.task_handle {
-                        None => {
-                            self.task_handle = Some(vec![sleeping_thread.1]);
-                        }
-                        Some(handles) => {
-                            handles.push(sleeping_thread.1);
-                        }
-                    }
-
-                    let reporting_task_sink = Arc::clone(&self.sink);
-                    let progress_thread = cosmic::Task::stream(cosmic::iced::stream::channel(
-                        1,
-                        |mut tx: Sender<Message>| async move {
-                            tokio::task::spawn_blocking(move || loop {
-                                sleep(Duration::from_millis(200));
-                                match tx.try_send(Message::SinkProgress(
-                                    reporting_task_sink.get_pos().as_secs_f64(),
-                                )) {
-                                    Ok(_) => {}
-                                    Err(_) => break,
-                                }
-                            });
-                        },
-                    ))
-                    .abortable();
-
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![progress_thread.1]),
-                        Some(handles) => handles.push(progress_thread.1),
-                    }
-                    let (task, handle) =
-                        cosmic::task::batch(vec![progress_thread.0, sleeping_thread.0]).abortable();
-                    match &mut self.task_handle {
-                        None => self.task_handle = Some(vec![handle]),
-                        Some(handles) => handles.push(handle),
-                    }
-                    self.sink.play();
-                    return task;
+                    self.audio_properties.sink.play();
                 }
             }
         };
@@ -2278,15 +2245,6 @@ where a.name = ?    ",
     fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
         let mut subscriptions: Vec<Subscription<Message>> = vec![];
 
-        match self.nav.active_data::<Page>().expect("Pages must exist") {
-            Page::NowPlaying(_) => {}
-            Page::Artist(_) => {}
-            Page::Albums(a) => subscriptions.push(a.subscription(self.config.thumbnail_jobs)),
-            Page::Playlists(_) => {}
-            Page::Tracks(_) => {}
-            Page::Genre(_) => {}
-        }
-
         struct MPRISSubscription;
         let mpris = cosmic::iced::Subscription::run_with(TypeId::of::<MPRISSubscription>(), |_| {
             stream::channel(
@@ -2300,6 +2258,13 @@ where a.name = ?    ",
                 },
             )
         });
+
+        if !self.audio_properties.sink.empty() && !self.audio_properties.sink.is_paused() {
+            subscriptions.push(
+                cosmic::iced::time::every(Duration::from_millis(10))
+                    .map(|_| Message::SinkProgress(0.0)),
+            );
+        }
 
         // let mpris = cosmic::iced::Subscription::run_with(cosmic::iced_futures::stream::channel(
         //     1,
