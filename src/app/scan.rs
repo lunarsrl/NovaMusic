@@ -44,7 +44,7 @@ fn handle_file(tx: &rusqlite::Transaction, path: PathBuf) {
         Default::default(),
     ) {
         let mut mdat = reader.metadata();
-        if let Some(tags) = mdat.skip_to_latest() {
+        if let Some(tags) = mdat.current() {
             let tags = tags
                 .media
                 .tags

@@ -44,30 +44,16 @@ impl<T: Subpage> SubpageBuilder for T {
                     cosmic::widget::column::with_children(vec![
                         cosmic::widget::divider::horizontal::default().into(),
                         cosmic::widget::row::with_children(vec![
-                            cosmic::iced::widget::tooltip(
-                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                    cosmic::widget::icon::from_name(
-                                        "media-playback-start-symbolic",
-                                    ),
+                            cosmic::widget::button::text(fl!("PlayNow").to_string())
+                                .leading_icon(cosmic::widget::icon::from_name(
+                                    "media-playback-start-symbolic",
                                 ))
-                                .class(cosmic::theme::Button::Standard),
-                                cosmic::widget::container(cosmic::widget::text(fl!("PlayNow")))
-                                    .padding(cosmic::theme::spacing().space_xxxs)
-                                    .class(cosmic::theme::Container::Tooltip),
-                                cosmic::widget::tooltip::Position::Top,
-                            )
-                            .into(),
-                            cosmic::iced::widget::tooltip(
-                                cosmic::widget::button::icon(cosmic::widget::icon::Handle::from(
-                                    cosmic::widget::icon::from_name("playlist-symbolic"),
-                                ))
-                                .class(cosmic::theme::Button::Standard),
-                                cosmic::widget::container(cosmic::widget::text(fl!("AddToQueue")))
-                                    .padding(cosmic::theme::spacing().space_xxxs)
-                                    .class(cosmic::theme::Container::Tooltip),
-                                cosmic::widget::tooltip::Position::Top,
-                            )
-                            .into(),
+                                .class(cosmic::theme::Button::Standard)
+                                .into(),
+                            cosmic::widget::button::text(fl!("AddToQueue").to_string())
+                                .leading_icon(cosmic::widget::icon::from_name("playlist-symbolic"))
+                                .class(cosmic::theme::Button::Standard)
+                                .into(),
                         ])
                         .align_y(cosmic::iced::Alignment::Center)
                         .spacing(cosmic::theme::spacing().space_xxs)

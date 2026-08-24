@@ -10,7 +10,7 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
 use symphonia::core::formats::FormatOptions;
-use symphonia::core::meta::{MetadataOptions, StandardTag, Tag};
+use symphonia::core::meta::{MetadataOptions, StandardTag, Tag, Visual};
 use symphonia::default::get_probe;
 
 struct Artist {
@@ -483,9 +483,9 @@ pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
         }
     };
 
-    let mdat_rev = reader.metadata();
+    let mut mdat_rev = reader.metadata();
 
-    if let Some(mdat_rev) = mdat_rev.current() {
+    if let Some(mdat_rev) = mdat_rev.skip_to_latest() {
         match mdat_rev.media.visuals.get(0) {
             Some(visual) => {
                 // log::info!("This album contains visual data!");
@@ -497,6 +497,6 @@ pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
             }
         }
     } else {
-        None
+        return None;
     }
 }
