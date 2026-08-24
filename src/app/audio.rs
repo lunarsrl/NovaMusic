@@ -1,4 +1,4 @@
-use rodio::Sink;
+use rodio::Player;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -12,21 +12,20 @@ pub enum LoopState {
 #[derive(Clone)]
 pub struct AudioOutput {
     pub loop_state: LoopState,
-    pub sink: Arc<Sink>,
-    pub mixer: Arc<rodio::stream::OutputStream>,
+    pub player: Arc<Player>,
+    pub mixer: Arc<rodio::stream::MixerDeviceSink>,
 }
 
 impl AudioOutput {
     pub fn new(volume: f32) -> AudioOutput {
-        let mixer =
-            rodio::OutputStreamBuilder::open_default_stream().expect("Failed to open stream");
-        let sink = rodio::Sink::connect_new(mixer.mixer());
+        let mixer = rodio::DeviceSinkBuilder::open_default_sink().expect("Failed to open stream");
+        let Player = rodio::Player::connect_new(mixer.mixer());
 
-        sink.set_volume(volume / 100.0);
+        Player.set_volume(volume / 100.0);
 
         AudioOutput {
             loop_state: LoopState::NotLooping,
-            sink: Arc::new(sink),
+            player: Arc::new(Player),
             mixer: Arc::new(mixer),
         }
     }

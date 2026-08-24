@@ -37,34 +37,22 @@ fn handle_file(tx: &rusqlite::Transaction, path: PathBuf) {
     let probe = get_probe();
     let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());
 
-    if let Ok(mut reader) = probe.format(
+    if let Ok(mut reader) = probe.probe(
         &Default::default(),
         mss,
-        &Default::default(),
-        &Default::default(),
+        Default::default(),
+        Default::default(),
     ) {
-        if let Some(mdat) = reader.metadata.get() {
-            if let Some(tags) = mdat.current() {
-                let tags = tags
-                    .tags()
-                    .iter()
-                    .filter(|a| a.is_known())
-                    .map(|a| a.clone())
-                    .collect();
-                create_database_entry(tags, &path, tx);
-            }
-        } else {
-            let mdat = reader.format.metadata();
-
-            if let Some(tags) = mdat.current() {
-                let tags = tags
-                    .tags()
-                    .iter()
-                    .filter(|a| a.is_known())
-                    .map(|a| a.clone())
-                    .collect();
-                create_database_entry(tags, &path, tx);
-            }
+        let mut mdat = reader.metadata();
+        if let Some(tags) = mdat.skip_to_latest() {
+            let tags = tags
+                .media
+                .tags
+                .iter()
+                .filter(|a| a.has_std_tag())
+                .map(|a| a.clone())
+                .collect();
+            create_database_entry(tags, &path, tx);
         }
     } else {
         if path.with_extension("m3u") == path || path.with_extension("m3u8") == path {

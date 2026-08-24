@@ -18,9 +18,9 @@ tokio = { version = "1.41.0", features = ["full"] }
 log = "0.4.27"
 humantime = "2.2.0"
 fern = "0.7.1"
-rodio = { version = "0.21.1", features = ["symphonia", "symphonia-all", "playback"], default-features = false }
-symphonia = { version = "0.5.4", features = ["all-codecs"] }
-rusqlite = "0.38.0"
+rodio = { version = "0.22.2", features = ["symphonia", "symphonia-all", "playback"], default-features = false }
+symphonia = { version = "0.6.1", features = ["all-codecs"] }
+rusqlite = "0.40.2"
 colored = "3.0.0"
 futures = "0.3.31"
 rayon = "1.10.0"
@@ -30,7 +30,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 zbus = { version = "5.12.0", features = ["tokio"] }
 event-listener = "5.4.1"
 tokio-stream = "0.1.17"
-rand = "0.9.5"
+rand = "0.10.2"
 
 [dependencies.i18n-embed]
 version = "0.16.0"

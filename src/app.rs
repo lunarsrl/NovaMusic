@@ -56,8 +56,8 @@ use cosmic::{action, cosmic_config, cosmic_theme, task, theme};
 use event_listener::Listener;
 use futures::channel::mpsc::Sender;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
-use rand::Rng;
-use rodio::{Sink, Source};
+use rand::{Rng, RngExt};
+use rodio::{Player, Source};
 use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::TransactionBehavior;
 use std::any::TypeId;
@@ -527,7 +527,7 @@ impl cosmic::Application for AppModel {
     }
 
     fn on_close_requested(&self, _id: Id) -> Option<Self::Message> {
-        self.audio_properties.sink.stop();
+        self.audio_properties.player.stop();
         match &self.task_handle {
             None => {}
             Some(handles) => {
@@ -544,7 +544,7 @@ impl cosmic::Application for AppModel {
         }
 
         let time_elapsed =
-            crate::app::home::format_time(self.audio_properties.sink.get_pos().as_secs_f64());
+            crate::app::home::format_time(self.audio_properties.player.get_pos().as_secs_f64());
 
         let mut total_duration = "**:**".to_string();
         match self.song_duration {
@@ -585,14 +585,14 @@ impl cosmic::Application for AppModel {
 
         let play_pause_button: cosmic::Element<Message> = match self.queue.is_empty() {
             true => {
-                self.audio_properties.sink.clear();
-                cosmic::widget::button::icon(match self.audio_properties.sink.is_paused() {
+                self.audio_properties.player.clear();
+                cosmic::widget::button::icon(match self.audio_properties.player.is_paused() {
                     true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                     false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
                 })
                 .into()
             }
-            false => cosmic::widget::button::icon(match self.audio_properties.sink.is_paused() {
+            false => cosmic::widget::button::icon(match self.audio_properties.player.is_paused() {
                 true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                 false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
             })
@@ -624,7 +624,7 @@ impl cosmic::Application for AppModel {
                                 cosmic::widget::text::heading(time_elapsed).into(),
                                 cosmic::widget::slider(
                                     0.0..=self.song_duration.unwrap_or(1.0),
-                                    self.audio_properties.sink.get_pos().as_secs_f64(),
+                                    self.audio_properties.player.get_pos().as_secs_f64(),
                                     |a| Message::SeekTrack(a),
                                 )
                                 .on_release(Message::SeekFinished)
@@ -1096,7 +1096,7 @@ impl cosmic::Application for AppModel {
                 _ = open::that_detached(REPOSITORY);
             }
             Message::ChangeActiveInQueue(index) => {
-                self.audio_properties.sink.clear();
+                self.audio_properties.player.clear();
                 self.queue_pos = index;
             }
             Message::RemoveSongInQueue(index) => {
@@ -1135,7 +1135,7 @@ impl cosmic::Application for AppModel {
                 }
             },
             Message::RescanDir => {
-                self.audio_properties.sink.stop();
+                self.audio_properties.player.stop();
                 match &self.task_handle {
                     None => {}
                     Some(handles) => {
@@ -1656,10 +1656,10 @@ where a.name = ?    ",
                     .expect("Failed To Update Config");
             }
             app::Message::SeekTrack(val) => {
-                self.audio_properties.sink.set_volume(0.0);
+                self.audio_properties.player.set_volume(0.0);
                 match self
                     .audio_properties
-                    .sink
+                    .player
                     .try_seek(Duration::from_secs_f64(val))
                 {
                     Ok(_) => {}
@@ -1668,10 +1668,10 @@ where a.name = ?    ",
             }
             Message::SeekFinished => self
                 .audio_properties
-                .sink
+                .player
                 .set_volume(self.config.volume / 100.0),
             Message::SinkProgress => {
-                self.song_progress = self.audio_properties.sink.get_pos().as_secs_f64()
+                self.song_progress = self.audio_properties.player.get_pos().as_secs_f64()
             }
             Message::SongFinished(val) => {
                 log::info!(
@@ -1679,13 +1679,13 @@ where a.name = ?    ",
                     val,
                     self.audio_properties.loop_state
                 );
-                let sink = self.audio_properties.sink.clone();
+                let sink = self.audio_properties.player.clone();
 
                 if self.queue.is_empty() {
                     self.queue_pos = 0;
                     self.song_progress = 0.0;
                     self.song_duration = None;
-                    self.audio_properties.sink.clear();
+                    self.audio_properties.player.clear();
                     return cosmic::Task::none();
                 }
 
@@ -1783,25 +1783,25 @@ where a.name = ?    ",
                             self.queue_pos = 0;
                             self.queue.remove(index);
 
-                            self.audio_properties.sink.clear();
+                            self.audio_properties.player.clear();
                             if let LoopState::LoopingQueue = self.audio_properties.loop_state {
-                                self.audio_properties.sink.play();
+                                self.audio_properties.player.play();
                             }
                             return cosmic::Task::none();
                         } else {
                             self.queue.remove(index);
                             if index == self.queue_pos {
-                                self.audio_properties.sink.clear();
-                                self.audio_properties.sink.play();
+                                self.audio_properties.player.clear();
+                                self.audio_properties.player.play();
                             }
                         }
                     }
                     QueueUpdateReason::ThreadKilled => {}
                 }
 
-                self.audio_properties.sink.clear();
+                self.audio_properties.player.clear();
                 if let Some(track) = self.queue.get(self.queue_pos) {
-                    self.audio_properties.sink.play();
+                    self.audio_properties.player.play();
                     return self.update(Message::AddTrackToSink(
                         track.path_buf.to_str().unwrap().to_string(),
                     ));
@@ -1821,9 +1821,9 @@ where a.name = ?    ",
                     .expect("Failed to build decoder");
 
                 self.song_duration = Some(decoder.total_duration().unwrap().as_secs_f64());
-                self.audio_properties.sink.append(decoder);
+                self.audio_properties.player.append(decoder);
 
-                let task_sink = Arc::clone(&self.audio_properties.sink);
+                let task_sink = Arc::clone(&self.audio_properties.player);
 
                 return cosmic::task::future(async move {
                     Message::SongFinished(
@@ -1844,7 +1844,7 @@ where a.name = ?    ",
                 self.song_progress = 0.0;
                 self.song_duration = None;
                 self.queue.clear();
-                self.audio_properties.sink.clear();
+                self.audio_properties.player.clear();
             }
             Message::PreviousTrack => {
                 return self.update(Message::SongFinished(QueueUpdateReason::Previous))
@@ -1863,12 +1863,12 @@ where a.name = ?    ",
                 .map(cosmic::Action::App)
             }
 
-            Message::PlayPause => match self.audio_properties.sink.is_paused() {
+            Message::PlayPause => match self.audio_properties.player.is_paused() {
                 true => {
-                    self.audio_properties.sink.play();
+                    self.audio_properties.player.play();
                 }
                 false => {
-                    self.audio_properties.sink.pause();
+                    self.audio_properties.player.pause();
                 }
             },
             Message::AddToPlaylist => self.playlist_creation_dialog = true,
@@ -2123,7 +2123,7 @@ where a.name = ?    ",
             }
             Message::VolumeSliderChange(val) => {
                 log::info!("volume: {}", val);
-                self.audio_properties.sink.set_volume(val / 100.0);
+                self.audio_properties.player.set_volume(val / 100.0);
                 self.config
                     .set_volume(&self.config_handler, val)
                     .expect("Failed to set volume");
@@ -2172,7 +2172,7 @@ where a.name = ?    ",
                     self.queue.push(result)
                 }
 
-                if self.audio_properties.sink.empty() {
+                if self.audio_properties.player.empty() {
                     let file = std::fs::File::open(self.queue.get(0).unwrap().path_buf.clone())
                         .expect("Failed to open file");
 
@@ -2185,9 +2185,9 @@ where a.name = ?    ",
                         .expect("Failed to build decoder");
 
                     self.song_duration = decoder.total_duration().map(|val| val.as_secs_f64());
-                    self.audio_properties.sink.append(decoder);
+                    self.audio_properties.player.append(decoder);
 
-                    let sleeping_task_sink = Arc::clone(&self.audio_properties.sink);
+                    let sleeping_task_sink = Arc::clone(&self.audio_properties.player);
                     let _: cosmic::Task<Message> = cosmic::task::future(async move {
                         let kill = true;
                         Message::SongFinished(
@@ -2204,7 +2204,7 @@ where a.name = ?    ",
                         )
                     });
 
-                    self.audio_properties.sink.play();
+                    self.audio_properties.player.play();
                 }
             }
         };
@@ -2235,7 +2235,7 @@ where a.name = ?    ",
             )
         });
 
-        if !self.audio_properties.sink.empty() && !self.audio_properties.sink.is_paused() {
+        if !self.audio_properties.player.empty() && !self.audio_properties.player.is_paused() {
             subscriptions.push(
                 cosmic::iced::time::every(Duration::from_millis(10)).map(|_| Message::SinkProgress),
             );

@@ -18,7 +18,6 @@ use std::cell::Cell;
 use std::ops::Div;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
-use symphonia::core::conv::IntoSample;
 
 #[derive(Debug, Clone)]
 pub struct TrackPage {

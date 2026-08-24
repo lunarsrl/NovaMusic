@@ -9,7 +9,8 @@ use rusqlite::ffi::sqlite_uint64;
 use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
-use symphonia::core::meta::{StandardTagKey, Tag, Value};
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::meta::{MetadataOptions, StandardTag, Tag};
 use symphonia::default::get_probe;
 
 struct Artist {
@@ -175,114 +176,50 @@ pub fn create_database_entry(
     let mut artist = Artist { id: 0, name: None };
 
     for tag in metadata_tags {
-        if let Some(key) = tag.std_key {
+        if let Some(key) = tag.std {
             match key {
                 //todo: maybe one day account for most of these tags somewhere
-                StandardTagKey::AcoustidFingerprint => {}
-                StandardTagKey::AcoustidId => {}
-                StandardTagKey::Album => match tag.value {
-                    Value::String(name) => {
-                        // log::info!("This file maay be a part of an album!");
-                        album.name = name;
-                    }
-                    _ => {
-                        // log::error!("Album name is not a string");
-                    }
-                },
-                StandardTagKey::AlbumArtist => match tag.value {
-                    Value::String(mut name) => {
-                        // let regex = Regex::new("/Feat.|ft.|&/i").unwrap();
-                        //
-                        // match regex.find(&name) {
-                        //     None => {}
-                        //     Some(val) => {
-                        //
-                        //         name.truncate(val.start());
-                        //     }
-                        // };
-                        //
+                StandardTag::Album(value) => album.name = value.to_string(),
+                StandardTag::AlbumArtist(name) => {
+                    // let regex = Regex::new("/Feat.|ft.|&/i").unwrap();
+                    //
+                    // match regex.find(&name) {
+                    //     None => {}
+                    //     Some(val) => {
+                    //
+                    //         name.truncate(val.start());
+                    //     }
+                    // };
+                    //
 
-                        match conn.execute("INSERT INTO artists (name) VALUES (?)", [name.trim()]) {
-                            Ok(_) => {
-                                // log::info!("Added artist {} to artists", name);
-                                album.artist_id = Some(conn.last_insert_rowid() as u32);
-                            }
-                            Err(_) => {
-                                // log::warn!("Artist: {} already created", name);
-                                album.artist_id = Some(
-                                    conn.query_row(
-                                        "SELECT id FROM artists WHERE name = ?",
-                                        &[&name],
-                                        |row| row.get::<usize, u32>(0),
-                                    )
-                                    .unwrap(),
-                                );
-                                // log::info!("ARTIST ID:  {}", album.artist_id);
-                            }
+                    match conn.execute("INSERT INTO artists (name) VALUES (?)", [name.trim()]) {
+                        Ok(_) => {
+                            // log::info!("Added artist {} to artists", name);
+                            album.artist_id = Some(conn.last_insert_rowid() as u32);
                         }
-                    }
-                    _ => {}
-                },
-                StandardTagKey::Arranger => {}
-                StandardTagKey::Artist => {
-                    if let Value::String(val) = tag.value {
-                        artist.name = Some(val)
+                        Err(_) => {
+                            // log::warn!("Artist: {} already created", name);
+                            album.artist_id = Some(
+                                conn.query_row(
+                                    "SELECT id FROM artists WHERE name = ?",
+                                    &[&name],
+                                    |row| row.get::<usize, u32>(0),
+                                )
+                                .unwrap(),
+                            );
+                            // log::info!("ARTIST ID:  {}", album.artist_id);
+                        }
                     }
                 }
-                StandardTagKey::Bpm => {}
-                StandardTagKey::Comment => {}
-                StandardTagKey::Compilation => {}
-                StandardTagKey::Composer => {}
-                StandardTagKey::Conductor => {}
-                StandardTagKey::ContentGroup => {}
-                StandardTagKey::Copyright => {}
-                StandardTagKey::Date => {}
-                StandardTagKey::Description => {}
-                StandardTagKey::DiscNumber => match tag.value {
-                    Value::String(val) => {
-                        // log::info!("DISC NUMBER");
-                        let mut final_val = val;
+                StandardTag::Artist(name) => artist.name = Some(name.to_string()),
 
-                        if final_val.contains("/") {
-                            final_val = final_val
-                                .split("/")
-                                .next()
-                                .expect("Number")
-                                .parse()
-                                .unwrap();
-                        }
-
-                        album_tracks.disc_number = final_val
-                            .parse::<u32>()
-                            .expect(format!("Invalid track number: {}", final_val).as_str());
-                    }
-                    Value::UnsignedInt(val) => {
-                        // log::info!("{}: {}", "DISC NUMBER unsigned int".red(), val);
-                        album_tracks.disc_number = val as u32
-                    }
-                    _ => {
-                        // log::error!("DISC NUMBER");
-                    }
-                },
-                StandardTagKey::DiscSubtitle => {}
-                StandardTagKey::DiscTotal => match tag.value {
-                    Value::String(val) => album.num_of_discs = val.parse::<u32>().unwrap(),
-                    _ => {
-                        // log::error!("Disc number is not a number");
-                    }
-                },
-                StandardTagKey::EncodedBy => {}
-                StandardTagKey::Encoder => {}
-                StandardTagKey::EncoderSettings => {}
-                StandardTagKey::EncodingDate => {}
-                StandardTagKey::Engineer => {}
-                StandardTagKey::Ensemble => {}
-                StandardTagKey::Genre => {
-                    if !tag.value.to_string().is_empty() {
-                        match conn.execute(
-                            "insert into genres (name) values (?)",
-                            [tag.value.to_string()],
-                        ) {
+                StandardTag::DiscNumber(num) => album_tracks.disc_number = num as u32,
+                StandardTag::DiscTotal(total) => album.num_of_discs = total as u32,
+                StandardTag::Genre(genre) => {
+                    if genre.to_string().is_empty() {
+                        match conn
+                            .execute("insert into genres (name) values (?)", [genre.to_string()])
+                        {
                             Ok(_) => {}
                             Err(err) => {
                                 // log::error!("error: {}", err);
@@ -290,147 +227,22 @@ pub fn create_database_entry(
                         }
 
                         if let Some(genres) = &mut track.genres {
-                            genres.push(tag.value.to_string())
+                            genres.push(genre.to_string())
                         } else {
-                            track.genres = Some(vec![tag.value.to_string()]);
+                            track.genres = Some(vec![genre.to_string()]);
                         }
                     } else {
                     }
                 }
-                StandardTagKey::IdentAsin => {}
-                StandardTagKey::IdentBarcode => {}
-                StandardTagKey::IdentCatalogNumber => {}
-                StandardTagKey::IdentEanUpn => {}
-                StandardTagKey::IdentIsrc => {}
-                StandardTagKey::IdentPn => {}
-                StandardTagKey::IdentPodcast => {}
-                StandardTagKey::IdentUpc => {}
-                StandardTagKey::Label => {}
-                StandardTagKey::Language => {}
-                StandardTagKey::License => {}
-                StandardTagKey::Lyricist => {}
-                StandardTagKey::Lyrics => {}
-                StandardTagKey::MediaFormat => {}
-                StandardTagKey::MixDj => {}
-                StandardTagKey::MixEngineer => {}
-                StandardTagKey::Mood => {}
-                StandardTagKey::MovementName => {}
-                StandardTagKey::MovementNumber => {}
-                StandardTagKey::MusicBrainzAlbumArtistId => {}
-                StandardTagKey::MusicBrainzAlbumId => {}
-                StandardTagKey::MusicBrainzArtistId => {}
-                StandardTagKey::MusicBrainzDiscId => {}
-                StandardTagKey::MusicBrainzGenreId => {}
-                StandardTagKey::MusicBrainzLabelId => {}
-                StandardTagKey::MusicBrainzOriginalAlbumId => {}
-                StandardTagKey::MusicBrainzOriginalArtistId => {}
-                StandardTagKey::MusicBrainzRecordingId => {}
-                StandardTagKey::MusicBrainzReleaseGroupId => {}
-                StandardTagKey::MusicBrainzReleaseStatus => {}
-                StandardTagKey::MusicBrainzReleaseTrackId => {}
-                StandardTagKey::MusicBrainzReleaseType => {}
-                StandardTagKey::MusicBrainzTrackId => {}
-                StandardTagKey::MusicBrainzWorkId => {}
-                StandardTagKey::Opus => {}
-                StandardTagKey::OriginalAlbum => {}
-                StandardTagKey::OriginalArtist => {}
-                StandardTagKey::OriginalDate => {}
-                StandardTagKey::OriginalFile => {}
-                StandardTagKey::OriginalWriter => {}
-                StandardTagKey::Owner => {}
-                StandardTagKey::Part => {}
-                StandardTagKey::PartTotal => {}
-                StandardTagKey::Performer => {}
-                StandardTagKey::Podcast => {}
-                StandardTagKey::PodcastCategory => {}
-                StandardTagKey::PodcastDescription => {}
-                StandardTagKey::PodcastKeywords => {}
-                StandardTagKey::Producer => {}
-                StandardTagKey::PurchaseDate => {}
-                StandardTagKey::Rating => {}
-                StandardTagKey::ReleaseCountry => {}
-                StandardTagKey::ReleaseDate => {}
-                StandardTagKey::Remixer => {}
-                StandardTagKey::ReplayGainAlbumGain => {}
-                StandardTagKey::ReplayGainAlbumPeak => {}
-                StandardTagKey::ReplayGainTrackGain => {}
-                StandardTagKey::ReplayGainTrackPeak => {}
-                StandardTagKey::Script => {}
-                StandardTagKey::SortAlbum => {}
-                StandardTagKey::SortAlbumArtist => {}
-                StandardTagKey::SortArtist => {}
-                StandardTagKey::SortComposer => {}
-                StandardTagKey::SortTrackTitle => {}
-                StandardTagKey::TaggingDate => {}
-                StandardTagKey::TrackNumber => match tag.value {
-                    Value::String(val) => {
-                        let mut final_val = val;
+                StandardTag::TrackNumber(val) => album_tracks.track_number = val as u32,
 
-                        if final_val.contains("/") {
-                            final_val = final_val
-                                .split("/")
-                                .next()
-                                .expect("Number")
-                                .parse()
-                                .unwrap();
-                        }
-
-                        album_tracks.track_number = final_val
-                            .parse::<u32>()
-                            .expect(format!("Invalid track number: {}", final_val).as_str());
-                    }
-                    Value::UnsignedInt(val) => album_tracks.track_number = val as u32,
-
-                    Value::Binary(_) => {
-                        // log::info!("{}", "TRACK NUMBER binary".red());
-                    }
-                    Value::Boolean(_) => {
-                        // log::info!("{}", "TRACK NUMBER  boolean".red());
-                    }
-                    Value::Flag => {
-                        // log::info!("{}", "TRACK NUMBER  flag".red());
-                    }
-                    Value::Float(_) => {
-                        // log::info!("{}", "TRACK NUMBER  float".red());
-                    }
-                    Value::SignedInt(_) => {
-                        // log::info!("{}", "TRACK NUMBER  signed int".red());
-                    }
-                },
-                StandardTagKey::TrackSubtitle => {}
-                StandardTagKey::TrackTitle => match tag.value {
-                    Value::String(name) => {
-                        track.name = Some(name);
-                    }
-                    _ => {
-                        // log::error!("Track name is not a string");
-                    }
-                },
-                StandardTagKey::TrackTotal => match tag.value {
-                    Value::String(val) => {
-                        album.num_of_tracks = val.parse::<u32>().unwrap();
-                    }
-                    _ => {
-                        // log::error!("Track number is not a number");
-                    }
-                },
-                StandardTagKey::TvEpisode => {}
-                StandardTagKey::TvEpisodeTitle => {}
-                StandardTagKey::TvNetwork => {}
-                StandardTagKey::TvSeason => {}
-                StandardTagKey::TvShowTitle => {}
-                StandardTagKey::Url => {}
-                StandardTagKey::UrlArtist => {}
-                StandardTagKey::UrlCopyright => {}
-                StandardTagKey::UrlInternetRadio => {}
-                StandardTagKey::UrlLabel => {}
-                StandardTagKey::UrlOfficial => {}
-                StandardTagKey::UrlPayment => {}
-                StandardTagKey::UrlPodcast => {}
-                StandardTagKey::UrlPurchase => {}
-                StandardTagKey::UrlSource => {}
-                StandardTagKey::Version => {}
-                StandardTagKey::Writer => {}
+                StandardTag::TrackTitle(name) => {
+                    track.name = Some(name.to_string());
+                }
+                StandardTag::TrackTotal(total) => {
+                    album.num_of_tracks = total as u32;
+                }
+                _ => {}
             }
         }
     }
@@ -606,7 +418,7 @@ pub fn create_database_entry(
         if album.num_of_tracks != 1 {
             match conn.execute(
                 "INSERT INTO album_tracks (album_id, track_id, track_number, disc_number) VALUES (?, ?, ?, ?)",
-                (&album.id, &track.id, &album_tracks.track_number, &album_tracks.disc_number),
+                (&album.id, &track.id, &album_tracks.track_number , &album_tracks.disc_number ),
             ) {
                 Ok(_) => {
 
@@ -658,41 +470,33 @@ fn insert_track_to_grouping(
 pub fn find_visual(filepath: &PathBuf) -> Option<Box<[u8]>> {
     let file = fs::File::open(filepath).unwrap();
 
-    let probe = get_probe();
     let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());
+    let meta_opts: MetadataOptions = Default::default();
+    let fmt_opts: FormatOptions = Default::default();
 
-    let mut reader = match probe.format(
-        &Default::default(),
-        mss,
-        &Default::default(),
-        &Default::default(),
-    ) {
+    let probe = get_probe();
+
+    let mut reader = match probe.probe(&Default::default(), mss, fmt_opts, meta_opts) {
         Ok(read) => read,
         Err(err) => {
             panic!("{}", err.to_string());
         }
     };
 
-    if let Some(mdat_rev) = reader.metadata.get() {
-        if let Some(mdat_rev) = mdat_rev.current() {
-            match mdat_rev.visuals().get(0) {
-                Some(visual) => {
-                    // log::info!("This album contains visual data!");
-                    Some(visual.data.clone())
-                }
-                None => {
-                    // log::info!("This album contains no visual data!");
-                    None
-                }
+    let mdat_rev = reader.metadata();
+
+    if let Some(mdat_rev) = mdat_rev.current() {
+        match mdat_rev.media.visuals.get(0) {
+            Some(visual) => {
+                // log::info!("This album contains visual data!");
+                Some(visual.data.clone())
             }
-        } else {
-            None
+            None => {
+                // log::info!("This album contains no visual data!");
+                None
+            }
         }
     } else {
-        if let Some(mdat_rev) = reader.format.metadata().current() {
-            Some(mdat_rev.visuals().get(0)?.data.clone())
-        } else {
-            None
-        }
+        None
     }
 }

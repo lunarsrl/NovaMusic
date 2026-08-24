@@ -53,19 +53,21 @@ impl HomePage {
 
         let play_pause_button: cosmic::Element<Message> = match model.queue.is_empty() {
             true => {
-                model.audio_properties.sink.clear();
-                cosmic::widget::button::icon(match model.audio_properties.sink.is_paused() {
+                model.audio_properties.player.clear();
+                cosmic::widget::button::icon(match model.audio_properties.player.is_paused() {
                     true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
                     false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
                 })
                 .into()
             }
-            false => cosmic::widget::button::icon(match model.audio_properties.sink.is_paused() {
-                true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
-                false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
-            })
-            .on_press(Message::PlayPause)
-            .into(),
+            false => {
+                cosmic::widget::button::icon(match model.audio_properties.player.is_paused() {
+                    true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
+                    false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
+                })
+                .on_press(Message::PlayPause)
+                .into()
+            }
         };
 
         // Actual contents
@@ -85,7 +87,11 @@ impl HomePage {
                                             cosmic::widget::text::heading(time_elapsed).into(),
                                             cosmic::widget::slider(
                                                 0.0f64..=model.song_duration.unwrap_or(1.0f64),
-                                                model.audio_properties.sink.get_pos().as_secs_f64(),
+                                                model
+                                                    .audio_properties
+                                                    .player
+                                                    .get_pos()
+                                                    .as_secs_f64(),
                                                 |a| Message::SeekTrack(a),
                                             )
                                             .on_release(Message::SeekFinished)
