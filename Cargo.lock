@@ -3333,6 +3333,7 @@ dependencies = [
  "libcosmic",
  "log",
  "open",
+ "rand 0.9.5",
  "rayon",
  "regex",
  "rodio",

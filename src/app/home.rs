@@ -84,7 +84,7 @@ impl HomePage {
                                         cosmic::widget::row::with_children(vec![
                                             cosmic::widget::text::heading(time_elapsed).into(),
                                             cosmic::widget::slider(
-                                                0.0..=model.song_duration.unwrap_or(1.0),
+                                                0.0f64..=model.song_duration.unwrap_or(1.0f64),
                                                 model.audio_properties.sink.get_pos().as_secs_f64(),
                                                 |a| Message::SeekTrack(a),
                                             )

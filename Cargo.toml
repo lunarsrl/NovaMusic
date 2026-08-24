@@ -30,6 +30,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 zbus = { version = "5.12.0", features = ["tokio"] }
 event-listener = "5.4.1"
 tokio-stream = "0.1.17"
+rand = "0.9.5"
 
 [dependencies.i18n-embed]
 version = "0.16.0"
