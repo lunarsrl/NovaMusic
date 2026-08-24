@@ -213,7 +213,8 @@ pub enum Message {
     PlayTrackById(u32),
     AddTrackById(u32),
     //todo Make albums in queue fancier kinda like Elisa does it
-    AddAlbumToQueue(Vec<u32>),
+    PlayListById(Vec<u32>),
+    AddListById(Vec<u32>),
 
     // Track Page
     TrackDataReceived(Vec<AppTrack>),
@@ -1849,7 +1850,12 @@ where a.name = ?    ",
             Message::PreviousTrack => {
                 return self.update(Message::SongFinished(QueueUpdateReason::Previous))
             }
-            app::Message::AddAlbumToQueue(mut paths) => {
+            Message::PlayListById(list) => {
+                self.audio_properties.player.clear();
+                self.update(Message::AddListById(list));
+                self.audio_properties.player.play();
+            }
+            Message::AddListById(mut paths) => {
                 return cosmic::Task::stream(cosmic::iced::stream::channel(
                     0,
                     |mut tx: Sender<Message>| async move {

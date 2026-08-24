@@ -10,6 +10,8 @@ pub trait Subpage {
     fn header_image(&self) -> Element<Message>;
     fn header_subtitle(&self) -> String;
     fn body(&self, model: &AppModel) -> Element<Message>;
+
+    fn data_ids(&self) -> Vec<u32>;
 }
 
 pub trait SubpageBuilder {
@@ -45,6 +47,7 @@ impl<T: Subpage> SubpageBuilder for T {
                         cosmic::widget::divider::horizontal::default().into(),
                         cosmic::widget::row::with_children(vec![
                             cosmic::widget::button::text(fl!("PlayNow").to_string())
+                                .on_press(Message::PlayListById(self.data_ids()))
                                 .leading_icon(cosmic::widget::icon::from_name(
                                     "media-playback-start-symbolic",
                                 ))
@@ -52,6 +55,7 @@ impl<T: Subpage> SubpageBuilder for T {
                                 .into(),
                             cosmic::widget::button::text(fl!("AddToQueue").to_string())
                                 .leading_icon(cosmic::widget::icon::from_name("playlist-symbolic"))
+                                .on_press(Message::AddListById(self.data_ids()))
                                 .class(cosmic::theme::Button::Standard)
                                 .into(),
                         ])

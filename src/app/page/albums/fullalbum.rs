@@ -10,6 +10,9 @@ use cosmic::Element;
 use std::collections::BTreeMap;
 
 impl Subpage for FullAlbum {
+    fn data_ids(&self) -> Vec<u32> {
+        self.tracks.iter().map(|a| a.id).collect::<Vec<u32>>()
+    }
     fn header_title(&self) -> String {
         return self.album.name.to_string();
     }
@@ -151,7 +154,6 @@ impl Track {
             // Normal Display
             cosmic::widget::container(
                 cosmic::widget::column::with_children(vec![
-                    cosmic::widget::divider::horizontal::light().into(),
                     cosmic::widget::space::vertical().into(),
                     cosmic::widget::text::heading(self.name.to_string())
                         .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)))
@@ -166,7 +168,6 @@ impl Track {
             // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             cosmic::widget::container(
                 cosmic::widget::column::with_children(vec![
-                    cosmic::widget::divider::horizontal::light().into(),
                     cosmic::widget::space::vertical().into(),
                     cosmic::widget::row::with_children([
                         cosmic::widget::text::heading(self.name.to_string())
