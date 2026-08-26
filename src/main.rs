@@ -11,6 +11,7 @@ mod mpris;
 
 fn main() -> cosmic::iced::Result {
     //start logging
+    console_subscriber::init();
     setup_logger().expect("Could not setup logger");
 
     // Get the system's preferred languages.

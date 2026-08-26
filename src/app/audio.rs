@@ -1,5 +1,4 @@
-use rodio::Player;
-use std::sync::Arc;
+use crate::app::AppTrack;
 
 #[derive(Debug, Clone)]
 pub enum LoopState {
@@ -10,23 +9,31 @@ pub enum LoopState {
 }
 
 #[derive(Clone)]
-pub struct AudioOutput {
+pub struct AudioPLayer {
     pub loop_state: LoopState,
-    pub player: Arc<Player>,
-    pub mixer: Arc<rodio::stream::MixerDeviceSink>,
+
+    pub song_progress: f64,
+    pub song_duration: Option<f64>,
+    pub queue: Vec<AppTrack>,
+    pub queue_pos: usize,
 }
 
-impl AudioOutput {
-    pub fn new(volume: f32) -> AudioOutput {
-        let mixer = rodio::DeviceSinkBuilder::open_default_sink().expect("Failed to open stream");
-        let Player = rodio::Player::connect_new(mixer.mixer());
-
-        Player.set_volume(volume / 100.0);
-
-        AudioOutput {
+impl AudioPLayer {
+    pub fn new(volume: f32) -> AudioPLayer {
+        AudioPLayer {
             loop_state: LoopState::NotLooping,
-            player: Arc::new(Player),
-            mixer: Arc::new(mixer),
+            song_progress: 0.0,
+            song_duration: None,
+            queue: vec![],
+            queue_pos: 0,
         }
+    }
+
+    /// Use to clear the queue and associated data
+    pub fn clear(&mut self) {
+        self.queue_pos = 0;
+        self.song_progress = 0.0;
+        self.song_duration = None;
+        self.queue.clear();
     }
 }

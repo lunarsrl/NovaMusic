@@ -20,10 +20,10 @@ pub(crate) struct HomePage {
 impl HomePage {
     pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
         // Time ELapsed
-        let time_elapsed = format_time(model.song_progress);
+        let time_elapsed = format_time(model.audio_properties.song_progress);
 
         let mut total_duration = "**:**".to_string();
-        match model.song_duration {
+        match model.audio_properties.song_duration {
             None => {}
             Some(val) => {
                 total_duration = format_time(val);
@@ -31,44 +31,41 @@ impl HomePage {
         };
 
         let cover;
-        match model.queue.is_empty() {
+        match model.audio_properties.queue.is_empty() {
             true => {
                 cover = format_cover_page(&"".to_string(), &"".to_string(), None, &CoverArt::None);
             }
             false => {
                 cover = format_cover_page(
-                    &model.queue.get(model.queue_pos as usize).unwrap().title,
-                    &model.queue.get(model.queue_pos as usize).unwrap().artist,
+                    &model
+                        .audio_properties
+                        .queue
+                        .get(model.audio_properties.queue_pos as usize)
+                        .unwrap()
+                        .title,
+                    &model
+                        .audio_properties
+                        .queue
+                        .get(model.audio_properties.queue_pos as usize)
+                        .unwrap()
+                        .artist,
                     Some(
                         &model
+                            .audio_properties
                             .queue
-                            .get(model.queue_pos as usize)
+                            .get(model.audio_properties.queue_pos as usize)
                             .unwrap()
                             .album_title,
                     ),
-                    &model.queue.get(model.queue_pos as usize).unwrap().cover_art,
+                    &model
+                        .audio_properties
+                        .queue
+                        .get(model.audio_properties.queue_pos as usize)
+                        .unwrap()
+                        .cover_art,
                 );
             }
         }
-
-        let play_pause_button: cosmic::Element<Message> = match model.queue.is_empty() {
-            true => {
-                model.audio_properties.player.clear();
-                cosmic::widget::button::icon(match model.audio_properties.player.is_paused() {
-                    true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
-                    false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
-                })
-                .into()
-            }
-            false => {
-                cosmic::widget::button::icon(match model.audio_properties.player.is_paused() {
-                    true => cosmic::widget::icon::from_name("media-playback-start-symbolic"),
-                    false => cosmic::widget::icon::from_name("media-playback-pause-symbolic"),
-                })
-                .on_press(Message::PlayPause)
-                .into()
-            }
-        };
 
         // Actual contents
         cosmic::widget::container(
@@ -86,12 +83,12 @@ impl HomePage {
                                         cosmic::widget::row::with_children(vec![
                                             cosmic::widget::text::heading(time_elapsed).into(),
                                             cosmic::widget::slider(
-                                                0.0f64..=model.song_duration.unwrap_or(1.0f64),
-                                                model
-                                                    .audio_properties
-                                                    .player
-                                                    .get_pos()
-                                                    .as_secs_f64(),
+                                                0.0f64
+                                                    ..=model
+                                                        .audio_properties
+                                                        .song_duration
+                                                        .unwrap_or(1.0f64),
+                                                model.audio_properties.song_progress,
                                                 |a| Message::SeekTrack(a),
                                             )
                                             .on_release(Message::SeekFinished)
@@ -117,7 +114,7 @@ impl HomePage {
                                             .on_press(Message::PreviousTrack)
                                             .into(),
                                             // PLAY OR PAUSE
-                                            play_pause_button,
+
                                             // PLAY OR PAUSE
                                             cosmic::widget::button::icon(
                                                 cosmic::widget::icon::from_name(
@@ -188,7 +185,10 @@ impl HomePage {
                                 .spacing(cosmic::theme::spacing().space_xxs)
                                 .into(),
                                 cosmic::widget::divider::horizontal::default().into(),
-                                listify_queue(&model.queue, model.queue_pos as usize),
+                                listify_queue(
+                                    &model.audio_properties.queue,
+                                    model.audio_properties.queue_pos as usize,
+                                ),
                             ])
                             .spacing(cosmic::theme::spacing().space_xxs),
                         )

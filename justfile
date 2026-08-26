@@ -49,7 +49,10 @@ check-json: (check '--message-format=json')
 
 # Run the application for testing purposes
 run *args:
-    env RUST_BACKTRACE=full cargo run --release {{ args }}
+    env RUST_BACKTRACE=full RUSTFLAGS="--cfg tokio_unstable" cargo run --release {{ args }}
+
+run-debug *args:
+    env RUST_BACKTRACE=full RUSTFLAGS="--cfg tokio_unstable" cargo run --dev {{ args }}
 
 # Installs files
 install:
