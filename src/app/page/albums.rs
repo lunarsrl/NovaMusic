@@ -5,7 +5,7 @@ use crate::app::page::tracks::SearchResult;
 use crate::app::page::BodyStyle::Grid;
 use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder};
 use crate::app::subpage::{Subpage, SubpageBuilder};
-use crate::app::{connect_to_db, AppModel, AppTrack, Message};
+use crate::app::{connect_to_db, AppModel, Message};
 use crate::fl;
 use colored::Colorize;
 use cosmic::iced::application::IntoBoot;

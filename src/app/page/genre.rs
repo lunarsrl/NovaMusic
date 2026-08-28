@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::app::audio::tracktypes::AppTrack;
 use crate::app::page::PageBuilder;
-use crate::app::{AppModel, AppTrack, Message};
+use crate::app::{AppModel, Message};
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::Element;
 use std::sync::Arc;

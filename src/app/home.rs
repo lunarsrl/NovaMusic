@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::app;
+use crate::app::audio::tracktypes::QueuedTrack;
 use crate::app::page::CoverArt;
 use crate::app::page::CoverArt::SomeLoaded;
-use crate::app::{AppModel, AppTrack, LoopState, Message};
+use crate::app::{AppModel, LoopState, Message};
 use crate::fl;
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::widget::scrollable::Viewport;
@@ -20,10 +21,10 @@ pub(crate) struct HomePage {
 impl HomePage {
     pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
         // Time ELapsed
-        let time_elapsed = format_time(model.audio_properties.song_progress);
+        let time_elapsed = format_time(model.audio_player.player_state.song_progress);
 
         let mut total_duration = "**:**".to_string();
-        match model.audio_properties.song_duration {
+        match model.audio_player.player_state.song_duration {
             None => {}
             Some(val) => {
                 total_duration = format_time(val);
@@ -31,37 +32,45 @@ impl HomePage {
         };
 
         let cover;
-        match model.audio_properties.queue.is_empty() {
+        match model.audio_player.queued_audio.long_queue.is_empty() {
             true => {
                 cover = format_cover_page(&"".to_string(), &"".to_string(), None, &CoverArt::None);
             }
             false => {
                 cover = format_cover_page(
                     &model
-                        .audio_properties
-                        .queue
-                        .get(model.audio_properties.queue_pos as usize)
+                        .audio_player
+                        .queued_audio
+                        .cached
+                        .first()
                         .unwrap()
+                        .app_track
                         .title,
                     &model
-                        .audio_properties
-                        .queue
-                        .get(model.audio_properties.queue_pos as usize)
+                        .audio_player
+                        .queued_audio
+                        .cached
+                        .first()
                         .unwrap()
+                        .app_track
                         .artist,
                     Some(
                         &model
-                            .audio_properties
-                            .queue
-                            .get(model.audio_properties.queue_pos as usize)
+                            .audio_player
+                            .queued_audio
+                            .cached
+                            .first()
                             .unwrap()
+                            .app_track
                             .album_title,
                     ),
                     &model
-                        .audio_properties
-                        .queue
-                        .get(model.audio_properties.queue_pos as usize)
+                        .audio_player
+                        .queued_audio
+                        .cached
+                        .first()
                         .unwrap()
+                        .app_track
                         .cover_art,
                 );
             }
@@ -85,10 +94,11 @@ impl HomePage {
                                             cosmic::widget::slider(
                                                 0.0f64
                                                     ..=model
-                                                        .audio_properties
+                                                        .audio_player
+                                                        .player_state
                                                         .song_duration
                                                         .unwrap_or(1.0f64),
-                                                model.audio_properties.song_progress,
+                                                model.audio_player.player_state.song_progress,
                                                 |a| Message::SeekTrack(a),
                                             )
                                             .on_release(Message::SeekFinished)
@@ -124,7 +134,7 @@ impl HomePage {
                                             .on_press(Message::SkipTrack)
                                             .into(),
                                             cosmic::widget::button::icon(
-                                                match model.audio_properties.loop_state {
+                                                match model.audio_player.player_state.loop_state {
                                                     LoopState::LoopingTrack => {
                                                         cosmic::widget::icon::from_name(
                                                             "media-playlist-repeat-song-symbolic",
@@ -186,8 +196,8 @@ impl HomePage {
                                 .into(),
                                 cosmic::widget::divider::horizontal::default().into(),
                                 listify_queue(
-                                    &model.audio_properties.queue,
-                                    model.audio_properties.queue_pos as usize,
+                                    &model.audio_player.queued_audio.long_queue,
+                                    model.audio_player.queued_audio.queue_pos as usize,
                                 ),
                             ])
                             .spacing(cosmic::theme::spacing().space_xxs),
@@ -220,7 +230,7 @@ impl HomePage {
     }
 }
 
-pub fn listify_queue(queue: &Vec<AppTrack>, active: usize) -> Element<'static, Message> {
+pub fn listify_queue(queue: &Vec<QueuedTrack>, active: usize) -> Element<'static, Message> {
     let mut list = Some(list_column());
 
     for (index, item) in queue.iter().enumerate() {

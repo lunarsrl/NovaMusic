@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-
 use crate::app::task::stream;
 use crate::app::GenrePageState::Search;
 use crate::mpris::player::MPRISPlayer;
@@ -20,7 +19,8 @@ mod scan;
 mod settings;
 mod subpage;
 
-use crate::app::audio::{AudioPLayer, LoopState};
+use crate::app::audio::tracktypes::{AppTrack, QueuedTrack};
+use crate::app::audio::{AudioPlayer, LoopState};
 use crate::app::home::HomePage;
 use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, FullAlbum};
 use crate::app::page::artists::{ArtistInfo, ArtistPage, ArtistPageState, ArtistsPage};
@@ -100,7 +100,7 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
-    pub audio_properties: AudioPLayer,
+    pub audio_player: AudioPlayer,
 
     pub task_handle: Option<Vec<Handle>>,
 
@@ -129,24 +129,6 @@ pub struct AppModel {
     homeid: nav_bar::Id,
     genreid: nav_bar::Id,
     search_id: cosmic::iced::id::Id,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/* todo: This is wasteful with memory at the benefit of less database accesses
-I think that the cost of accessing the database is much less important than the cost
-of having every track in the queue, for example, which is only displayed on one page,
-be in the global state of the application as an AppTrack. Only the first and second tracks up
-next in the queue should be AppTracks. The rest can just be ids that are turned into AppTracks
-as they approach. This should save a lot of memory
-*/
-/// All info associated with a track
-pub struct AppTrack {
-    pub id: u32,
-    pub title: String,
-    pub artist: String,
-    pub album_title: String,
-    pub path_buf: PathBuf,
-    pub cover_art: crate::app::page::CoverArt,
 }
 
 /// Minimum amount of info required to display fully expose a Single track
@@ -417,7 +399,7 @@ impl cosmic::Application for AppModel {
             key_binds: HashMap::new(),
 
             // Audio
-            audio_properties: AudioPLayer::new(config.1.volume),
+            audio_player: AudioPlayer::new(config.1.volume),
 
             task_handle: None,
 
@@ -532,172 +514,7 @@ impl cosmic::Application for AppModel {
         None
     }
     fn footer(&self) -> Option<Element<Self::Message>> {
-        if !self.config.footer {
-            return None;
-        }
-
-        let mut total_duration = "**:**".to_string();
-        match self.audio_properties.song_duration {
-            None => {}
-            Some(val) => {
-                total_duration = crate::app::home::format_time(val);
-            }
-        };
-
-        const FOOTER_IMAGE_SIZE: f32 = 64.0;
-        let data = match self.audio_properties.queue.is_empty() {
-            true => {
-                let cover = cosmic::widget::icon::from_name("applications-audio-symbolic")
-                    .size(FOOTER_IMAGE_SIZE as u16)
-                    .into();
-
-                (None, None, None, cover)
-            }
-            false => {
-                let title = Some(
-                    self.audio_properties
-                        .queue
-                        .get(self.audio_properties.queue_pos)
-                        .unwrap()
-                        .title
-                        .as_str(),
-                );
-                let artist = Some(
-                    self.audio_properties
-                        .queue
-                        .get(self.audio_properties.queue_pos)
-                        .unwrap()
-                        .artist
-                        .as_str(),
-                );
-                let album = Some(
-                    self.audio_properties
-                        .queue
-                        .get(self.audio_properties.queue_pos)
-                        .unwrap()
-                        .album_title
-                        .as_str(),
-                );
-
-                let cover = match &self
-                    .audio_properties
-                    .queue
-                    .get(self.audio_properties.queue_pos)
-                    .unwrap()
-                    .cover_art
-                {
-                    _ => cosmic::widget::icon::from_name("media-playback-start-symbolic")
-                        .size(FOOTER_IMAGE_SIZE as u16)
-                        .into(),
-                    SomeLoaded(val) => cosmic::widget::image(val)
-                        .width(Length::Fixed(FOOTER_IMAGE_SIZE))
-                        .height(Length::Fixed(FOOTER_IMAGE_SIZE))
-                        .content_fit(ContentFit::ScaleDown)
-                        .into(),
-                };
-
-                (title, artist, album, cover)
-            }
-        };
-
-        let play_pause_button: cosmic::Element<Message> =
-            cosmic::widget::icon::from_name("media-playback-start-symbolic").into();
-
-        return Some(
-            cosmic::widget::container(
-                cosmic::widget::container(
-                    cosmic::widget::row::with_children(vec![
-                        data.3,
-                        // Media Progress
-                        cosmic::widget::column::with_children(vec![
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading(data.0.unwrap_or("")).into(),
-                                cosmic::widget::text::heading(data.1.unwrap_or("")).into(),
-                                cosmic::widget::text::heading(data.2.unwrap_or("")).into(),
-                                cosmic::widget::space().into(), // todo Context menu for mini player options
-                                                                // cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                                                //     "go-up-symbolic",
-                                                                // ))
-                                                                // .on_press(Message::ToggleFooter)
-                                                                // .into(),
-                            ])
-                            .spacing(cosmic::theme::spacing().space_s)
-                            .into(),
-                            cosmic::widget::row::with_children(vec![
-                                cosmic::widget::text::heading("HI!").into(),
-                                cosmic::widget::slider(
-                                    0.0..=self.audio_properties.song_duration.unwrap_or(1.0),
-                                    self.audio_properties.song_progress,
-                                    |a| Message::SeekTrack(a),
-                                )
-                                .on_release(Message::SeekFinished)
-                                .height(31.0)
-                                .into(),
-                                cosmic::widget::text::heading(format!("{}", total_duration)).into(),
-                                // Media Controls
-                                cosmic::widget::row::with_children(vec![
-                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                        "media-skip-backward-symbolic",
-                                    ))
-                                    .on_press(Message::PreviousTrack)
-                                    .into(),
-                                    // PLAY OR PAUSE
-                                    play_pause_button,
-                                    // PLAY OR PAUSE
-                                    cosmic::widget::button::icon(cosmic::widget::icon::from_name(
-                                        "media-skip-forward-symbolic",
-                                    ))
-                                    .on_press(Message::SkipTrack)
-                                    .into(),
-                                    cosmic::widget::button::icon(
-                                        match self.audio_properties.loop_state {
-                                            LoopState::LoopingTrack => {
-                                                cosmic::widget::icon::from_name(
-                                                    "media-playlist-repeat-song-symbolic",
-                                                )
-                                            }
-                                            LoopState::LoopingQueue => {
-                                                cosmic::widget::icon::from_name(
-                                                    "media-playlist-no-repeat-symbolic",
-                                                )
-                                            }
-                                            LoopState::NotLooping => {
-                                                cosmic::widget::icon::from_name(
-                                                    "media-playlist-consecutive-symbolic",
-                                                )
-                                            }
-                                            LoopState::RandomShuffle => {
-                                                cosmic::widget::icon::from_name(
-                                                    "media-playlist-shuffle-symbolic",
-                                                )
-                                            }
-                                        },
-                                    )
-                                    .on_press(Message::ChangeLoopState)
-                                    .into(),
-                                ])
-                                .width(Length::Shrink)
-                                .align_y(Vertical::Center)
-                                .spacing(cosmic::theme::spacing().space_xxxs)
-                                .into(),
-                            ])
-                            .width(Length::Fill)
-                            .align_y(Vertical::Center)
-                            .spacing(cosmic::theme::spacing().space_xxs)
-                            .into(),
-                        ])
-                        .into(),
-                    ])
-                    .spacing(cosmic::theme::spacing().space_xs),
-                )
-                .width(Length::Fill)
-                .padding(cosmic::theme::spacing().space_xxs)
-                .class(cosmic::theme::Container::Primary),
-            )
-            .align_y(Start)
-            .width(Length::Fill)
-            .into(),
-        );
+        Some(cosmic::widget::text::text("TODO!").into())
     }
 
     /// Enables the COSMIC application to create a nav bar with this model.
@@ -1098,29 +915,8 @@ impl cosmic::Application for AppModel {
             Message::OpenRepositoryUrl => {
                 _ = open::that_detached(REPOSITORY);
             }
-            Message::ChangeActiveInQueue(index) => {
-                self.audio_properties.clear();
-                self.audio_properties.queue_pos = index;
-            }
-            Message::RemoveSongInQueue(index) => {
-                return cosmic::task::future(async move {
-                    Message::SongFinished(QueueUpdateReason::Removed(index))
-                });
-            }
-            Message::ChangeLoopState => match self.audio_properties.loop_state {
-                LoopState::LoopingTrack => {
-                    self.audio_properties.loop_state = LoopState::RandomShuffle;
-                }
-                LoopState::LoopingQueue => {
-                    self.audio_properties.loop_state = LoopState::LoopingTrack;
-                }
-                LoopState::NotLooping => {
-                    self.audio_properties.loop_state = LoopState::LoopingQueue;
-                }
-                LoopState::RandomShuffle => {
-                    self.audio_properties.loop_state = LoopState::NotLooping
-                }
-            },
+
+            Message::ChangeLoopState => {}
             Message::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -1154,11 +950,7 @@ impl cosmic::Application for AppModel {
                     .map(cosmic::Action::App);
                 }
 
-                self.audio_properties.queue_pos = 0;
-                self.audio_properties.song_progress = 0.0;
-                self.audio_properties.song_duration = None;
-
-                self.audio_properties.queue.clear();
+                self.audio_player.reset();
 
                 // Settings: No rescan until current rescan finishes
                 self.rescan_available = false;
@@ -1856,12 +1648,12 @@ where a.name = ?    ",
                         .as_bytes(),
                     )
                     .expect("Failed to write Playlist file");
-                for track in &self.audio_properties.queue {
+                for track in &self.audio_player.queued_audio.long_queue {
                     new_file
                         .write_all(
                             format!(
                                 "#EXTINF:0,{} - {}\n{}\n",
-                                track.artist,
+                                "",
                                 track.title,
                                 track.path_buf.to_string_lossy().to_string()
                             )
@@ -1919,8 +1711,7 @@ where a.name = ?    ",
             }
 
             Message::PlayTrackById(track) => {
-                self.audio_properties.clear();
-                return self.update(Message::AddTrackById(track));
+                self.audio_player.play_now(track);
             }
             Message::AddTrackById(id) => {
                 let conn = connect_to_db();
@@ -1939,21 +1730,13 @@ where a.name = ?    ",
                     let filepath = PathBuf::from(row.get::<_, String>("path").unwrap());
                     let visual = find_visual(&filepath);
 
-                    Ok(AppTrack {
+                    Ok(QueuedTrack {
                         id: row.get("id").unwrap(),
-                        artist: row.get("artist").unwrap(),
-                        path_buf: filepath,
-                        title: row.get("title").unwrap(),
-                        album_title: row.get("album_title").unwrap_or(String::from("")),
-                        cover_art: match visual {
-                            Some(cover) => {
-                                SomeLoaded(cosmic::widget::image::Handle::from_bytes(cover))
-                            }
-                            None => CoverArt::None,
-                        },
+                        path_buf: filepath.into(),
+                        title: row.get::<&str, String>("title").unwrap().into(),
                     })
                 }) {
-                    self.audio_properties.queue.push(result)
+                    self.audio_player.queued_audio.long_queue.push(result)
                 }
             }
             Message::PlayListById(_) => {}
@@ -1964,6 +1747,8 @@ where a.name = ?    ",
             Message::PreviousTrack => {}
             Message::ClearQueue => {}
             Message::VolumeSliderChange(_) => {}
+            Message::ChangeActiveInQueue(_) => {}
+            Message::RemoveSongInQueue(_) => {}
         };
         Task::none()
     }

@@ -1,4 +1,13 @@
-use crate::app::AppTrack;
+mod player;
+mod queued_audio;
+pub(crate) mod tracktypes;
+
+use crate::app::audio::queued_audio::QueuedAudio;
+use crate::app::audio::tracktypes::AppTrack;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::Stream;
+use player::PlayerState;
+use symphonia::core::audio::conv::IntoSample;
 
 #[derive(Debug, Clone)]
 pub enum LoopState {
@@ -8,32 +17,58 @@ pub enum LoopState {
     RandomShuffle,
 }
 
-#[derive(Clone)]
-pub struct AudioPLayer {
-    pub loop_state: LoopState,
-
-    pub song_progress: f64,
-    pub song_duration: Option<f64>,
-    pub queue: Vec<AppTrack>,
-    pub queue_pos: usize,
+pub struct CachedAudio {
+    pub app_track: AppTrack,
 }
 
-impl AudioPLayer {
-    pub fn new(volume: f32) -> AudioPLayer {
-        AudioPLayer {
-            loop_state: LoopState::NotLooping,
-            song_progress: 0.0,
-            song_duration: None,
-            queue: vec![],
-            queue_pos: 0,
+pub struct AudioPlayer {
+    pub queued_audio: QueuedAudio,
+    pub player_state: PlayerState,
+    pub stream_handle: Stream,
+}
+
+impl AudioPlayer {
+    pub fn new(volume: f32) -> AudioPlayer {
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .expect("No output device available!");
+        let config = match device.default_output_config() {
+            Ok(a) => a.config(),
+            Err(err) => {
+                panic!("{}", err)
+            }
+        };
+
+        let stream = device
+            .build_output_stream(
+                config,
+                |input: &mut [f32], output| {},
+                |err| panic!("{}", err),
+                None,
+            )
+            .expect("Stream failed to build");
+
+        AudioPlayer {
+            player_state: PlayerState::new(),
+            queued_audio: QueuedAudio::new(config.sample_rate as usize),
+            stream_handle: stream,
         }
     }
+    pub fn stream_data(self) {}
+    pub fn play_now(&mut self, track_id: u32) -> Result<u32, String> {
+        self.reset();
+        let a = AppTrack::get_by_id(track_id)?;
+        self.queued_audio.long_queue.push(a.to_queued_track());
+        self.queued_audio.cached.push(CachedAudio { app_track: a });
 
-    /// Use to clear the queue and associated data
-    pub fn clear(&mut self) {
-        self.queue_pos = 0;
-        self.song_progress = 0.0;
-        self.song_duration = None;
-        self.queue.clear();
+        Ok(1)
+    }
+    pub fn add_to_queue(&mut self, track_id: u32) {}
+    pub fn reset(&mut self) {
+        self.queued_audio.queue_pos = 0;
+        self.queued_audio.cached.clear();
+        self.queued_audio.long_queue.clear();
+        self.player_state.song_progress = 0.0;
     }
 }
