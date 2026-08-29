@@ -22,6 +22,8 @@ humantime = "2.2.0"
 fern = "0.7.1"
 ringbuf = "0.5.1"
 cpal = "0.18.2"
+rubato = "5.0.0"
+audioadapter-compat-symphonia = "1.0.0"
 symphonia = { version = "0.6.1", features = ["all-codecs"] }
 rusqlite = "0.40.2"
 futures = "0.3.31"

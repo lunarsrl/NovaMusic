@@ -1,5 +1,6 @@
 use crate::app::audio::CachedAudio;
 
+use crate::app::audio::resampling::Resamplifier;
 use crate::app::audio::tracktypes::QueuedTrack;
 use ringbuf::traits::Split;
 use ringbuf::HeapRb;
@@ -35,7 +36,7 @@ impl QueuedAudio {
         let (_, consumer) = self.audio_ring.split();
     }
 
-    fn decode(self) -> Result<String, String> {
+    pub fn decode(&mut self, sample_rate: u32) -> Result<String, String> {
         let track = match self.long_queue.get(self.queue_pos) {
             None => return Err("Failed to decode track".to_string()),
             Some(a) => a,
@@ -68,23 +69,44 @@ impl QueuedAudio {
             Some(track) => track,
         };
 
-        let codec = match track.codec_params.as_ref() {
+        let mut codec = match track.codec_params.as_ref() {
             None => return Err("Track lacks codec parameters".to_string()),
             Some(a) => match a {
-                CodecParameters::Audio(a) => a,
+                CodecParameters::Audio(a) => a.clone(),
                 _ => return Err("This is not an audio track".to_string()),
             },
         };
 
-        let mut decoder = match get_codecs().make_audio_decoder(codec, &Default::default()) {
+        let mut decoder = match get_codecs().make_audio_decoder(&codec, &Default::default()) {
             Ok(a) => a,
             Err(_) => return Err("Decoder failed".to_string()),
         };
+
         let track_id = track.id;
+        let channels = codec.channels.expect("Failed to get channels");
+
+        let mut resamp = Resamplifier::new(
+            codec.sample_rate.expect("There is no sample rate") as usize,
+            sample_rate as usize,
+            channels,
+        );
 
         while let Some(packet) = reader.next_packet().expect("Failed") {
             if packet.track_id != track_id {
                 continue;
+            }
+
+            match decoder.decode(&packet) {
+                Ok(a) => {
+                    if resamp.chunk_size.is_none() {
+                        resamp.chunk_size = Some(a.capacity())
+                    }
+
+                    let out = Box::from(Vec::with_capacity(a.capacity()));
+                    resamp.resample(a, out);
+                    continue;
+                }
+                Err(_) => return Err("FAILED".to_string()),
             }
         }
 
