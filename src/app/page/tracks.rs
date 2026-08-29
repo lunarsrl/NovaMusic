@@ -38,7 +38,6 @@ pub struct TrackPage {
 
 #[derive(Debug, Clone)]
 pub enum TrackPageState {
-    Waiting,
     Loading,
     Loaded,
     Search,
@@ -56,10 +55,6 @@ impl Page for TrackPage {
         String::from(fl!("TrackLibrary"))
     }
     fn body(&self, model: &AppModel) -> Element<Message> {
-        if let TrackPageState::Waiting = self.page_state {
-            return cosmic::widget::text::heading("Loading...").into();
-        }
-
         let visible_height = match self.viewport {
             None => 0.0,
             Some(val) => val.bounds().height,

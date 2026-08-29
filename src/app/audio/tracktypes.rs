@@ -71,10 +71,10 @@ impl AppTrack {
 
             Ok(AppTrack {
                 id: row.get("id").unwrap(),
-                artist: row.get("artist").unwrap(),
+                artist: row.get("artist").unwrap_or("N/A".to_string()),
                 path_buf: filepath.into(),
                 title: row.get::<&str, String>("title").unwrap().into(),
-                album_title: row.get("album_title").unwrap_or(String::from("")),
+                album_title: row.get("album_title").unwrap_or(String::from("N/A")),
                 cover_art: match visual {
                     Some(cover) => SomeLoaded(cosmic::widget::image::Handle::from_bytes(cover)),
                     None => CoverArt::None,

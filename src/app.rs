@@ -1094,9 +1094,6 @@ impl cosmic::Application for AppModel {
                             return task::none();
                         }
                         TrackPageState::Search => {}
-                        TrackPageState::Waiting => {
-                            return task::none();
-                        }
                     },
                     Page::Artist(page) => {}
                     Page::Genre(page) => {}
@@ -1178,23 +1175,7 @@ impl cosmic::Application for AppModel {
 
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
 
-                    tracks.into_iter().for_each(|track| {
-                        let cloned_tracks: Arc<RwLock<Vec<AppTrack>>> = Arc::clone(&data.tracks);
-                        tokio::task::spawn_blocking(move || {
-                            cloned_tracks.write().unwrap().push(track);
-                        });
-                    });
-                    tx.send(Message::ToastError(format!(
-                        "Finished loading {} tracks in {}ms",
-                        size,
-                        timer.elapsed().as_millis()
-                    )))
-                    .expect("Unable to send");
-
-                    return cosmic::Task::stream(
-                        tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
-                    )
-                    .map(cosmic::Action::App);
+                    data.tracks = Arc::from(RwLock::new(tracks));
                 }
             }
 
