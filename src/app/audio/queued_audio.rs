@@ -2,9 +2,11 @@ use crate::app::audio::CachedAudio;
 
 use crate::app::audio::resampling::Resamplifier;
 use crate::app::audio::tracktypes::QueuedTrack;
+use colored::Colorize;
 use ringbuf::traits::Split;
 use ringbuf::HeapRb;
 use std::fs::File;
+use std::ops::Deref;
 use symphonia::core::audio::GenericAudioBuffer;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::formats::probe::Hint;
@@ -77,6 +79,19 @@ impl QueuedAudio {
             },
         };
 
+        log::info!(
+            "{}",
+            format!(
+                "Device sample rate: {}, Track sample rate: {}",
+                sample_rate,
+                codec.sample_rate.unwrap()
+            )
+            .blue()
+        );
+        if sample_rate == codec.sample_rate.unwrap() {
+            return Ok("No resampling needed!".to_string());
+        }
+
         let mut decoder = match get_codecs().make_audio_decoder(&codec, &Default::default()) {
             Ok(a) => a,
             Err(_) => return Err("Decoder failed".to_string()),
@@ -84,32 +99,39 @@ impl QueuedAudio {
 
         let track_id = track.id;
         let channels = codec.channels.expect("Failed to get channels");
-
-        let mut resamp = Resamplifier::new(
-            codec.sample_rate.expect("There is no sample rate") as usize,
-            sample_rate as usize,
-            channels,
-        );
-
+        let mut count = 0;
         while let Some(packet) = reader.next_packet().expect("Failed") {
+            count += 1;
+
             if packet.track_id != track_id {
                 continue;
             }
 
             match decoder.decode(&packet) {
                 Ok(a) => {
-                    if resamp.chunk_size.is_none() {
-                        resamp.chunk_size = Some(a.capacity())
-                    }
+                    log::info!(
+                        "SAMPLE CAPACITY: {}",
+                        a.samples_interleaved().to_string().yellow()
+                    );
+                    let mut resamp = Resamplifier::new(
+                        codec.sample_rate.expect("There is no sample rate") as usize,
+                        sample_rate as usize,
+                        channels.clone(),
+                        a.capacity() as usize,
+                    );
 
-                    let out = Box::from(Vec::with_capacity(a.capacity()));
-                    resamp.resample(a, out);
+                    let mut out: Vec<f32> = Vec::with_capacity(a.samples_interleaved());
+                    out.fill(0.0);
+
+                    log::info!("LENGTH OF BUFFER: {}", out.len());
+
+                    resamp.resample(a, &mut out);
                     continue;
                 }
                 Err(_) => return Err("FAILED".to_string()),
             }
         }
 
-        return Ok("12".to_string());
+        Ok(format!("Resampling finished! ({} packets)", count))
     }
 }

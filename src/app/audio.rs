@@ -5,6 +5,7 @@ pub(crate) mod tracktypes;
 
 use crate::app::audio::queued_audio::QueuedAudio;
 use crate::app::audio::tracktypes::AppTrack;
+use colored::Colorize;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, StreamConfig};
 use player::PlayerState;
@@ -44,8 +45,6 @@ impl AudioPlayer {
             }
         };
 
-        log::info!("streammmmmm: {}", config.sample_rate);
-
         let stream = device
             .build_output_stream(
                 config,
@@ -68,7 +67,15 @@ impl AudioPlayer {
         let a = AppTrack::get_by_id(track_id)?;
         self.queued_audio.long_queue.push(a.to_queued_track());
         self.queued_audio.cached.push(CachedAudio { app_track: a });
-        self.queued_audio.decode(self.stream_config.sample_rate);
+        let a = self.queued_audio.decode(self.stream_config.sample_rate);
+        match a {
+            Ok(a) => {
+                log::info!("{}", a.bright_purple())
+            }
+            Err(a) => {
+                log::info!("{}", "Something went wrong".red())
+            }
+        }
 
         Ok(1)
     }
