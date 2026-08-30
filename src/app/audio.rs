@@ -5,10 +5,14 @@ pub(crate) mod tracktypes;
 
 use crate::app::audio::queued_audio::QueuedAudio;
 use crate::app::audio::tracktypes::AppTrack;
+use crate::app::page::CoverArt;
 use colored::Colorize;
+use cosmic::widget::image::Handle;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, StreamConfig};
 use player::PlayerState;
+use ringbuf::traits::Split;
+use std::sync::Arc;
 use symphonia::core::audio::conv::IntoSample;
 
 #[derive(Debug, Clone)]
@@ -19,8 +23,10 @@ pub enum LoopState {
     RandomShuffle,
 }
 
-pub struct CachedAudio {
+#[derive(Clone)]
+pub struct CachedAudioMixer {
     pub app_track: AppTrack,
+    pub sample: Vec<f32>,
 }
 
 pub struct AudioPlayer {
@@ -61,13 +67,22 @@ impl AudioPlayer {
             stream_handle: stream,
         }
     }
-    pub fn stream_data(self) {}
+
+    fn read_write_stream(self) {
+        let (write, consumer) = self.queued_audio.audio_ring.split();
+    }
+
     pub fn play_now(&mut self, track_id: u32) -> Result<u32, String> {
         self.reset();
         let a = AppTrack::get_by_id(track_id)?;
         self.queued_audio.long_queue.push(a.to_queued_track());
-        self.queued_audio.cached.push(CachedAudio { app_track: a });
-        let a = self.queued_audio.decode(self.stream_config.sample_rate);
+
+        let next = self.queued_audio.get_next_cache_pointer();
+        self.queued_audio.insert_cache_item(a, next);
+
+        let a = self
+            .queued_audio
+            .decode_and_cache(self.stream_config.sample_rate);
         match a {
             Ok(a) => {
                 log::info!("{}", a.bright_purple())
@@ -81,9 +96,34 @@ impl AudioPlayer {
     }
     pub fn add_to_queue(&mut self, track_id: u32) {}
     pub fn reset(&mut self) {
-        self.queued_audio.queue_pos = 0;
-        self.queued_audio.cached.clear();
-        self.queued_audio.long_queue.clear();
-        self.player_state.song_progress = 0.0;
+        self.queued_audio.clear()
+    }
+
+    /// returns decorative elmeents, title, artist, album, cover
+    pub fn display_current(&self) -> (Arc<String>, String, String, CoverArt) {
+        let a = match self
+            .queued_audio
+            .cached
+            .get(self.queued_audio.cache_pointer as usize)
+            .unwrap()
+            .as_ref()
+        {
+            None => {
+                return (
+                    Arc::from("".to_string()),
+                    "".to_string(),
+                    "".to_string(),
+                    CoverArt::None,
+                )
+            }
+            Some(a) => a,
+        };
+
+        return (
+            a.app_track.title.clone(),
+            a.app_track.artist.to_string(),
+            a.app_track.album_title.to_string(),
+            a.app_track.cover_art.clone(),
+        );
     }
 }

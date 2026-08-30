@@ -31,48 +31,15 @@ impl HomePage {
             }
         };
 
+        let a = model.audio_player.display_current();
+
         let cover;
         match model.audio_player.queued_audio.long_queue.is_empty() {
             true => {
                 cover = format_cover_page(&"".to_string(), &"".to_string(), None, &CoverArt::None);
             }
             false => {
-                cover = format_cover_page(
-                    &model
-                        .audio_player
-                        .queued_audio
-                        .cached
-                        .first()
-                        .unwrap()
-                        .app_track
-                        .title,
-                    &model
-                        .audio_player
-                        .queued_audio
-                        .cached
-                        .first()
-                        .unwrap()
-                        .app_track
-                        .artist,
-                    Some(
-                        &model
-                            .audio_player
-                            .queued_audio
-                            .cached
-                            .first()
-                            .unwrap()
-                            .app_track
-                            .album_title,
-                    ),
-                    &model
-                        .audio_player
-                        .queued_audio
-                        .cached
-                        .first()
-                        .unwrap()
-                        .app_track
-                        .cover_art,
-                );
+                cover = format_cover_page(&a.0, &a.1, Some(&a.2), &a.3);
             }
         }
 

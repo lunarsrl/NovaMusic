@@ -1,12 +1,17 @@
-use crate::app::audio::CachedAudio;
+use crate::app::audio::CachedAudioMixer;
 
 use crate::app::audio::resampling::Resamplifier;
-use crate::app::audio::tracktypes::QueuedTrack;
+use crate::app::audio::tracktypes::{AppTrack, QueuedTrack};
 use colored::Colorize;
-use ringbuf::traits::Split;
+use cosmic::widget::canvas::Cache;
+use cpal::Sample;
+use futures_util::StreamExt;
+use ringbuf::producer::Producer;
+use ringbuf::traits::{Split, SplitRef};
 use ringbuf::HeapRb;
 use std::fs::File;
 use std::ops::Deref;
+use symphonia::core::audio::conv::IntoSample;
 use symphonia::core::audio::GenericAudioBuffer;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::formats::probe::Hint;
@@ -15,30 +20,40 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::default::get_codecs;
 
 pub struct QueuedAudio {
-    audio_ring: HeapRb<GenericAudioBuffer>,
+    pub(crate) audio_ring: HeapRb<Vec<f32>>,
     /// Points to the current item in the long_queue
     pub queue_pos: usize,
     /// Should consist of every item added to the queue
     pub long_queue: Vec<QueuedTrack>,
+    /// Points to the tuple holding the current cached audio samples.
+    pub cache_pointer: bool,
     /// Should consist of the current and next track in the queue
-    pub cached: Vec<CachedAudio>,
+    pub cached: [Option<CachedAudioMixer>; 2],
 }
 
 impl QueuedAudio {
     pub fn new(cap: usize) -> QueuedAudio {
-        let ring = ringbuf::HeapRb::new(cap);
+        let ring = ringbuf::HeapRb::new((500 * cap) / 1000);
         QueuedAudio {
             audio_ring: ring,
             queue_pos: 0,
             long_queue: vec![],
-            cached: vec![],
+            cache_pointer: false,
+            cached: [None, None],
         }
     }
-    fn read_ring_buf(self) {
-        let (_, consumer) = self.audio_ring.split();
+
+    pub fn insert_cache_item(&mut self, a: AppTrack, point: bool) {}
+
+    pub fn get_next_cache_pointer(&self) -> bool {
+        if self.cache_pointer == false {
+            return true;
+        } else {
+            return false;
+        }
     }
 
-    pub fn decode(&mut self, sample_rate: u32) -> Result<String, String> {
+    pub fn decode_and_cache(&mut self, sample_rate: u32) -> Result<String, String> {
         let track = match self.long_queue.get(self.queue_pos) {
             None => return Err("Failed to decode track".to_string()),
             Some(a) => a,
@@ -88,9 +103,8 @@ impl QueuedAudio {
             )
             .blue()
         );
-        if sample_rate == codec.sample_rate.unwrap() {
-            return Ok("No resampling needed!".to_string());
-        }
+
+        let sample_rate_match = sample_rate == codec.sample_rate.unwrap();
 
         let mut decoder = match get_codecs().make_audio_decoder(&codec, &Default::default()) {
             Ok(a) => a,
@@ -109,29 +123,41 @@ impl QueuedAudio {
 
             match decoder.decode(&packet) {
                 Ok(a) => {
-                    log::info!(
-                        "SAMPLE CAPACITY: {}",
-                        a.samples_interleaved().to_string().yellow()
-                    );
-                    let mut resamp = Resamplifier::new(
-                        codec.sample_rate.expect("There is no sample rate") as usize,
-                        sample_rate as usize,
-                        channels.clone(),
-                        a.capacity() as usize,
-                    );
-
                     let mut out: Vec<f32> = Vec::with_capacity(a.samples_interleaved());
-                    out.fill(0.0);
 
-                    log::info!("LENGTH OF BUFFER: {}", out.len());
+                    if !sample_rate_match {
+                        let mut resamp = Resamplifier::new(
+                            codec.sample_rate.expect("There is no sample rate") as usize,
+                            sample_rate as usize,
+                            channels.clone(),
+                            a.capacity() as usize,
+                        );
 
-                    resamp.resample(a, &mut out);
+                        resamp.resample(a, &mut out);
+                    } else {
+                        a.copy_to_vec_interleaved(&mut out)
+                    }
+
+                    if let Some(cache) = self.cached.get_mut(self.cache_pointer as usize) {
+                        if let Some(cache_value) = cache {
+                            if cache_value.sample.is_empty() {
+                                cache_value.sample.copy_from_slice(out.as_slice())
+                            } else {
+                                cache_value.sample.append(&mut out)
+                            }
+                        }
+                    }
+
                     continue;
                 }
                 Err(_) => return Err("FAILED".to_string()),
             }
         }
-
         Ok(format!("Resampling finished! ({} packets)", count))
+    }
+
+    pub fn clear(&mut self) {
+        self.long_queue.clear();
+        self.queue_pos = 0;
     }
 }
