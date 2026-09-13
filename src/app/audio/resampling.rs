@@ -2,7 +2,9 @@ use audioadapter_compat_symphonia::SymphoniaAdapter;
 use colored::Colorize;
 use rubato::{FixedSync, Indexing, Resampler};
 use rusqlite::fallible_iterator::FallibleIterator;
-use symphonia::core::audio::{Audio, AudioBuffer, AudioSpec, Channels, GenericAudioBufferRef};
+use symphonia::core::audio::{
+    Audio, AudioBuffer, AudioBytes, AudioSpec, Channels, GenericAudioBufferRef,
+};
 
 pub struct Resamplifier {
     resampler: rubato::Fft<f32>,
@@ -47,12 +49,12 @@ impl Resamplifier {
         while self.chunk_size <= self.input.frames() {
             let next = self.resampler.output_frames_next();
 
-            log::info!(
-                "IN_FRAMES: {}, IN_NEXT {}, OUT_NEXT: {}",
-                self.input.frames(),
-                self.resampler.input_frames_next(),
-                next
-            );
+            // log::info!(
+            //     "IN_FRAMES: {}, IN_NEXT {}, OUT_NEXT: {}",
+            //     self.input.frames(),
+            //     self.resampler.input_frames_next(),
+            //     next
+            // );
 
             self.output.grow_capacity(self.output.frames() + next);
             self.output.render_uninit(Some(next));
@@ -66,11 +68,15 @@ impl Resamplifier {
                 )
                 .expect("Buffer failed");
 
-            log::info!("Shifting [{}]!", a.to_string().yellow());
+            // log::info!("Shifting [{}]!", a.to_string().yellow());
 
             self.input.shift(a);
         }
 
+        log::info!(
+            "{}",
+            format!("Size of output: {}", self.output.byte_len() as f32 / 4.0).bright_red()
+        );
         self.output.copy_to_vec_interleaved(out);
         self.input.clear();
     }
@@ -82,8 +88,6 @@ impl Resamplifier {
 
         self.input.render_uninit(Some(frame_count));
 
-        log::info!("INPUT");
         in_buffer.copy_to(&mut self.input);
-        log::info!("{}", "SUCCESS".green());
     }
 }

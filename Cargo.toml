@@ -20,7 +20,7 @@ tokio = { version = "1.41.0", features = ["full"] }
 log = "0.4.27"
 humantime = "2.2.0"
 fern = "0.7.1"
-ringbuf = "0.5.1"
+rb = "0.4.1"
 cpal = "0.18.2"
 rubato = "5.0.0"
 audioadapter-compat-symphonia = "1.0.0"

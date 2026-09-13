@@ -19,6 +19,9 @@ mod scan;
 mod settings;
 mod subpage;
 
+use crate::app::audio::player::AudioState;
+use crate::app::audio::queue::AudioQueue;
+use crate::app::audio::ringbuffer::AudioBuffer;
 use crate::app::audio::tracktypes::{AppTrack, QueuedTrack};
 use crate::app::audio::{AudioPlayer, LoopState};
 use crate::app::home::HomePage;
@@ -100,7 +103,10 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
-    pub audio_player: AudioPlayer,
+    pub audio_player: Arc<AudioPlayer>,
+    pub audio_buffer: AudioBuffer,
+    pub audio_queue: AudioQueue,
+    pub audio_state: AudioState,
 
     pub task_handle: Option<Vec<Handle>>,
 
@@ -158,14 +164,13 @@ pub enum Message {
 
     // Config change related
     RescanDir,
-    // For people who dont have an xdg file chooser :)
+    // For people who don't have a xdg file chooser :)
     ManualScanDirEdit(String),
 
     // Filesystem related
     ChooseFolder,
     FolderChosen(String),
     FolderPickerFail(String),
-    UpdateScanProgress,
     UpdateScanDirSize,
     ProbeFail,
     ChooseFile(FileChooserEvents),
@@ -181,18 +186,8 @@ pub enum Message {
     AlbumPageReturn,
 
     // implemented for Artists & Album Page
-    AlbumRequested((String, String)), // when an album icon is clicked [gets title & artist of album]
-    AlbumInfoRetrieved(FullAlbum), // when task assigned to retrieving requested albums info is completed [gets full track list of album]
-
-    // Home Page
-    //  todo: move all AddTrackToQueue to AddTrackByID
-    //      Advantage: No need to clone strings
-    //      Disadvantage: Database access but that happens anyway sometimes
-    PlayTrackById(u32),
-    AddTrackById(u32),
-    //todo Make albums in queue fancier kinda like Elisa does it
-    PlayListById(Vec<u32>),
-    AddListById(Vec<u32>),
+    AlbumRequested((String, String)),
+    AlbumInfoRetrieved(FullAlbum),
 
     // Track Page
     TrackDataReceived(Vec<AppTrack>),
@@ -234,6 +229,11 @@ pub enum Message {
     SeekTrack(f64),
     ChangeActiveInQueue(usize),
     RemoveSongInQueue(usize),
+    // Audio Queue Related
+    PlayTrackById(u32),
+    AddTrackById(u32),
+    PlayListById(Vec<u32>),
+    AddListById(Vec<u32>),
 
     // Settings
     GridSliderChange(u32),
@@ -242,11 +242,10 @@ pub enum Message {
     // Footer
     ToggleFooter(bool),
 
-    // Error Reporting
+    // Error Reporting To User
     Toasts(cosmic::widget::toaster::ToastId),
     ToastError(String),
 
-    //experimenting
     /// Dialogs
     CreatePlaylistCancel,
     CreatePlaylistAddThumbnail,
@@ -279,7 +278,7 @@ pub enum QueueUpdateReason {
     Skipped,
     Previous,
     Removed(usize),
-    None,
+    Done,
     ThreadKilled,
 }
 
@@ -388,6 +387,9 @@ impl cosmic::Application for AppModel {
 
         // init toasts
 
+        let audio_player = AudioPlayer::new(config.1.volume);
+        let audio_buffer = AudioBuffer::new(audio_player.stream_config.sample_rate as u32);
+
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
@@ -399,8 +401,10 @@ impl cosmic::Application for AppModel {
             key_binds: HashMap::new(),
 
             // Audio
-            audio_player: AudioPlayer::new(config.1.volume),
-
+            audio_player: Arc::from(audio_player),
+            audio_buffer,
+            audio_queue: AudioQueue::new(),
+            audio_state: AudioState::new(),
             task_handle: None,
 
             // Optional configuration file for an application.
@@ -950,8 +954,6 @@ impl cosmic::Application for AppModel {
                     .map(cosmic::Action::App);
                 }
 
-                self.audio_player.reset();
-
                 // Settings: No rescan until current rescan finishes
                 self.rescan_available = false;
 
@@ -1029,12 +1031,6 @@ impl cosmic::Application for AppModel {
                         .expect("Scanning sb thread failed"),
                     )
                 });
-            }
-
-            Message::UpdateScanProgress => {
-                self.config
-                    .set_files_scanned(&self.config_handler, self.config.files_scanned + 1)
-                    .expect("Failed to save to config");
             }
             Message::ProbeFail => {
                 self.config
@@ -1629,7 +1625,7 @@ where a.name = ?    ",
                         .as_bytes(),
                     )
                     .expect("Failed to write Playlist file");
-                for track in &self.audio_player.queued_audio.long_queue {
+                for track in &self.audio_queue.long_queue {
                     new_file
                         .write_all(
                             format!(
@@ -1692,6 +1688,16 @@ where a.name = ?    ",
             }
 
             Message::PlayTrackById(track) => {
+                let audio = Arc::clone(&self.audio_player);
+                return cosmic::task::future(async {
+                    tokio::task::spawn_blocking(|| {
+                        return Message::SongFinished(QueueUpdateReason::Done);
+                    })
+                    .await
+                    .expect("finish")
+                })
+                .map(cosmic::Action::App);
+
                 self.audio_player.play_now(track);
             }
             Message::AddTrackById(id) => {
@@ -1716,9 +1722,7 @@ where a.name = ?    ",
                         path_buf: filepath.into(),
                         title: row.get::<&str, String>("title").unwrap().into(),
                     })
-                }) {
-                    self.audio_player.queued_audio.long_queue.push(result)
-                }
+                }) {}
             }
             Message::PlayListById(_) => {}
             Message::AddListById(_) => {}

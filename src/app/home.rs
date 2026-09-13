@@ -21,27 +21,20 @@ pub(crate) struct HomePage {
 impl HomePage {
     pub fn load_page<'a>(&self, model: &'a AppModel) -> Element<'a, app::Message> {
         // Time ELapsed
-        let time_elapsed = format_time(model.audio_player.player_state.song_progress);
+        let time_elapsed = format_time(model.audio_state.song_progress);
 
         let mut total_duration = "**:**".to_string();
-        match model.audio_player.player_state.song_duration {
+        match model.audio_state.song_duration {
             None => {}
             Some(val) => {
                 total_duration = format_time(val);
             }
         };
 
-        let a = model.audio_player.display_current();
-
-        let cover;
-        match model.audio_player.queued_audio.long_queue.is_empty() {
-            true => {
-                cover = format_cover_page(&"".to_string(), &"".to_string(), None, &CoverArt::None);
-            }
-            false => {
-                cover = format_cover_page(&a.0, &a.1, Some(&a.2), &a.3);
-            }
-        }
+        let cover = match model.audio_queue.display_current() {
+            None => format_cover_page(&"".to_string(), &"".to_string(), None, &CoverArt::None),
+            Some(a) => format_cover_page(&a.0, &a.1, Some(&a.2), &a.3),
+        };
 
         // Actual contents
         cosmic::widget::container(
@@ -61,11 +54,10 @@ impl HomePage {
                                             cosmic::widget::slider(
                                                 0.0f64
                                                     ..=model
-                                                        .audio_player
-                                                        .player_state
+                                                        .audio_state
                                                         .song_duration
                                                         .unwrap_or(1.0f64),
-                                                model.audio_player.player_state.song_progress,
+                                                model.audio_state.song_progress,
                                                 |a| Message::SeekTrack(a),
                                             )
                                             .on_release(Message::SeekFinished)
@@ -101,7 +93,7 @@ impl HomePage {
                                             .on_press(Message::SkipTrack)
                                             .into(),
                                             cosmic::widget::button::icon(
-                                                match model.audio_player.player_state.loop_state {
+                                                match model.audio_state.loop_state {
                                                     LoopState::LoopingTrack => {
                                                         cosmic::widget::icon::from_name(
                                                             "media-playlist-repeat-song-symbolic",
@@ -163,8 +155,8 @@ impl HomePage {
                                 .into(),
                                 cosmic::widget::divider::horizontal::default().into(),
                                 listify_queue(
-                                    &model.audio_player.queued_audio.long_queue,
-                                    model.audio_player.queued_audio.queue_pos as usize,
+                                    &model.audio_queue.long_queue,
+                                    model.audio_queue.queue_pos as usize,
                                 ),
                             ])
                             .spacing(cosmic::theme::spacing().space_xxs),

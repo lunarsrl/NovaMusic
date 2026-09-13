@@ -38,6 +38,10 @@ impl QueuedTrack {
             Err(a) => Err(format!("Failed:{}", a).to_string()),
         }
     }
+
+    pub fn to_app_track(&self) -> AppTrack {
+        AppTrack::get_by_id(self.id).unwrap_or_else(|_| panic!("Failed to find song in database"))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

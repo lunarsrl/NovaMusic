@@ -1,17 +1,19 @@
 use crate::app::audio::LoopState;
 
-pub struct PlayerState {
+pub struct AudioState {
     pub loop_state: LoopState,
     pub song_progress: f64,
     pub song_duration: Option<f64>,
+    pub play_pause: bool,
 }
 
-impl PlayerState {
-    pub fn new() -> PlayerState {
-        PlayerState {
+impl AudioState {
+    pub fn new() -> AudioState {
+        AudioState {
             loop_state: LoopState::NotLooping,
             song_progress: 0.0,
             song_duration: None,
+            play_pause: false,
         }
     }
 

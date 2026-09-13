@@ -1,17 +1,17 @@
-mod player;
-mod queued_audio;
+pub mod player;
+pub mod queue;
 mod resampling;
+pub mod ringbuffer;
 pub(crate) mod tracktypes;
 
-use crate::app::audio::queued_audio::QueuedAudio;
+use crate::app::audio::ringbuffer::AudioBuffer;
 use crate::app::audio::tracktypes::AppTrack;
-use crate::app::page::CoverArt;
 use colored::Colorize;
-use cosmic::widget::image::Handle;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Stream, StreamConfig};
-use player::PlayerState;
-use ringbuf::traits::Split;
+use cpal::{Device, Sample, Stream, StreamConfig};
+use futures_util::future::err;
+use rb::{RbConsumer, RbInspector, RB};
+use rusqlite::fallible_iterator::FallibleIterator;
 use std::sync::Arc;
 use symphonia::core::audio::conv::IntoSample;
 
@@ -25,14 +25,14 @@ pub enum LoopState {
 
 #[derive(Clone)]
 pub struct CachedAudioMixer {
+    pub read_head: u32,
     pub app_track: AppTrack,
     pub sample: Vec<f32>,
 }
 
 pub struct AudioPlayer {
-    pub queued_audio: QueuedAudio,
-    pub player_state: PlayerState,
-    pub stream_handle: Stream,
+    pub stream: Option<Stream>,
+    pub device: Device,
     pub stream_config: StreamConfig,
 }
 
@@ -51,79 +51,40 @@ impl AudioPlayer {
             }
         };
 
-        let stream = device
-            .build_output_stream(
-                config,
-                |input: &mut [f32], output| {},
-                |err| panic!("{}", err),
-                None,
-            )
-            .expect("Stream failed to build");
-
         AudioPlayer {
-            player_state: PlayerState::new(),
-            queued_audio: QueuedAudio::new(config.sample_rate as usize),
             stream_config: config,
-            stream_handle: stream,
+            device,
+            stream: None,
         }
     }
 
-    fn read_write_stream(self) {
-        let (write, consumer) = self.queued_audio.audio_ring.split();
+    pub fn open_stream(&mut self, ring: Arc<AudioBuffer>) {
+        if let Ok(stream) = self.device.build_output_stream(
+            self.stream_config,
+            move |out, _| {
+                let ring = ring.ring.consumer();
+                ring.read_blocking(out);
+            },
+            move |error| {
+                log::error!(
+                    "CPAL ERROR [{}]: {}",
+                    error.kind(),
+                    error.message().unwrap()
+                )
+            },
+            None,
+        ) {
+            self.stream.replace(stream);
+        } else {
+            panic!("Failed to open output stream")
+        }
     }
 
     pub fn play_now(&mut self, track_id: u32) -> Result<u32, String> {
-        self.reset();
-        let a = AppTrack::get_by_id(track_id)?;
-        self.queued_audio.long_queue.push(a.to_queued_track());
-
-        let next = self.queued_audio.get_next_cache_pointer();
-        self.queued_audio.insert_cache_item(a, next);
-
-        let a = self
-            .queued_audio
-            .decode_and_cache(self.stream_config.sample_rate);
-        match a {
-            Ok(a) => {
-                log::info!("{}", a.bright_purple())
-            }
-            Err(a) => {
-                log::info!("{}", "Something went wrong".red())
-            }
-        }
-
         Ok(1)
     }
     pub fn add_to_queue(&mut self, track_id: u32) {}
-    pub fn reset(&mut self) {
-        self.queued_audio.clear()
-    }
-
-    /// returns decorative elmeents, title, artist, album, cover
-    pub fn display_current(&self) -> (Arc<String>, String, String, CoverArt) {
-        let a = match self
-            .queued_audio
-            .cached
-            .get(self.queued_audio.cache_pointer as usize)
-            .unwrap()
-            .as_ref()
-        {
-            None => {
-                return (
-                    Arc::from("".to_string()),
-                    "".to_string(),
-                    "".to_string(),
-                    CoverArt::None,
-                )
-            }
-            Some(a) => a,
-        };
-
-        return (
-            a.app_track.title.clone(),
-            a.app_track.artist.to_string(),
-            a.app_track.album_title.to_string(),
-            a.app_track.cover_art.clone(),
-        );
-    }
+    pub fn reset(&mut self) {}
 }
+
+pub fn decode_audio(id: u32, ring: Arc<AudioBuffer>) {}
