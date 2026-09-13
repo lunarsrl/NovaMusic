@@ -18,6 +18,20 @@ impl AudioQueue {
         }
     }
 
+    pub fn append(&mut self, new: QueuedTrack) {
+        if !(self.long_queue.len() >= 2) {
+            self.cycle_upcoming(new.to_app_track())
+        }
+        self.long_queue.push(new);
+    }
+
+    fn cycle_upcoming(&mut self, track: AppTrack) {
+        self.upcoming
+            .get_mut((!self.upcoming_cur) as usize)
+            .expect("Array should always be initialied")
+            .replace(track);
+    }
+
     pub(crate) fn display_current(&self) -> Option<(String, String, String, CoverArt)> {
         if let Some(a) = self
             .upcoming
@@ -36,21 +50,10 @@ impl AudioQueue {
     }
     /// Should be run after q song is finished
     fn next(&mut self) {
+        self.upcoming_cur = !self.upcoming_cur;
         if !self.long_queue.is_empty() {
-            if let Some(track) = self.long_queue.get_mut(self.queue_pos as usize) {
-                if self.upcoming_cur == false {
-                    self.upcoming_cur = !self.upcoming_cur;
-                    self.upcoming
-                        .get_mut(0)
-                        .expect("Array should always be initialized")
-                        .replace(track.to_app_track());
-                } else {
-                    self.upcoming_cur = !self.upcoming_cur;
-                    self.upcoming
-                        .get_mut(1)
-                        .expect("Array should always be initialized")
-                        .replace(track.to_app_track());
-                }
+            if let Some(track) = self.long_queue.get(self.queue_pos as usize) {
+                self.cycle_upcoming(track.to_app_track())
             }
         }
     }

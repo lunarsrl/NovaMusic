@@ -19,11 +19,11 @@ mod scan;
 mod settings;
 mod subpage;
 
-use crate::app::audio::player::AudioState;
 use crate::app::audio::queue::AudioQueue;
 use crate::app::audio::ringbuffer::AudioBuffer;
+use crate::app::audio::states::AudioState;
 use crate::app::audio::tracktypes::{AppTrack, QueuedTrack};
-use crate::app::audio::{AudioPlayer, LoopState};
+use crate::app::audio::{decode_audio, AudioPlayer, LoopState};
 use crate::app::home::HomePage;
 use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, FullAlbum};
 use crate::app::page::artists::{ArtistInfo, ArtistPage, ArtistPageState, ArtistsPage};
@@ -56,6 +56,7 @@ use cosmic::widget::segmented_button::Entity;
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::Action::App;
 use cosmic::{action, cosmic_config, cosmic_theme, task, theme};
+use cpal::traits::StreamTrait;
 use event_listener::Listener;
 use futures::channel::mpsc::Sender;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
@@ -103,8 +104,8 @@ pub struct AppModel {
     pub rescan_available: bool,
 
     //Audio
-    pub audio_player: Arc<AudioPlayer>,
-    pub audio_buffer: AudioBuffer,
+    pub audio_player: AudioPlayer,
+    pub audio_buffer: Arc<AudioBuffer>,
     pub audio_queue: AudioQueue,
     pub audio_state: AudioState,
 
@@ -401,8 +402,8 @@ impl cosmic::Application for AppModel {
             key_binds: HashMap::new(),
 
             // Audio
-            audio_player: Arc::from(audio_player),
-            audio_buffer,
+            audio_player: audio_player,
+            audio_buffer: Arc::from(audio_buffer),
             audio_queue: AudioQueue::new(),
             audio_state: AudioState::new(),
             task_handle: None,
@@ -1429,7 +1430,10 @@ where a.name = ?    ",
             app::Message::SeekTrack(val) => {}
             Message::SeekFinished => {}
             Message::SinkProgress => {}
-            Message::SongFinished(val) => {}
+            Message::SongFinished(val) => {
+                self.audio_queue.long_queue.clear();
+                log::warn!("DONEEEE")
+            }
             Message::AddToPlaylist => self.playlist_creation_dialog = true,
             Message::EditPlaylistCancel => self.playlist_edit_dialog = false,
             Message::EditPlaylistConfirm => {
@@ -1687,19 +1691,7 @@ where a.name = ?    ",
                     .expect("Failed to edit config");
             }
 
-            Message::PlayTrackById(track) => {
-                let audio = Arc::clone(&self.audio_player);
-                return cosmic::task::future(async {
-                    tokio::task::spawn_blocking(|| {
-                        return Message::SongFinished(QueueUpdateReason::Done);
-                    })
-                    .await
-                    .expect("finish")
-                })
-                .map(cosmic::Action::App);
-
-                self.audio_player.play_now(track);
-            }
+            Message::PlayTrackById(track) => {}
             Message::AddTrackById(id) => {
                 let conn = connect_to_db();
 
@@ -1722,7 +1714,30 @@ where a.name = ?    ",
                         path_buf: filepath.into(),
                         title: row.get::<&str, String>("title").unwrap().into(),
                     })
-                }) {}
+                }) {
+                    let path = Arc::clone(&result.path_buf);
+                    self.audio_queue.append(result);
+                    let buf = Arc::clone(&self.audio_buffer);
+                    self.audio_player.open_stream(buf.clone());
+                    self.audio_player
+                        .stream
+                        .as_ref()
+                        .expect("Should be open")
+                        .play();
+                    let rate = self.audio_player.stream_config.sample_rate as u32;
+
+                    if self.audio_queue.long_queue.len() == 1 {
+                        return cosmic::task::future(async move {
+                            tokio::task::spawn_blocking(move || {
+                                decode_audio(path, buf, rate);
+                                Message::SongFinished(QueueUpdateReason::Done)
+                            })
+                            .await
+                            .expect("finish")
+                        })
+                        .map(cosmic::Action::App);
+                    };
+                }
             }
             Message::PlayListById(_) => {}
             Message::AddListById(_) => {}
