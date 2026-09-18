@@ -4,6 +4,7 @@ pub mod ringbuffer;
 pub mod states;
 pub(crate) mod tracktypes;
 
+use crate::app::audio::resampling::Resamplifier;
 use crate::app::audio::ringbuffer::AudioBuffer;
 use crate::app::audio::tracktypes::AppTrack;
 use colored::Colorize;
@@ -15,12 +16,13 @@ use rb::{RbConsumer, RbInspector, RbProducer, RB};
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
 use symphonia::core::audio::conv::IntoSample;
 use symphonia::core::audio::AmbisonicBFormat::T;
 use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::formats::TrackType;
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
-use crate::app::audio::resampling::Resamplifier;
 
 #[derive(Debug, Clone)]
 pub enum LoopState {
@@ -85,7 +87,7 @@ impl AudioPlayer {
                 log::error!(
                     "CPAL ERROR [{}]: {}",
                     error.kind(),
-                    error.message().unwrap()
+                    error.message().expect("No error message somehow")
                 )
             },
             None,
@@ -129,24 +131,30 @@ pub fn decode_audio(file: Arc<PathBuf>, ring: Arc<AudioBuffer>, sample_rate: u32
         .make_audio_decoder(&audio, &Default::default())
         .expect("Failed to make decoder");
 
-
-    let track_rate = audio.sample_rate.expect("No defined sample rate")
+    let track_rate = audio.sample_rate.expect("No defined sample rate");
     let resample = !(track_rate == sample_rate);
-
-
-
-    Resamplifier::new(track_rate as usize, sample_rate as usize, audio.channels.unwrap(), 0);
-
+    //
+    // Resamplifier::new(
+    //     track_rate as usize,
+    //     sample_rate as usize,
+    //     audio.channels.unwrap(),
+    //     0,
+    // );
+    //
     while let Some(packet) = res.next_packet().expect("a") {
         match decoder.decode(&packet) {
             Ok(audio) => {
                 let mut out: Vec<f32> = Vec::with_capacity(audio.samples_interleaved());
 
-
                 if resample {
                 } else {
                     audio.copy_to_vec_interleaved(&mut out);
-                    let write = ring.ring.producer().write_blocking(out.as_slice());
+
+                    while ring.ring.capacity() - ring.ring.count() < out.len() {
+                        sleep(Duration::from_millis(10));
+                    }
+
+                    let write = ring.ring.producer().write(out.as_slice());
                     log::info!("Size of write: {}", write.unwrap_or(0).to_string().red());
                 }
             }

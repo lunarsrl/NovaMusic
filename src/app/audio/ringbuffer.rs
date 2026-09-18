@@ -5,7 +5,7 @@ pub struct AudioBuffer {
 impl AudioBuffer {
     pub fn new(sample_rate: u32) -> AudioBuffer {
         AudioBuffer {
-            ring: rb::SpscRb::new((sample_rate * 100) as usize),
+            ring: rb::SpscRb::new(((sample_rate * 5) as usize) as usize),
         }
     }
 }
