@@ -40,7 +40,7 @@ pub struct CachedAudioMixer {
 }
 
 pub struct AudioPlayer {
-    pub stream: Option<Stream>,
+    pub stream: Option<Arc<Stream>>,
     pub device: Device,
     pub stream_config: StreamConfig,
 }
@@ -60,14 +60,14 @@ impl AudioPlayer {
             }
         };
 
-        AudioPlayer {
-            stream_config: config,
-            device,
+        return AudioPlayer {
             stream: None,
-        }
+            device,
+            stream_config: config,
+        };
     }
 
-    pub fn open_stream(&mut self, ring: Arc<AudioBuffer>) {
+    pub fn link_to_buffer(&mut self, ring: Arc<AudioBuffer>) {
         if let Ok(stream) = self.device.build_output_stream(
             self.stream_config,
             move |out, a| {
@@ -92,12 +92,11 @@ impl AudioPlayer {
             },
             None,
         ) {
-            self.stream.replace(stream);
+            self.stream.replace(Arc::from(stream));
         } else {
             panic!("Failed to open output stream")
         }
     }
-
     pub fn play_now(&mut self, track_id: u32) -> Result<u32, String> {
         Ok(1)
     }
@@ -125,38 +124,44 @@ pub fn decode_audio(file: Arc<PathBuf>, ring: Arc<AudioBuffer>, sample_rate: u32
         .expect("Track has no default audio track");
 
     let codecs = track.codec_params.clone().expect("Failed to return codec ");
-    let audio = codecs.audio().expect("Fauled to return audio_codec");
+    let audio_param = codecs
+        .audio()
+        .expect("Fauled to return audio_codec")
+        .clone();
 
     let mut decoder = symphonia::default::get_codecs()
-        .make_audio_decoder(&audio, &Default::default())
+        .make_audio_decoder(&audio_param, &Default::default())
         .expect("Failed to make decoder");
 
-    let track_rate = audio.sample_rate.expect("No defined sample rate");
+    let channels = audio_param.channels.unwrap();
+    let track_rate = audio_param.sample_rate.expect("No defined sample rate");
     let resample = !(track_rate == sample_rate);
-    //
-    // Resamplifier::new(
-    //     track_rate as usize,
-    //     sample_rate as usize,
-    //     audio.channels.unwrap(),
-    //     0,
-    // );
-    //
+
     while let Some(packet) = res.next_packet().expect("a") {
         match decoder.decode(&packet) {
             Ok(audio) => {
+                let mut resampler = Resamplifier::new(
+                    track_rate as usize,
+                    sample_rate as usize,
+                    channels.clone(),
+                    audio.capacity(),
+                );
                 let mut out: Vec<f32> = Vec::with_capacity(audio.samples_interleaved());
 
                 if resample {
+                    log::info!("{}", "Must be resampled first!".bright_yellow());
+                    resampler.resample(audio, &mut out)
                 } else {
+                    log::info!("{}", "Ready to copy!".bright_green());
                     audio.copy_to_vec_interleaved(&mut out);
-
-                    while ring.ring.capacity() - ring.ring.count() < out.len() {
-                        sleep(Duration::from_millis(10));
-                    }
-
-                    let write = ring.ring.producer().write(out.as_slice());
-                    log::info!("Size of write: {}", write.unwrap_or(0).to_string().red());
                 }
+
+                while ring.ring.capacity() - ring.ring.count() < out.len() {
+                    sleep(Duration::from_millis(10));
+                }
+
+                let write = ring.ring.producer().write(out.as_slice());
+                log::info!("Size of write: {}", write.unwrap_or(0).to_string().red());
             }
             Err(err) => {
                 log::warn!("Failed to read packet: {}", err);

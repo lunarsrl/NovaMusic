@@ -26,7 +26,7 @@ use std::sync::{Arc, RwLock};
 
 #[derive(Clone, Debug)]
 pub struct AlbumPage {
-    pub albums: Arc<RwLock<Vec<Album>>>,
+    pub albums: Arc<Vec<Album>>,
     pub page_state: AlbumPageState,
     pub has_fully_loaded: bool,
     pub viewport: Option<Viewport>,
@@ -74,7 +74,7 @@ pub enum AlbumPageState {
 impl AlbumPage {
     pub fn new() -> AlbumPage {
         AlbumPage {
-            albums: Arc::new(RwLock::new(vec![])),
+            albums: Arc::new(vec![]),
             page_state: AlbumPageState::Loading,
             has_fully_loaded: false,
             viewport: None,
@@ -142,7 +142,7 @@ impl AlbumPage {
             .width(Length::Fill)
             .height(Length::Shrink);
 
-        for (index, album) in self.albums.clone().read().unwrap().iter().enumerate() {
+        for (index, album) in self.albums.clone().iter().enumerate() {
             let insert_element;
 
             if album_rect.intersects(&visible_rect) {
@@ -214,11 +214,9 @@ impl AlbumPage {
             Rectangle::new(point, size)
         };
 
-        if let Ok(albums) = self.albums.clone().try_read() {
-            for album in albums.iter() {
-                if let Some(art) = album.cover_art.as_ref() {
-                    continue;
-                }
+        for album in self.albums.iter() {
+            if let Some(art) = album.cover_art.as_ref() {
+                continue;
             }
         }
 

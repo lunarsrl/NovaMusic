@@ -1,5 +1,6 @@
 use crate::app::audio::tracktypes::{AppTrack, QueuedTrack};
 use crate::app::page::CoverArt;
+use colored::Colorize;
 
 pub struct AudioQueue {
     pub queue_pos: u32,
@@ -19,6 +20,7 @@ impl AudioQueue {
     }
 
     pub fn append(&mut self, new: QueuedTrack) {
+        log::info!("{}", "Track Appended!".green());
         if !(self.long_queue.len() >= 2) {
             self.cycle_upcoming(new.to_app_track())
         }

@@ -183,7 +183,7 @@ pub enum Message {
 
     // Album Page
     AlbumsDataRecieved(Vec<Album>),
-    LoadAlbumsData(Album),
+
     AlbumPageReturn,
 
     // implemented for Artists & Album Page
@@ -386,10 +386,11 @@ impl cosmic::Application for AppModel {
             Some(som) => som,
         };
 
-        // init toasts
+        // audio init
 
-        let audio_player = AudioPlayer::new(config.1.volume);
-        let audio_buffer = AudioBuffer::new(audio_player.stream_config.sample_rate as u32);
+        let mut audio_player = AudioPlayer::new(config.1.volume);
+        let audio_buffer = Arc::from(AudioBuffer::new(&mut audio_player));
+        audio_player.link_to_buffer(audio_buffer.clone());
 
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
@@ -979,7 +980,7 @@ impl cosmic::Application for AppModel {
                     .expect("Should always be intialized");
 
                 if let Page::Albums(page) = album {
-                    page.albums = Arc::from(RwLock::from(vec![]));
+                    page.albums = Arc::from(vec![]);
                     page.page_state = AlbumPageState::Loading
                 }
 
@@ -1117,36 +1118,16 @@ impl cosmic::Application for AppModel {
                         }
                     }
 
-                    albumpage.albums = Arc::from(RwLock::from(Vec::with_capacity(size)));
+                    albumpage.albums = Arc::new(albums);
 
-                    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
-
-                    albums.into_iter().for_each(|album| {
-                        tx.send(Message::LoadAlbumsData(album)).unwrap();
-                    });
-                    tx.send(Message::ToastError(format!(
+                    return self.update(Message::ToastError(format!(
                         "Finished loading {} albums in {}ms",
                         size,
                         timer.elapsed().as_millis()
-                    )))
-                    .expect("Unable to send");
-
-                    return cosmic::Task::stream(
-                        tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
-                    )
-                    .map(cosmic::Action::App);
+                    )));
                 }
             }
 
-            Message::LoadAlbumsData(album) => {
-                if let Page::Albums(albumspage) = self.nav.active_data_mut::<Page>().unwrap() {
-                    let cloned_albums: Arc<RwLock<Vec<Album>>> = Arc::clone(&albumspage.albums);
-
-                    tokio::task::spawn_blocking(move || {
-                        cloned_albums.write().unwrap().push(album);
-                    });
-                }
-            }
             Message::TrackDataReceived(mut tracks) => {
                 let timer = std::time::Instant::now();
                 let size = tracks.len();
@@ -1694,6 +1675,7 @@ where a.name = ?    ",
             Message::PlayTrackById(track) => {}
             Message::AddTrackById(id) => {
                 let conn = connect_to_db();
+                let mut tasks = vec![];
 
                 let mut stmt =
                     "
@@ -1717,17 +1699,30 @@ where a.name = ?    ",
                 }) {
                     let path = Arc::clone(&result.path_buf);
                     self.audio_queue.append(result);
-                    let buf = Arc::clone(&self.audio_buffer);
-                    self.audio_player.open_stream(buf.clone());
-                    self.audio_player
-                        .stream
-                        .as_ref()
-                        .expect("Should be open")
-                        .play();
-                    let rate = self.audio_player.stream_config.sample_rate as u32;
 
                     if self.audio_queue.long_queue.len() == 1 {
-                        return cosmic::task::future(async move {
+                        let buf = Arc::clone(&self.audio_buffer);
+                        let rate = self.audio_player.stream_config.sample_rate as u32;
+                        let value = buf.clone();
+                        let stream_handle = self
+                            .audio_player
+                            .stream
+                            .as_mut()
+                            .expect("Should exist")
+                            .clone();
+
+                        let player = cosmic::task::future(async move {
+                            tokio::task::spawn_blocking(move || {
+                                stream_handle.play();
+                                Message::SongFinished(QueueUpdateReason::Done)
+                            })
+                            .await
+                            .expect("finish")
+                        })
+                        .map(cosmic::Action::App);
+                        tasks.push(player);
+
+                        let decode = cosmic::task::future(async move {
                             tokio::task::spawn_blocking(move || {
                                 decode_audio(path, buf, rate);
                                 Message::SongFinished(QueueUpdateReason::Done)
@@ -1736,12 +1731,20 @@ where a.name = ?    ",
                             .expect("finish")
                         })
                         .map(cosmic::Action::App);
+
+                        tasks.push(decode)
                     };
                 }
+                return cosmic::task::batch(tasks);
             }
             Message::PlayListById(_) => {}
             Message::AddListById(_) => {}
-            Message::PlayPause => {}
+            Message::PlayPause => {
+                match self.audio_state.play_pause_toggle() {
+                    true => self.audio_player.stream.as_ref().unwrap().pause(),
+                    false => self.audio_player.stream.as_ref().unwrap().play(),
+                };
+            }
             Message::AddTrackToSink(_) => {}
             Message::SkipTrack => {}
             Message::PreviousTrack => {}

@@ -77,7 +77,7 @@ impl<T: Subpage> SubpageBuilder for T {
         .into()
     }
 
-    fn page(&self, model: &AppModel) -> Element<Message> {
+    fn page(&self, model: &AppModel) -> Element<'_, Message> {
         cosmic::widget::scrollable::vertical(
             cosmic::widget::column::with_children(vec![self.header(), self.body(model)])
                 .spacing(cosmic::theme::spacing().space_s)

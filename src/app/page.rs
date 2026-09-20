@@ -88,6 +88,8 @@ impl<T: Page> PageBuilder for T {
                         .padding(iced::core::padding::Padding::from([
                             0,
                             cosmic::theme::spacing().space_s,
+                            0,
+                            0,
                         ]))
                         .height(Length::Fill)
                         .width(Length::Fill),

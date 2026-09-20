@@ -31,4 +31,9 @@ impl AudioState {
             LoopState::RandomShuffle => self.loop_state = LoopState::NotLooping,
         }
     }
+
+    pub fn play_pause_toggle(&mut self) -> bool {
+        self.play_pause = !self.play_pause;
+        !self.play_pause
+    }
 }

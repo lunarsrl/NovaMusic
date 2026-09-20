@@ -47,15 +47,17 @@ impl Resamplifier {
         self.output.clear();
 
         while self.chunk_size <= self.input.frames() {
+            log::info!(
+                "{}: {}",
+                "[Resampling]".blue(),
+                format!(
+                    "Chunk Size: {}; Input Frames #: {}",
+                    self.chunk_size,
+                    self.input.frames()
+                )
+            );
+
             let next = self.resampler.output_frames_next();
-
-            // log::info!(
-            //     "IN_FRAMES: {}, IN_NEXT {}, OUT_NEXT: {}",
-            //     self.input.frames(),
-            //     self.resampler.input_frames_next(),
-            //     next
-            // );
-
             self.output.grow_capacity(self.output.frames() + next);
             self.output.render_uninit(Some(next));
 
@@ -68,25 +70,25 @@ impl Resamplifier {
                 )
                 .expect("Buffer failed");
 
-            // log::info!("Shifting [{}]!", a.to_string().yellow());
+            log::info!(
+                "{}: {}",
+                "[Resampling]".blue(),
+                format!("Shifting data: {}", a)
+            );
 
             self.input.shift(a);
         }
 
-        log::info!(
-            "{}",
-            format!("Size of output: {}", self.output.byte_len() as f32 / 4.0).bright_red()
-        );
+        log::info!("{}: {}", "[Resampling]".blue(), "Finished chunk");
+
         self.output.copy_to_vec_interleaved(out);
-        self.input.clear();
     }
 
-    pub fn set_input(&mut self, in_buffer: GenericAudioBufferRef) {
-        let frame_count = in_buffer.frames();
+    fn set_input(&mut self, in_buffer: GenericAudioBufferRef) {
+        let frame_count = in_buffer.frames() + self.input.frames();
 
         self.input.grow_capacity(frame_count);
-
-        self.input.render_uninit(Some(frame_count));
+        self.input.render_uninit(Some(in_buffer.frames()));
 
         in_buffer.copy_to(&mut self.input);
     }
