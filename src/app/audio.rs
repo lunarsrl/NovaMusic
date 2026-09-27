@@ -7,13 +7,19 @@ pub(crate) mod tracktypes;
 use crate::app::audio::resampling::Resamplifier;
 use crate::app::audio::ringbuffer::AudioBuffer;
 use crate::app::audio::tracktypes::AppTrack;
+use crate::app::Message;
 use colored::Colorize;
+use cosmic::cosmic_theme::palette::chromatic_adaptation::AdaptIntoUnclamped;
+use cosmic::iced::runtime::task::widget;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Sample, Stream, StreamConfig};
+use futures::channel::mpsc::{SendError, Sender};
 use futures_util::future::err;
+use futures_util::SinkExt;
 use rand::seq::index::sample;
 use rb::{RbConsumer, RbInspector, RbProducer, RB};
 use rusqlite::fallible_iterator::FallibleIterator;
+use std::fmt::format;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::sleep;
@@ -73,12 +79,14 @@ impl AudioPlayer {
             move |out, a| {
                 let rring = ring.ring.consumer();
                 let write = rring.read(out).unwrap_or(0);
+
                 log::info!(
-                    "[{}] Size of read: {}, Samples to read: {}",
-                    ring.ring.is_full().to_string(),
-                    write.to_string().yellow(),
+                    "{} Size of read: {}, Samples to read: {}",
+                    "[Audio Callback]".yellow(),
+                    write,
                     ring.ring.count()
                 );
+
                 out[write..]
                     .iter_mut()
                     .for_each(|s| *s = Sample::EQUILIBRIUM);
@@ -104,7 +112,16 @@ impl AudioPlayer {
     pub fn reset(&mut self) {}
 }
 
-pub fn decode_audio(file: Arc<PathBuf>, ring: Arc<AudioBuffer>, sample_rate: u32) {
+pub async fn decode_audio(
+    file: Arc<PathBuf>,
+    ring: Arc<AudioBuffer>,
+    sample_rate: u32,
+    tx: &mut Sender<Message>,
+) {
+    tx.send(Message::ToastError("BYEEEE!".to_string()))
+        .await
+        .expect("sdfahi");
+    let mut messages: Vec<Message> = vec![];
     let file = std::fs::File::open(file.to_path_buf()).expect("Failed to open file");
     let probe = symphonia::default::get_probe();
 
@@ -122,6 +139,19 @@ pub fn decode_audio(file: Arc<PathBuf>, ring: Arc<AudioBuffer>, sample_rate: u32
     let track = res
         .default_track(TrackType::Audio)
         .expect("Track has no default audio track");
+
+    if let Some(dur) = track.duration {
+        if let Some(timebase) = track.time_base {
+            let time = timebase.calc_duration(dur).unwrap().as_secs();
+            log::info!("Time: {}", time);
+
+            tx.send(Message::AudioDuration(time)).await.expect("HI");
+        } else {
+            log::info!("No time")
+        }
+    } else {
+        log::info!("No time")
+    }
 
     let codecs = track.codec_params.clone().expect("Failed to return codec ");
     let audio_param = codecs
@@ -149,19 +179,34 @@ pub fn decode_audio(file: Arc<PathBuf>, ring: Arc<AudioBuffer>, sample_rate: u32
                 let mut out: Vec<f32> = Vec::with_capacity(audio.samples_interleaved());
 
                 if resample {
-                    log::info!("{}", "Must be resampled first!".bright_yellow());
-                    resampler.resample(audio, &mut out)
+                    log::info!(
+                        "{}: {}",
+                        "[Writer]".red(),
+                        "Must be resampled first!".yellow()
+                    );
+                    resampler.resample(audio, &mut out);
+
+                    log::info!("{}: {}", "[Writer]".red(), "Ready to copy!".green());
                 } else {
-                    log::info!("{}", "Ready to copy!".bright_green());
                     audio.copy_to_vec_interleaved(&mut out);
                 }
 
                 while ring.ring.capacity() - ring.ring.count() < out.len() {
-                    sleep(Duration::from_millis(10));
+                    // log::info!(
+                    // "{} Not enough space! {} vs {}",
+                    // "[Writer]".red(),
+                    // ring.ring.capacity() - ring.ring.count(),
+                    // out.len()
+                    // );
+                    sleep(Duration::from_millis(1));
                 }
 
                 let write = ring.ring.producer().write(out.as_slice());
-                log::info!("Size of write: {}", write.unwrap_or(0).to_string().red());
+                log::info!(
+                    "{} Size of Write: {}",
+                    "[Writer]".red(),
+                    write.unwrap_or(0).to_string()
+                )
             }
             Err(err) => {
                 log::warn!("Failed to read packet: {}", err);

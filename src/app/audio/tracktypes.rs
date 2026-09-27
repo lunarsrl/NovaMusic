@@ -6,6 +6,7 @@ use cosmic::iced::alignment::Vertical;
 use cosmic::iced::core::text::{Ellipsize, EllipsizeHeightLimit};
 use cosmic::iced::{widget, Length};
 use cosmic::Element;
+use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -16,6 +17,11 @@ pub struct QueuedTrack {
     pub path_buf: Arc<PathBuf>,
 }
 
+impl Display for QueuedTrack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.id, self.title)
+    }
+}
 impl QueuedTrack {
     pub fn get_by_id(id: u32) -> Result<QueuedTrack, String> {
         let conn = connect_to_db();

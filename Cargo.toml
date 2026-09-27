@@ -6,6 +6,9 @@ license = "GPL-2.0-or-later"
 description = "A music player written in the libcosmic toolkit"
 repository = "https://github.com/lunarsrl/NovaMusic.git"
 
+[workspace.package]
+edition = "2024"
+
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }
 

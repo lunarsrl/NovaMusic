@@ -23,9 +23,9 @@ impl HomePage {
         // Time ELapsed
         let time_elapsed = format_time(model.audio_state.song_progress);
 
-        let mut total_duration = "**:**".to_string();
+        let mut total_duration = "00:00".to_string();
         match model.audio_state.song_duration {
-            None => {}
+            None => total_duration = "**:**".to_string(),
             Some(val) => {
                 total_duration = format_time(val);
             }
@@ -52,13 +52,10 @@ impl HomePage {
                                         cosmic::widget::row::with_children(vec![
                                             cosmic::widget::text::heading(time_elapsed).into(),
                                             cosmic::widget::slider(
-                                                0.0f64
-                                                    ..=model
-                                                        .audio_state
-                                                        .song_duration
-                                                        .unwrap_or(1.0f64),
-                                                model.audio_state.song_progress,
-                                                |a| Message::SeekTrack(a),
+                                                0.0..=model.audio_state.song_duration.unwrap_or(1)
+                                                    as f64,
+                                                model.audio_state.song_progress as f64,
+                                                |a| Message::SeekTrack(a as i64),
                                             )
                                             .on_release(Message::SeekFinished)
                                             .height(31.0)
@@ -83,7 +80,18 @@ impl HomePage {
                                             .on_press(Message::PreviousTrack)
                                             .into(),
                                             // PLAY OR PAUSE
-
+                                            if model.audio_queue.long_queue.len() == 0 {
+                                                cosmic::widget::button::icon(
+                                                    model.audio_state.play_pause_icons(),
+                                                )
+                                                .into()
+                                            } else {
+                                                cosmic::widget::button::icon(
+                                                    model.audio_state.play_pause_icons(),
+                                                )
+                                                .on_press(Message::PlayPause)
+                                                .into()
+                                            },
                                             // PLAY OR PAUSE
                                             cosmic::widget::button::icon(
                                                 cosmic::widget::icon::from_name(
@@ -285,14 +293,14 @@ pub(crate) fn format_cover_page<'a>(
     .spacing(cosmic::theme::spacing().space_l)
     .into()
 }
-pub fn format_time(mut seconds: f64) -> String {
+pub fn format_time(mut seconds: i64) -> String {
     let mut minutes = 0;
 
-    let seconds_final = (seconds % 60.0) as u64;
+    let seconds_final = (seconds % 60) as u64;
 
     loop {
-        seconds -= 60.0;
-        if seconds < 0.0 {
+        seconds -= 60;
+        if seconds < 0 {
             break;
         }
         minutes += 1;

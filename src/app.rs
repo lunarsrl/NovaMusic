@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
 use crate::app::task::stream;
+// SPDX-License-Identifier: GPL-2.0-or-later
 use crate::app::GenrePageState::Search;
 use crate::mpris::player::MPRISPlayer;
 use cosmic::dialog::file_chooser::Error;
@@ -160,7 +160,6 @@ pub enum Message {
     ToggleContextPage(ContextPage),
     UpdateTheme(AppTheme),
     LaunchUrl(String),
-
     // MPRIS
 
     // Config change related
@@ -218,6 +217,7 @@ pub enum Message {
     PlaylistDeleteConfirmed,
 
     // Audio Messages
+    AudioDuration(i64),
     PlayPause,
     SongFinished(QueueUpdateReason),
     AddTrackToSink(String),
@@ -227,7 +227,7 @@ pub enum Message {
     SeekFinished,
     ClearQueue,
     SinkProgress,
-    SeekTrack(f64),
+    SeekTrack(i64),
     ChangeActiveInQueue(usize),
     RemoveSongInQueue(usize),
     // Audio Queue Related
@@ -279,7 +279,7 @@ pub enum QueueUpdateReason {
     Skipped,
     Previous,
     Removed(usize),
-    Done,
+    DecodeFinished,
     ThreadKilled,
 }
 
@@ -658,16 +658,16 @@ impl cosmic::Application for AppModel {
                 match self.nav.active_data::<Page>().unwrap() {
                     Page::NowPlaying(_) => {}
                     Page::Artist(_) => {
-                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange));
                     }
                     Page::Albums(_) => {
-                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange));
                     }
                     Page::Playlists(_) => {
-                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange));
                     }
                     Page::Tracks(_) => {
-                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange))
+                        return self.update(Message::OnNavEnter(ReEnterNavReason::SortingChange));
                     }
                     Page::Genre(_) => {}
                 }
@@ -823,7 +823,7 @@ impl cosmic::Application for AppModel {
                         }
                     }
                 })
-                .map(action::Action::App)
+                .map(action::Action::App);
             }
             Message::ArtistAddPicture(path) => {
                 if let Page::Artist(toppage) = self.nav.active_data_mut::<Page>().unwrap() {
@@ -1410,11 +1410,19 @@ where a.name = ?    ",
             }
             app::Message::SeekTrack(val) => {}
             Message::SeekFinished => {}
-            Message::SinkProgress => {}
-            Message::SongFinished(val) => {
-                self.audio_queue.long_queue.clear();
-                log::warn!("DONEEEE")
+            Message::SinkProgress => {
+                log::info!("I WAS CALLED!!!!")
             }
+            Message::SongFinished(val) => match val {
+                QueueUpdateReason::Skipped => {}
+                QueueUpdateReason::Previous => {}
+                QueueUpdateReason::Removed(_) => {}
+                QueueUpdateReason::DecodeFinished => match self.audio_queue.next() {
+                    true => return self.audio_queue.to_decode(&self),
+                    false => return cosmic::task::none(),
+                },
+                QueueUpdateReason::ThreadKilled => {}
+            },
             Message::AddToPlaylist => self.playlist_creation_dialog = true,
             Message::EditPlaylistCancel => self.playlist_edit_dialog = false,
             Message::EditPlaylistConfirm => {
@@ -1674,75 +1682,29 @@ where a.name = ?    ",
 
             Message::PlayTrackById(track) => {}
             Message::AddTrackById(id) => {
-                let conn = connect_to_db();
-                let mut tasks = vec![];
-
-                let mut stmt =
-                    "
-                                select track.id as id, track.name as title, art.name as artist, track.path as path, a.album_cover, a.name as album_title
-                                from track
-                                left join main.album_tracks at on track.id = at.track_id
-                                left join main.artists art on track.artist_id = art.id
-                                left join main.album a on at.album_id = a.id
-                                where track.id = ?
-                            ";
-
-                if let Ok(result) = conn.query_row(stmt, [&id], |row| {
-                    let filepath = PathBuf::from(row.get::<_, String>("path").unwrap());
-                    let visual = find_visual(&filepath);
-
-                    Ok(QueuedTrack {
-                        id: row.get("id").unwrap(),
-                        path_buf: filepath.into(),
-                        title: row.get::<&str, String>("title").unwrap().into(),
-                    })
-                }) {
+                if let Ok(result) = QueuedTrack::get_by_id(id) {
                     let path = Arc::clone(&result.path_buf);
                     self.audio_queue.append(result);
-
-                    if self.audio_queue.long_queue.len() == 1 {
-                        let buf = Arc::clone(&self.audio_buffer);
-                        let rate = self.audio_player.stream_config.sample_rate as u32;
-                        let value = buf.clone();
-                        let stream_handle = self
-                            .audio_player
-                            .stream
-                            .as_mut()
-                            .expect("Should exist")
-                            .clone();
-
-                        let player = cosmic::task::future(async move {
-                            tokio::task::spawn_blocking(move || {
-                                stream_handle.play();
-                                Message::SongFinished(QueueUpdateReason::Done)
-                            })
-                            .await
-                            .expect("finish")
-                        })
-                        .map(cosmic::Action::App);
-                        tasks.push(player);
-
-                        let decode = cosmic::task::future(async move {
-                            tokio::task::spawn_blocking(move || {
-                                decode_audio(path, buf, rate);
-                                Message::SongFinished(QueueUpdateReason::Done)
-                            })
-                            .await
-                            .expect("finish")
-                        })
-                        .map(cosmic::Action::App);
-
-                        tasks.push(decode)
-                    };
                 }
-                return cosmic::task::batch(tasks);
             }
             Message::PlayListById(_) => {}
-            Message::AddListById(_) => {}
+            Message::AddListById(list) => list.iter().for_each(|item| {
+                if let Ok(track) = QueuedTrack::get_by_id(*item) {
+                    self.audio_queue.append(track)
+                }
+            }),
             Message::PlayPause => {
                 match self.audio_state.play_pause_toggle() {
                     true => self.audio_player.stream.as_ref().unwrap().pause(),
-                    false => self.audio_player.stream.as_ref().unwrap().play(),
+                    false => {
+                        if self.audio_state.is_decoding {
+                            self.audio_player.stream.as_ref().unwrap().play();
+                            return cosmic::task::none();
+                        } else {
+                            self.audio_player.stream.as_ref().unwrap().play();
+                            return self.audio_queue.to_decode(self);
+                        }
+                    }
                 };
             }
             Message::AddTrackToSink(_) => {}
@@ -1752,6 +1714,11 @@ where a.name = ?    ",
             Message::VolumeSliderChange(_) => {}
             Message::ChangeActiveInQueue(_) => {}
             Message::RemoveSongInQueue(_) => {}
+            Message::AudioDuration(dur) => {
+                log::info!("RECIEVED DURATIONQQQ");
+
+                self.audio_state.song_duration = Some(dur)
+            }
         };
         Task::none()
     }
