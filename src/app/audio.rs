@@ -167,18 +167,26 @@ pub async fn decode_audio(
     let track_rate = audio_param.sample_rate.expect("No defined sample rate");
     let resample = !(track_rate == sample_rate);
 
+    let mut resamplething: Option<Resamplifier> = None;
+    if let Some(first_packet) = res.next_packet().expect("Packets") {
+        let first_audio = decoder.decode(&first_packet);
+
+        if resample {
+            resamplething.replace(Resamplifier::new(
+                track_rate as usize,
+                sample_rate as usize,
+                channels.clone(),
+                first_audio.unwrap().capacity(),
+            ));
+        }
+    }
+
     while let Some(packet) = res.next_packet().expect("a") {
         match decoder.decode(&packet) {
             Ok(audio) => {
-                let mut resampler = Resamplifier::new(
-                    track_rate as usize,
-                    sample_rate as usize,
-                    channels.clone(),
-                    audio.capacity(),
-                );
                 let mut out: Vec<f32> = Vec::with_capacity(audio.samples_interleaved());
 
-                if resample {
+                if let Some(resampler) = resamplething.as_mut() {
                     log::info!(
                         "{}: {}",
                         "[Writer]".red(),

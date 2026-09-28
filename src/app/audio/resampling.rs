@@ -2,6 +2,7 @@ use audioadapter_compat_symphonia::SymphoniaAdapter;
 use colored::Colorize;
 use rubato::{FixedSync, Indexing, Resampler};
 use rusqlite::fallible_iterator::FallibleIterator;
+use std::time::Duration;
 use symphonia::core::audio::{
     Audio, AudioBuffer, AudioBytes, AudioSpec, Channels, GenericAudioBufferRef,
 };
@@ -29,8 +30,10 @@ impl Resamplifier {
         )
         .unwrap();
 
+        //out
         let spec = AudioSpec::new(out_rate as u32, in_channels.clone());
         let out_buf: AudioBuffer<f32> = AudioBuffer::new(spec, resampler.output_frames_max());
+        //in
         let spec = AudioSpec::new(in_rate as u32, in_channels.clone());
         let in_buf: AudioBuffer<f32> = AudioBuffer::new(spec, in_chunk);
 
@@ -42,24 +45,39 @@ impl Resamplifier {
         }
     }
 
-    pub fn resample(&mut self, in_buffer: GenericAudioBufferRef, out: &mut Vec<f32>) {
-        self.set_input(in_buffer);
+    pub fn resample(&mut self, audio: GenericAudioBufferRef, out: &mut Vec<f32>) {
+        self.set_input(audio);
         self.output.clear();
+        log::info!(
+            "{}: {}",
+            "[Resampling]".blue(),
+            format!(
+                "Chunk Size: {}; Input Frames #: {}",
+                self.chunk_size,
+                self.input.frames()
+            )
+        );
 
         while self.chunk_size <= self.input.frames() {
-            log::info!(
-                "{}: {}",
-                "[Resampling]".blue(),
-                format!(
-                    "Chunk Size: {}; Input Frames #: {}",
-                    self.chunk_size,
-                    self.input.frames()
-                )
-            );
-
             let next = self.resampler.output_frames_next();
+            log::info!(
+                "{} Next: {} Current: {}",
+                "[Resampling]".blue(),
+                next,
+                self.output.frames()
+            );
             self.output.grow_capacity(self.output.frames() + next);
+            log::info!(
+                "{} Capacity grew to: {}",
+                "[Resampling]".blue(),
+                self.output.frames() + next
+            );
             self.output.render_uninit(Some(next));
+            log::info!(
+                "{} New frame count: {}",
+                "[Resampling]".blue(),
+                self.output.frames()
+            );
 
             let (a, _) = self
                 .resampler
@@ -79,17 +97,28 @@ impl Resamplifier {
             self.input.shift(a);
         }
 
-        log::info!("{}: {}", "[Resampling]".blue(), "Finished chunk");
+        log::info!(
+            "{}: Finished Chunk! {}",
+            "[Resampling]".blue(),
+            self.output.frames()
+        );
 
         self.output.copy_to_vec_interleaved(out);
     }
 
-    fn set_input(&mut self, in_buffer: GenericAudioBufferRef) {
-        let frame_count = in_buffer.frames() + self.input.frames();
+    fn set_input(&mut self, audio: GenericAudioBufferRef) {
+        let frame_count = audio.frames() + self.input.frames();
 
         self.input.grow_capacity(frame_count);
-        self.input.render_uninit(Some(in_buffer.frames()));
+        self.input.render_uninit(Some(frame_count));
 
-        in_buffer.copy_to(&mut self.input);
+        audio.copy_to(&mut self.input);
+
+        log::info!(
+            "{}: Input: {}, Audio: {}",
+            "[Resampling]".blue(),
+            self.input.frames(),
+            audio.frames()
+        );
     }
 }
