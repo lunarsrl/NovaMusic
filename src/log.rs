@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use colored::*;
-use log::{Level, LevelFilter};
+use log::Level;
 use std::time::SystemTime;
 
 pub fn setup_logger() -> Result<(), fern::InitError> {
@@ -29,6 +29,10 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
                 message
             ))
         })
+        .level_for(
+            "nova_music::app::audio::resampling",
+            log::LevelFilter::Error,
+        )
         .level_for("wgpu_core::device::resource", log::LevelFilter::Error)
         .level_for("tracing::span", log::LevelFilter::Error)
         .level_for("symphonia_bundle_mp3::demuxer", log::LevelFilter::Error)

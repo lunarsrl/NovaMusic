@@ -28,8 +28,9 @@ use crate::app::home::HomePage;
 use crate::app::page::albums::{Album, AlbumPage, AlbumPageState, FullAlbum};
 use crate::app::page::artists::{ArtistInfo, ArtistPage, ArtistPageState, ArtistsPage};
 use crate::app::page::genre::{GenrePage, GenrePageState};
+use crate::app::page::playlists::fullplaylist::FullPlaylist;
 use crate::app::page::playlists::{
-    FullPlaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
+    fullplaylist, Playlist, PlaylistPage, PlaylistPageState, PlaylistTrack,
 };
 use crate::app::page::tracks::{SearchResult, TrackPage, TrackPageState};
 use crate::app::page::CoverArt;
@@ -61,6 +62,7 @@ use event_listener::Listener;
 use futures::channel::mpsc::Sender;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use rand::{Rng, RngExt};
+use rb::RbInspector;
 use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::TransactionBehavior;
 use std::any::TypeId;
@@ -280,6 +282,7 @@ pub enum QueueUpdateReason {
     Previous,
     Removed(usize),
     DecodeFinished,
+    SongFinished,
     ThreadKilled,
 }
 
@@ -388,7 +391,7 @@ impl cosmic::Application for AppModel {
 
         // audio init
 
-        let mut audio_player = AudioPlayer::new(config.1.volume);
+        let (mut audio_player, mut audio_event_listener) = AudioPlayer::new(config.1.volume);
         let audio_buffer = Arc::from(AudioBuffer::new(&mut audio_player));
         audio_player.link_to_buffer(audio_buffer.clone());
 
@@ -449,7 +452,7 @@ impl cosmic::Application for AppModel {
 
         let commands = cosmic::Task::batch(vec![
             app.update_title(),
-            // cosmic::Task::future(async { Message::MPRISCheck }).map(action::app),
+            cosmic::Task::stream(audio_event_listener).map(cosmic::Action::App),
         ]);
         (app, commands)
     }
@@ -1083,7 +1086,12 @@ impl cosmic::Application for AppModel {
                             return task::none();
                         }
                     },
-                    Page::Playlists(page) => {}
+                    Page::Playlists(playlistpage) => match playlistpage.playlist_page_state {
+                        PlaylistPageState::Loading => playlistpage.load_page_data(),
+                        PlaylistPageState::Loaded => {}
+                        PlaylistPageState::PlaylistPage(_) => {}
+                        PlaylistPageState::Search(_) => {}
+                    },
                     Page::Tracks(trackspage) => match trackspage.page_state {
                         TrackPageState::Loading => {
                             return trackspage.load_page_data();
@@ -1417,11 +1425,24 @@ where a.name = ?    ",
                 QueueUpdateReason::Skipped => {}
                 QueueUpdateReason::Previous => {}
                 QueueUpdateReason::Removed(_) => {}
-                QueueUpdateReason::DecodeFinished => match self.audio_queue.next() {
-                    true => return self.audio_queue.to_decode(&self),
-                    false => return cosmic::task::none(),
-                },
+                QueueUpdateReason::DecodeFinished => {
+                    log::info!(
+                        "Samples left in this track: {}",
+                        self.audio_buffer.ring.count()
+                    );
+
+                    self.audio_player
+                        .track_samples(self.audio_buffer.ring.count());
+
+                    match self.audio_queue.next() {
+                        true => return self.audio_queue.to_decode(&self),
+                        false => return cosmic::task::none(),
+                    }
+                }
                 QueueUpdateReason::ThreadKilled => {}
+                QueueUpdateReason::SongFinished => {
+                    self.audio_queue.queue_pos += 1;
+                }
             },
             Message::AddToPlaylist => self.playlist_creation_dialog = true,
             Message::EditPlaylistCancel => self.playlist_edit_dialog = false,
@@ -1714,11 +1735,7 @@ where a.name = ?    ",
             Message::VolumeSliderChange(_) => {}
             Message::ChangeActiveInQueue(_) => {}
             Message::RemoveSongInQueue(_) => {}
-            Message::AudioDuration(dur) => {
-                log::info!("RECIEVED DURATIONQQQ");
-
-                self.audio_state.song_duration = Some(dur)
-            }
+            Message::AudioDuration(dur) => self.audio_state.song_duration = Some(dur),
         };
         Task::none()
     }

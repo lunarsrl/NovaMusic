@@ -1,6 +1,7 @@
 use crate::app::audio::decode_audio;
 use crate::app::audio::tracktypes::{AppTrack, QueuedTrack};
 use crate::app::page::CoverArt;
+use crate::app::QueueUpdateReason::DecodeFinished;
 use crate::app::{AppModel, Message, QueueUpdateReason};
 use colored::Colorize;
 use cosmic::cosmic_theme::palette::chromatic_adaptation::AdaptIntoUnclamped;
@@ -28,7 +29,7 @@ impl AudioQueue {
 
     pub fn append(&mut self, new: QueuedTrack) {
         log::info!("{}", "Track Appended!".green());
-        if !(self.long_queue.len() >= 2) {
+        if self.long_queue.len() == 0 {
             self.cycle_upcoming(new.to_app_track())
         }
         self.long_queue.push(new);
@@ -77,13 +78,12 @@ impl AudioQueue {
     }
     /// Should be run after q song is finished
     pub fn next(&mut self) -> bool {
-        self.queue_pos += 1;
+        let next_t = self.queue_pos + 1;
         self.upcoming_cur = !self.upcoming_cur;
 
-        if !self.long_queue.is_empty() || self.long_queue.get(self.queue_pos as usize).is_none() {
-            if let Some(track) = self.long_queue.get(self.queue_pos as usize) {
+        if self.long_queue.get(next_t as usize).is_some() {
+            if let Some(track) = self.long_queue.get(next_t as usize) {
                 self.cycle_upcoming(track.to_app_track());
-
                 true
             } else {
                 false
@@ -118,6 +118,9 @@ impl AudioQueue {
             1,
             move |mut tx: Sender<Message>| async move {
                 decode_audio(path.clone(), buf.clone(), samp, &mut tx).await;
+                tx.send(Message::SongFinished(DecodeFinished))
+                    .await
+                    .unwrap();
             },
         ))
         .map(cosmic::Action::App)

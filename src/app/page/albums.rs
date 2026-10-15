@@ -1,7 +1,7 @@
 mod fullalbum;
 
-// SPDX-License-Identifier: GPL-2.0-or-later
 use crate::app::page::tracks::SearchResult;
+// SPDX-License-Identifier: GPL-2.0-or-later
 use crate::app::page::BodyStyle::Grid;
 use crate::app::page::{BodyStyle, CoverArt, Page, PageBuilder};
 use crate::app::subpage::{Subpage, SubpageBuilder};
@@ -95,9 +95,10 @@ impl AlbumPage {
         while width > (items_per_row * icon_size * 32) {
             items_per_row += 1;
         }
+
         items_per_row -= 1;
 
-        let check_spacing: u32 = ((items_per_row + 1) * icon_size * 32).saturating_sub(width);
+        let check_spacing: u32 = ((items_per_row + 1) * (icon_size * 32)).saturating_sub(width);
         let check_final = icon_size * 32 - check_spacing;
 
         if items_per_row < 3 {
@@ -105,18 +106,6 @@ impl AlbumPage {
         } else {
             spacing = (check_final / (items_per_row - 1)) as u16;
         }
-
-        log::info!(
-            "OFFSET: {}",
-            match self.viewport {
-                None => {
-                    "NONE".to_string().red()
-                }
-                Some(a) => {
-                    a.absolute_offset().y.to_string().red()
-                }
-            }
-        );
 
         let visible_rect = cosmic::iced::Rectangle::new(
             cosmic::iced::Point::new(
@@ -182,7 +171,7 @@ impl AlbumPage {
             }
         }
 
-        cosmic::widget::scrollable::vertical(grid)
+        cosmic::widget::scrollable::vertical(grid.padding(cosmic::iced::Padding::from([0, 0])))
             .id(self.scrollbar_id.clone())
             .on_scroll(|view| Message::ScrollView(view))
             .into()

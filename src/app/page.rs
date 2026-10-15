@@ -7,7 +7,6 @@ pub mod playlists;
 pub mod tracks;
 
 use crate::app::page::genre::GenrePage;
-use crate::app::page::playlists::PlaylistPage;
 use crate::app::{AppModel, Message};
 use crate::config::SortOrder;
 use crate::fl;
@@ -64,10 +63,7 @@ impl<T: Page> PageBuilder for T {
                         ]))
                         .into(),
                     cosmic::widget::container(self.body(model))
-                        .padding(iced::core::padding::Padding::from([
-                            0,
-                            cosmic::theme::spacing().space_s,
-                        ]))
+                        .padding(iced::core::padding::Padding::from([0, 0]))
                         .into(),
                 ])
                 .spacing(cosmic::theme::spacing().space_xs),
@@ -81,6 +77,8 @@ impl<T: Page> PageBuilder for T {
                 .padding(iced::core::padding::Padding::from([
                     0,
                     cosmic::theme::spacing().space_s,
+                    0,
+                    cosmic::theme::spacing().space_xxs,
                 ]))
                 .into(),
                 cosmic::widget::scrollable::vertical(
@@ -89,11 +87,12 @@ impl<T: Page> PageBuilder for T {
                             0,
                             cosmic::theme::spacing().space_s,
                             0,
-                            0,
+                            cosmic::theme::spacing().space_xxs,
                         ]))
                         .height(Length::Fill)
                         .width(Length::Fill),
                 )
+                .anchor_right()
                 .height(Length::Shrink)
                 .on_scroll(|a| Message::ScrollView(a))
                 .into(),
@@ -104,9 +103,11 @@ impl<T: Page> PageBuilder for T {
 
     fn header(&self) -> Element<Message> {
         cosmic::widget::column::with_children(vec![
-            cosmic::widget::row::with_children(vec![cosmic::widget::text::title3(self.title())
-                .width(Length::FillPortion(2))
-                .into()])
+            cosmic::widget::row::with_children(vec![
+                cosmic::widget::text::title3(self.title())
+                    .width(Length::FillPortion(2))
+                    .into(),
+            ])
             .align_y(Alignment::Center)
             .spacing(cosmic::theme::spacing().space_xxs)
             .into(),
@@ -122,20 +123,6 @@ impl<T: Page> PageBuilder for T {
 impl Page for GenrePage {
     fn title(&self) -> String {
         String::from(fl!("genres"))
-    }
-
-    fn body(&self, model: &AppModel) -> Element<Message> {
-        todo!()
-    }
-
-    fn body_style(&self) -> BodyStyle {
-        return BodyStyle::Grid;
-    }
-}
-
-impl Page for PlaylistPage {
-    fn title(&self) -> String {
-        String::from(fl!("playlists"))
     }
 
     fn body(&self, model: &AppModel) -> Element<Message> {
