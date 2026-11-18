@@ -62,9 +62,15 @@ impl<T: Page> PageBuilder for T {
                             cosmic::theme::spacing().space_xxs,
                         ]))
                         .into(),
-                    cosmic::widget::container(self.body(model))
-                        .padding(iced::core::padding::Padding::from([0, 0]))
-                        .into(),
+                    cosmic::widget::scrollable::vertical(
+                        cosmic::widget::container(self.body(model)).padding(
+                            cosmic::iced::core::padding::right(cosmic::theme::spacing().space_xxs),
+                        ),
+                    )
+                    .anchor_right()
+                    .height(Length::Shrink)
+                    .on_scroll(|a| Message::ScrollView(a))
+                    .into(),
                 ])
                 .spacing(cosmic::theme::spacing().space_xs),
             )

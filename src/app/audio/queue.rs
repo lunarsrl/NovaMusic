@@ -42,6 +42,9 @@ impl AudioQueue {
     }
 
     fn cycle_upcoming(&mut self, track: AppTrack) {
+        let a = 0;
+        let b = 2;
+
         match self
             .upcoming
             .get_mut((self.upcoming_cur) as usize)

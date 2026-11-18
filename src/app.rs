@@ -46,6 +46,7 @@ use cosmic::app::context_drawer;
 use cosmic::cosmic_theme::palette::cam16::Cam16IntoUnclamped;
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::keyboard::key;
+use cosmic::iced::program::graphics::text::cosmic_text::skrifa::color;
 use cosmic::iced::task::Handle;
 use cosmic::iced::widget::list;
 use cosmic::iced::widget::scrollable::{AbsoluteOffset, Viewport};

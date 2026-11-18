@@ -13,10 +13,12 @@ use cosmic::iced::core::text::EllipsizeHeightLimit;
 use cosmic::iced::runtime::task::widget;
 use cosmic::iced::widget::scrollable::Viewport;
 use cosmic::iced::widget::text::Ellipsize;
-use cosmic::iced::{Alignment, Color, ContentFit, Length, Point, Rectangle, Size, Subscription};
+use cosmic::iced::{
+    padding, Alignment, Color, ContentFit, Length, Point, Rectangle, Size, Subscription,
+};
 use cosmic::widget::settings::item;
-use cosmic::widget::{icon, JustifyContent};
-use cosmic::{theme, Element, Task};
+use cosmic::widget::{icon, JustifyContent, Widget};
+use cosmic::{iced, theme, Element, Task};
 use rusqlite::ToSql;
 use std::cell::Cell;
 use std::fmt::format;
@@ -111,11 +113,28 @@ impl AlbumPage {
             cosmic::iced::Point::new(
                 f32::from(cosmic::theme::spacing().space_s),
                 match self.viewport {
-                    None => 0.0,
-                    Some(val) => val.absolute_offset().y,
+                    None => {
+                        log::info!("{}", "NO DATA".red());
+
+                        0.0
+                    }
+                    Some(val) => {
+                        log::info!(
+                            "{}, {} | {}, {}",
+                            val.absolute_offset().y,
+                            val.content_bounds().y,
+                            size.height,
+                            self.size.get().unwrap().height,
+                        );
+                        val.absolute_offset().y
+                    }
                 },
             ),
-            cosmic::iced::Size::new(3.0, size.height),
+            if self.viewport.is_some() {
+                cosmic::iced::Size::new(3.0, self.viewport.unwrap().bounds().height)
+            } else {
+                Size::new(3.0, size.height)
+            },
         );
 
         let mut album_rect = cosmic::iced::Rectangle::new(
@@ -128,7 +147,6 @@ impl AlbumPage {
             .column_alignment(Alignment::Center)
             .justify_content(JustifyContent::Center)
             .row_alignment(Alignment::Center)
-            .width(Length::Fill)
             .height(Length::Shrink);
 
         for (index, album) in self.albums.clone().iter().enumerate() {
@@ -144,37 +162,23 @@ impl AlbumPage {
                     .into()
             }
 
+            // .height(Length::Fixed(size as f32 * 32.0 + TextArea))
+            // .width(Length::Fixed(size as f32 * 32.0))
+
             item_num += 1;
 
             if item_num as u32 % items_per_row == 0 {
-                log::info!(
-                    "{}",
-                    format!("new row {} --------\\", (index as f32 / 3.0).floor())
-                        .to_string()
-                        .red()
-                );
-                log::info!(
-                    "visible area: startY: {} endY: {}",
-                    visible_rect.y,
-                    visible_rect.height + visible_rect.y
-                );
-                log::info!(
-                    "album rect area: startY: {} endY {}",
-                    album_rect.y,
-                    album_rect.height + album_rect.y
-                );
-
                 grid = grid.push(insert_element).insert_row();
-                album_rect.y += icon_size as f32 * 32.0 + TextArea;
+                album_rect.y += icon_size as f32 * 32.0 + TextArea + 4f32;
             } else {
                 grid = grid.push(insert_element);
             }
         }
 
-        cosmic::widget::scrollable::vertical(grid.padding(cosmic::iced::Padding::from([0, 0])))
-            .id(self.scrollbar_id.clone())
-            .on_scroll(|view| Message::ScrollView(view))
-            .into()
+        grid.into()
+        // .id(self.scrollbar_id.clone())
+        // .on_scroll(|view| Message::ScrollView(view))
+        // .into()
     }
 
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
@@ -213,7 +217,7 @@ impl AlbumPage {
     }
 
     pub fn load_page_data(&self) -> Task<cosmic::Action<Message>> {
-        return cosmic::Task::future(async move {
+        cosmic::Task::future(async move {
             let conn = connect_to_db();
 
             let mut stmt = conn
@@ -251,7 +255,7 @@ impl AlbumPage {
             // log::info!("| time since entering the page {}ms", timer.elapsed().as_millis());
             Message::AlbumsDataRecieved(albums)
         })
-            .map(cosmic::Action::App);
+            .map(cosmic::Action::App)
     }
 }
 
@@ -285,7 +289,7 @@ impl Album {
                 .into(),
         };
 
-        return cosmic::widget::container(
+        cosmic::widget::container(
             cosmic::widget::button::custom(
                 cosmic::widget::column::with_children(vec![
                     art,
@@ -307,7 +311,7 @@ impl Album {
         )
         .height(Length::Fixed(size as f32 * 32.0 + TextArea))
         .width(Length::Fixed(size as f32 * 32.0))
-        .into();
+        .into()
     }
 }
 
