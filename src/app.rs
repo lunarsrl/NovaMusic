@@ -1089,7 +1089,6 @@ impl cosmic::Application for AppModel {
                     },
                     Page::Playlists(playlistpage) => match playlistpage.playlist_page_state {
                         PlaylistPageState::Loading => playlistpage.load_page_data(),
-                        PlaylistPageState::Loaded => {}
                         PlaylistPageState::PlaylistPage(_) => {}
                         PlaylistPageState::Search(_) => {}
                     },
@@ -1309,7 +1308,6 @@ where a.name = ?    ",
                     .expect("Should always be intialized")
                 {
                     page.playlists = Arc::new(playlists);
-                    page.playlist_page_state = PlaylistPageState::Loaded;
                 }
             }
             Message::PlaylistSelected(playlist) => {
@@ -1330,6 +1328,10 @@ where a.name = ?    ",
                     let mut is_m3u = false;
                     let mut track_title = None;
 
+                    let conn = connect_to_db();
+                    let mut stmt = conn
+                        .prepare("select id from track where track.path = ?")
+                        .expect("SQL ERROR");
                     for (index, line) in files.lines().filter_map(Result::ok).enumerate() {
                         if !is_m3u {
                             if line.contains("#EXTM3U") && index == 0 {
@@ -1353,7 +1355,9 @@ where a.name = ?    ",
 
                             tracks.push(PlaylistTrack {
                                 title: track_title.take().unwrap().parse().unwrap(),
-                                path: path.to_string_lossy().to_string(),
+                                id: stmt
+                                    .query_row([path.to_str()], |result| result.get(0))
+                                    .unwrap_or(0),
                             });
                         }
                     }
@@ -1367,9 +1371,7 @@ where a.name = ?    ",
                     .nav
                     .data_mut::<Page>(self.playlistsid)
                     .expect("should always be intialized")
-                {
-                    page.playlist_page_state = PlaylistPageState::Loaded;
-                }
+                {}
             }
 
             Message::AlbumPageReturn => {

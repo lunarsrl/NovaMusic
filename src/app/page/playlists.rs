@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-pub(crate) mod fullplaylist;
+use crate::app::subpage::SubpageBuilder;
 
+pub(crate) mod fullplaylist;
 use crate::app::page::playlists::fullplaylist::FullPlaylist;
+
 use crate::app::page::tracks::SearchResult;
 use crate::app::page::{BodyStyle, Page, PageBuilder};
 use crate::app::{AppModel, Message};
@@ -43,13 +45,12 @@ pub struct Playlist {
 #[derive(Debug, Clone)]
 pub struct PlaylistTrack {
     pub(crate) title: String,
-    pub(crate) path: String,
+    pub(crate) id: u32,
 }
 
 #[derive(Debug, Clone)]
 pub enum PlaylistPageState {
     Loading,
-    Loaded,
     PlaylistPage(FullPlaylist),
     Search(Vec<SearchResult>),
 }
@@ -71,11 +72,7 @@ impl Page for PlaylistPage {
                 .into()
             })
             .into(),
-            _ => {
-                todo!("HI!")
-            }
-            PlaylistPageState::PlaylistPage(page) => self.page(model),
-            PlaylistPageState::Search(_) => cosmic::widget::text("tired").into(),
+            _ => todo!("ijasdf"),
         }
     }
 
@@ -96,9 +93,9 @@ impl PlaylistPage {
         }
     }
     pub fn load_page(&self, model: &AppModel) -> Element<Message> {
-        match self.playlist_page_state {
+        match &self.playlist_page_state {
             PlaylistPageState::Loading => self.page(model),
-            PlaylistPageState::PlaylistPage(_) => self.page(model),
+            PlaylistPageState::PlaylistPage(p) => p.page(model),
             _ => self.page(model),
         }
     }
@@ -177,25 +174,8 @@ impl PlaylistPage {
             item_num += 1;
 
             if item_num as u32 % items_per_row == 0 {
-                // log::info!(
-                //     "{}",
-                //     format!("new row {} --------\\", (index as f32 / 3.0).floor())
-                //         .to_string()
-                //         .red()
-                // );
-                // log::info!(
-                //     "visible area: startY: {} endY: {}",
-                //     visible_rect.y,
-                //     visible_rect.height + visible_rect.y
-                // );
-                // log::info!(
-                //     "album rect area: startY: {} endY {}",
-                //     album_rect.y,
-                //     album_rect.height + album_rect.y
-                // );
-
                 grid = grid.push(insert_element).insert_row();
-                album_rect.y += icon_size as f32 * 32.0 + TextArea;
+                album_rect.y += icon_size as f32 * 32.0 + TextArea + 4f32;
             } else {
                 grid = grid.push(insert_element);
             }
@@ -273,7 +253,7 @@ impl Playlist {
                 .into(),
         };
 
-        return cosmic::widget::container(
+        cosmic::widget::container(
             cosmic::widget::button::custom(
                 cosmic::widget::column::with_children(vec![
                     art,
@@ -289,6 +269,6 @@ impl Playlist {
         )
         .height(Length::Fixed(size as f32 * 32.0 + TextArea))
         .width(Length::Fixed(size as f32 * 32.0))
-        .into();
+        .into()
     }
 }

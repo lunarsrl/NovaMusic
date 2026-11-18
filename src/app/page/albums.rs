@@ -1,4 +1,4 @@
-mod fullalbum;
+pub mod fullalbum;
 
 use crate::app::page::tracks::SearchResult;
 // SPDX-License-Identifier: GPL-2.0-or-later

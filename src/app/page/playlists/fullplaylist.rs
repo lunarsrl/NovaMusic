@@ -1,6 +1,8 @@
 use crate::app::page::playlists::{Playlist, PlaylistTrack};
 use crate::app::subpage::Subpage;
 use crate::app::{AppModel, Message};
+
+use crate::app::page::albums::fullalbum::display_track;
 use cosmic::Element;
 
 #[derive(Debug, Clone)]
@@ -22,14 +24,23 @@ impl Subpage for FullPlaylist {
     }
 
     fn header_subtitle(&self) -> String {
-        self.playlist.path.to_string()
+        "".to_string()
     }
 
     fn body(&self, model: &AppModel) -> Element<Message> {
-        cosmic::widget::text("Whats up chat").into()
+        let len = self.tracks.len().clone();
+        let mut column = cosmic::widget::Column::with_capacity(len);
+
+        for track in &self.tracks {
+            let elem = display_track(&track.title, track.id);
+            column = column.push(elem)
+        }
+
+        return column.into();
     }
 
     fn data_ids(&self) -> Vec<u32> {
-        todo!()
+        log::info!("{:?}", self.tracks);
+        self.tracks.iter().map(|a| a.id).collect::<Vec<u32>>()
     }
 }
